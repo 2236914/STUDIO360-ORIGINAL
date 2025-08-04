@@ -25,7 +25,6 @@ const ICONS = {
   course: icon('ic-course'),
   banking: icon('ic-banking'),
   booking: icon('ic-booking'),
-  invoice: icon('ic-invoice'),
   product: icon('ic-product'),
   calendar: icon('ic-calendar'),
   disabled: icon('ic-disabled'),
@@ -78,16 +77,7 @@ export const navData = [
           { title: 'AI Categorization Log', path: paths.dashboard.aiBookkeeper.aiCategorization },
         ],
       },
-      {
-        title: 'Invoice',
-        path: paths.dashboard.invoice.root,
-        icon: ICONS.invoice,
-        children: [
-          { title: 'List', path: paths.dashboard.invoice.root },
-          { title: 'Create', path: paths.dashboard.invoice.create },
-          { title: 'Settings', path: paths.dashboard.invoice.settings },
-        ],
-      },
+
       {
         title: 'Tax Calculator',
         path: paths.dashboard.taxCalculator,

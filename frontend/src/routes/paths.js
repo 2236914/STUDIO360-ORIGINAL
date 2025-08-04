@@ -67,16 +67,6 @@ export const paths = {
       aiCategorization: `${ROOTS.DASHBOARD}/ai-bookkeeper/ai-categorization`,
       uploadProcess: `${ROOTS.DASHBOARD}/ai-bookkeeper/upload-process`,
     },
-      invoice: {
-    root: `${ROOTS.DASHBOARD}/invoice`,
-    new: `${ROOTS.DASHBOARD}/invoice/new`,
-    details: (id) => `${ROOTS.DASHBOARD}/invoice/${id}`,
-    edit: (id) => `${ROOTS.DASHBOARD}/invoice/${id}/edit`,
-    demo: {
-      details: `${ROOTS.DASHBOARD}/invoice/${MOCK_ID}`,
-      edit: `${ROOTS.DASHBOARD}/invoice/${MOCK_ID}/edit`,
-    },
-  },
     taxCalculator: `${ROOTS.DASHBOARD}/tax-calculator`,
   },
   // ADMIN (Admin IT Dashboard)

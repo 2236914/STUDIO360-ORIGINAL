@@ -86,6 +86,11 @@ export function Searchbar({ data: navItems = [], sx, ...other }) {
           {dataGroups[group].map((item) => {
             const { title, path } = item;
 
+            // Skip items without a path or title
+            if (!title || !path) {
+              return null;
+            }
+
             const partsTitle = parse(title, match(title, searchQuery));
 
             const partsPath = parse(path, match(path, searchQuery));

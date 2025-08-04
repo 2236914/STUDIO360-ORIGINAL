@@ -7,7 +7,7 @@ import { AccountBillingAddress } from './account-billing-address';
 
 // ----------------------------------------------------------------------
 
-export function AccountBilling({ cards, plans, invoices, addressBook }) {
+export function AccountBilling({ cards, plans, addressBook }) {
   return (
     <Grid container spacing={5} disableEqualOverflow>
       <Grid xs={12} md={8}>
@@ -19,7 +19,7 @@ export function AccountBilling({ cards, plans, invoices, addressBook }) {
       </Grid>
 
       <Grid xs={12} md={4}>
-        <AccountBillingHistory invoices={invoices} />
+
       </Grid>
     </Grid>
   );

@@ -8,7 +8,7 @@ import { paths } from 'src/routes/paths';
 import { useTabs } from 'src/hooks/use-tabs';
 
 import { DashboardContent } from 'src/layouts/dashboard';
-import { _userAbout, _userPlans, _userPayment, _userInvoices, _userAddressBook } from 'src/_mock';
+import { _userAbout, _userPlans, _userPayment, _userAddressBook } from 'src/_mock';
 
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
@@ -62,7 +62,6 @@ export function AccountView() {
         <AccountBilling
           plans={_userPlans}
           cards={_userPayment}
-          invoices={_userInvoices}
           addressBook={_userAddressBook}
         />
       )}
