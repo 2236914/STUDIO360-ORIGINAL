@@ -6,6 +6,9 @@ const ROOTS = {
   ADMIN: '/admin',
 };
 
+// Mock ID for demo purposes
+const MOCK_ID = 'e99f09a7-dd88-49d5-b1c8-1daf80c2d7b1';
+
 // ----------------------------------------------------------------------
 
 export const paths = {
