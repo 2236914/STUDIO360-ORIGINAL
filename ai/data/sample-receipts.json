@@ -1,0 +1,119 @@
+{
+  "receipts": [
+    {
+      "id": "rec_001",
+      "merchant": "Office Depot",
+      "date": "2024-12-04",
+      "total": 45.99,
+      "items": [
+        {
+          "description": "Printer Paper",
+          "price": 25.99,
+          "quantity": 1
+        },
+        {
+          "description": "Ink Cartridges",
+          "price": 20.00,
+          "quantity": 2
+        }
+      ],
+      "tax": 3.68,
+      "subtotal": 42.31,
+      "category": "office_supplies",
+      "imageUrl": "receipts/office-depot-001.jpg"
+    },
+    {
+      "id": "rec_002",
+      "merchant": "Starbucks",
+      "date": "2024-12-04",
+      "total": 8.75,
+      "items": [
+        {
+          "description": "Venti Latte",
+          "price": 5.25,
+          "quantity": 1
+        },
+        {
+          "description": "Blueberry Muffin",
+          "price": 3.50,
+          "quantity": 1
+        }
+      ],
+      "tax": 0.70,
+      "subtotal": 8.05,
+      "category": "meals",
+      "imageUrl": "receipts/starbucks-001.jpg"
+    },
+    {
+      "id": "rec_003",
+      "merchant": "Shell Gas Station",
+      "date": "2024-12-03",
+      "total": 52.40,
+      "items": [
+        {
+          "description": "Premium Gasoline",
+          "price": 52.40,
+          "quantity": 12.5,
+          "unitPrice": 4.19
+        }
+      ],
+      "tax": 4.19,
+      "subtotal": 48.21,
+      "category": "travel",
+      "imageUrl": "receipts/shell-001.jpg"
+    },
+    {
+      "id": "rec_004",
+      "merchant": "Adobe",
+      "date": "2024-12-01",
+      "total": 52.99,
+      "items": [
+        {
+          "description": "Creative Suite Monthly",
+          "price": 52.99,
+          "quantity": 1
+        }
+      ],
+      "tax": 0.00,
+      "subtotal": 52.99,
+      "category": "software",
+      "imageUrl": "receipts/adobe-001.jpg"
+    },
+    {
+      "id": "rec_005",
+      "merchant": "Marriott Hotel",
+      "date": "2024-11-30",
+      "total": 189.00,
+      "items": [
+        {
+          "description": "Standard Room",
+          "price": 169.00,
+          "quantity": 1
+        },
+        {
+          "description": "Room Service",
+          "price": 20.00,
+          "quantity": 1
+        }
+      ],
+      "tax": 15.12,
+      "subtotal": 173.88,
+      "category": "travel",
+      "imageUrl": "receipts/marriott-001.jpg"
+    }
+  ],
+  "metadata": {
+    "totalReceipts": 5,
+    "dateRange": {
+      "start": "2024-11-30",
+      "end": "2024-12-04"
+    },
+    "categories": {
+      "office_supplies": 1,
+      "meals": 1,
+      "travel": 2,
+      "software": 1
+    },
+    "totalAmount": 347.13
+  }
+} 

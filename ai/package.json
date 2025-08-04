@@ -1,0 +1,55 @@
+{
+  "name": "studio360-ai-services",
+  "version": "1.0.0",
+  "description": "AI/ML services for STUDIO360 bookkeeping system",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "train": "node training/train-models.js",
+    "test": "jest",
+    "test:ocr": "jest --testNamePattern='OCR'",
+    "test:categorization": "jest --testNamePattern='Categorization'",
+    "lint": "eslint .",
+    "build": "echo 'AI services are ready to use'"
+  },
+  "keywords": [
+    "ai",
+    "ml",
+    "ocr",
+    "categorization",
+    "bookkeeping",
+    "studio360"
+  ],
+  "author": "STUDIO360 Team",
+  "license": "MIT",
+  "dependencies": {
+    "tesseract.js": "^4.1.1",
+    "sharp": "^0.32.6",
+    "natural": "^6.10.4",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "dotenv": "^16.3.1",
+    "winston": "^3.11.0",
+    "joi": "^17.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "eslint": "^8.55.0",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sippinsalmon/STUDIO360.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sippinsalmon/STUDIO360/issues"
+  },
+  "homepage": "https://github.com/sippinsalmon/STUDIO360#readme"
+} 
