@@ -1,0 +1,333 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+
+import Box from '@mui/material/Box';
+import Card from '@mui/material/Card';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
+import Avatar from '@mui/material/Avatar';
+import Divider from '@mui/material/Divider';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import { useTheme } from '@mui/material/styles';
+import InputAdornment from '@mui/material/InputAdornment';
+
+import { DashboardContent } from 'src/layouts/dashboard';
+import { Iconify } from 'src/components/iconify';
+import { Label } from 'src/components/label';
+
+// ----------------------------------------------------------------------
+
+const MOCK_CHAT_HISTORY = [
+  {
+    id: 1,
+    type: 'ai',
+    message: 'Hello! I\'m your AI Bookkeeper. I can help you with transaction categorization, expense analysis, financial reporting, and more. What would you like to work on today?',
+    timestamp: '2 minutes ago',
+  },
+  {
+    id: 2,
+    type: 'user',
+    message: 'Can you help me categorize my recent transactions?',
+    timestamp: '1 minute ago',
+  },
+  {
+    id: 3,
+    type: 'ai',
+    message: 'Of course! I can help you categorize transactions automatically. I can analyze transaction descriptions and amounts to suggest appropriate categories like "Office Supplies", "Marketing", "Utilities", etc. Would you like me to review your recent transactions?',
+    timestamp: '1 minute ago',
+  },
+];
+
+const MOCK_SUGGESTIONS = [
+  'Categorize recent transactions',
+  'Generate monthly financial report',
+  'Analyze expense patterns',
+  'Reconcile bank statements',
+  'Create budget recommendations',
+  'Identify tax deductions',
+];
+
+const MOCK_ANALYTICS = [
+  {
+    title: 'Transactions Processed',
+    value: '1,247',
+    change: '+12%',
+    trend: 'up',
+    icon: 'eva:trending-up-fill',
+    color: 'success.main',
+  },
+  {
+    title: 'Accuracy Rate',
+    value: '98.5%',
+    change: '+2.1%',
+    trend: 'up',
+    icon: 'eva:checkmark-circle-2-fill',
+    color: 'primary.main',
+  },
+  {
+    title: 'Time Saved',
+    value: '45 hrs',
+    change: '+8 hrs',
+    trend: 'up',
+    icon: 'eva:clock-fill',
+    color: 'warning.main',
+  },
+  {
+    title: 'Cost Savings',
+    value: '₱12,500',
+    change: '+₱2,300',
+    trend: 'up',
+    icon: 'eva:credit-card-fill',
+    color: 'success.main',
+  },
+];
+
+export default function AIBookkeeperPage() {
+  useEffect(() => {
+    document.title = 'AI Bookkeeper - AI Bookkeeper | Kitsch Studio';
+  }, []);
+  const theme = useTheme();
+  const [message, setMessage] = useState('');
+  const [chatHistory, setChatHistory] = useState(MOCK_CHAT_HISTORY);
+
+  const handleUploadClick = () => {
+    window.location.href = '/dashboard/ai-bookkeeper/upload-process';
+  };
+
+  const handleSendMessage = () => {
+    if (!message.trim()) return;
+
+    const newMessage = {
+      id: chatHistory.length + 1,
+      type: 'user',
+      message: message,
+      timestamp: 'Just now',
+    };
+
+    setChatHistory([...chatHistory, newMessage]);
+    setMessage('');
+
+    // Simulate AI response
+    setTimeout(() => {
+      const aiResponse = {
+        id: chatHistory.length + 2,
+        type: 'ai',
+        message: 'I understand your request. Let me analyze that for you and provide the best solution.',
+        timestamp: 'Just now',
+      };
+      setChatHistory(prev => [...prev, aiResponse]);
+    }, 1000);
+  };
+
+  return (
+    <DashboardContent maxWidth="xl">
+      {/* Header */}
+      <Typography variant="h4" sx={{ mb: 1 }}>
+        AI Bookkeeper
+      </Typography>
+      
+      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+        Dashboard / Bookkeeping / AI Bookkeeper
+      </Typography>
+
+      {/* Overview Section */}
+      <Card sx={{ p: 3, mb: 3, bgcolor: 'primary.lighter' }}>
+        <Stack direction="row" alignItems="flex-start" spacing={2}>
+          <Iconify icon="eva:bulb-fill" width={24} sx={{ color: 'primary.main', mt: 0.5 }} />
+          <Box>
+            <Typography variant="h6" sx={{ mb: 1, color: 'primary.main' }}>
+              AI Bookkeeper Overview
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Your intelligent assistant for automated bookkeeping. I can help categorize transactions, 
+              generate reports, analyze patterns, and provide financial insights to streamline your accounting.
+            </Typography>
+          </Box>
+        </Stack>
+      </Card>
+
+      {/* Upload CTA Section */}
+      <Card sx={{ p: 3, mb: 3, bgcolor: 'secondary.lighter' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Box>
+            <Typography variant="h6" sx={{ mb: 1, color: 'secondary.main' }}>
+              Start AI Bookkeeping Process
+            </Typography>
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Upload receipts, sales data, or Excel files to begin automated categorization and analysis
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<Iconify icon="eva:upload-fill" />}
+            onClick={handleUploadClick}
+            sx={{
+              bgcolor: 'secondary.main',
+              '&:hover': { bgcolor: 'secondary.dark' },
+              px: 3,
+              py: 1.5,
+            }}
+          >
+            Upload Button for OCR/Excel
+          </Button>
+        </Stack>
+      </Card>
+
+      {/* Analytics Cards */}
+      <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
+        {MOCK_ANALYTICS.map((item) => (
+          <Card key={item.title} sx={{ p: 3, flex: 1 }}>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Avatar sx={{ bgcolor: item.color, width: 48, height: 48 }}>
+                <Iconify icon={item.icon} width={24} />
+              </Avatar>
+              <Box>
+                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                  {item.title}
+                </Typography>
+                <Typography variant="h4" sx={{ mb: 0.5 }}>
+                  {item.value}
+                </Typography>
+                <Label
+                  variant="soft"
+                  color={item.trend === 'up' ? 'success' : 'error'}
+                  sx={{ fontSize: '0.75rem' }}
+                >
+                  {item.change}
+                </Label>
+              </Box>
+            </Stack>
+          </Card>
+        ))}
+      </Stack>
+
+      {/* Main Content */}
+      <Stack direction="row" spacing={3} sx={{ height: 600 }}>
+        {/* Chat Interface */}
+        <Card sx={{ p: 3, flex: 2 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            AI Assistant
+          </Typography>
+          
+          {/* Chat Messages */}
+          <Box sx={{ 
+            height: 450, 
+            overflowY: 'auto', 
+            mb: 2,
+            border: `1px solid ${theme.palette.divider}`,
+            borderRadius: 1,
+            p: 2,
+          }}>
+            {chatHistory.map((chat) => (
+              <Box key={chat.id} sx={{ mb: 2 }}>
+                <Stack direction="row" spacing={2} alignItems="flex-start">
+                  <Avatar 
+                    sx={{ 
+                      bgcolor: chat.type === 'ai' ? 'primary.main' : 'grey.500',
+                      width: 32,
+                      height: 32,
+                    }}
+                  >
+                    {chat.type === 'ai' ? (
+                      <Iconify icon="eva:bulb-fill" width={16} />
+                    ) : (
+                      <Iconify icon="eva:person-fill" width={16} />
+                    )}
+                  </Avatar>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" sx={{ mb: 0.5 }}>
+                      {chat.message}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                      {chat.timestamp}
+                    </Typography>
+                  </Box>
+                </Stack>
+              </Box>
+            ))}
+          </Box>
+
+          {/* Message Input */}
+          <Stack direction="row" spacing={1}>
+            <TextField
+              fullWidth
+              placeholder="Ask me anything about your bookkeeping..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+              InputProps={{
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <IconButton onClick={handleSendMessage} disabled={!message.trim()}>
+                      <Iconify icon="eva:paper-plane-fill" />
+                    </IconButton>
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Stack>
+        </Card>
+
+        {/* Quick Actions & Suggestions */}
+        <Card sx={{ p: 3, flex: 1 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Quick Actions
+          </Typography>
+          
+          <Stack spacing={2}>
+            {MOCK_SUGGESTIONS.map((suggestion) => (
+              <Button
+                key={suggestion}
+                variant="outlined"
+                startIcon={<Iconify icon="eva:arrow-forward-fill" />}
+                onClick={() => setMessage(suggestion)}
+                sx={{ justifyContent: 'flex-start', textAlign: 'left' }}
+              >
+                {suggestion}
+              </Button>
+            ))}
+          </Stack>
+
+          <Divider sx={{ my: 3 }} />
+
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Recent Activity
+          </Typography>
+          
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Transaction Categorization
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                15 transactions categorized • 2 minutes ago
+              </Typography>
+            </Box>
+            
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Monthly Report Generated
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                September 2024 report • 1 hour ago
+              </Typography>
+            </Box>
+            
+            <Box>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                Expense Analysis
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Pattern analysis completed • 3 hours ago
+              </Typography>
+            </Box>
+          </Stack>
+        </Card>
+      </Stack>
+    </DashboardContent>
+  );
+} 
