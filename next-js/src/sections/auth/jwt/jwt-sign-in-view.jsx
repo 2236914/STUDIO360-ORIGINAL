@@ -23,7 +23,7 @@ import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
 
 import { useAuthContext } from 'src/auth/hooks';
-import { signInWithPassword } from 'src/auth/context/mock/auth-utils';
+import { signInWithPassword } from 'src/auth/context/jwt/action';
 
 // ----------------------------------------------------------------------
 

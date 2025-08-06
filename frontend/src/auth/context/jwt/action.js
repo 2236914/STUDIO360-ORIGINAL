@@ -1,58 +1,54 @@
-'use client';
-
+import { supabase } from './supabaseClient';
 import { setSession } from './utils';
-import { STORAGE_KEY } from './constant';
 
-/** **************************************
- * Sign in
- *************************************** */
 export const signInWithPassword = async ({ email, password }) => {
   try {
-    // Validate credentials
-    if (email === 'admin@studio360.com' && password === '@demo1') {
-      // Admin login - create mock session
-      const mockToken = `mock-admin-token-${Date.now()}`;
-      sessionStorage.setItem('user-email', email);
-      setSession(mockToken);
-    } else if (email === 'seller@studio360.com' && password === '@demo1') {
-      // Seller login - create mock session
-      const mockToken = `mock-seller-token-${Date.now()}`;
-      sessionStorage.setItem('user-email', email);
-      setSession(mockToken);
-    } else {
-      throw new Error('Invalid email or password');
-    }
+    // Authenticate with Supabase Auth
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw new Error(error.message);
+    const user = data.user;
+    if (!user) throw new Error('No user returned from Supabase Auth');
+
+    // Fetch user info from user_model by id
+    const { data: userData, error: userError } = await supabase
+      .from('user_model')
+      .select('role, name, email')
+      .eq('id', user.id)
+      .single();
+    if (userError || !userData) throw new Error('User info not found');
+
+    // Store session and user info
+    sessionStorage.setItem('user-email', userData.email);
+    setSession(data.session?.access_token || '');
+    sessionStorage.setItem('user-role', userData.role);
+    sessionStorage.setItem('user-name', userData.name || '');
   } catch (error) {
     console.error('Error during sign in:', error);
     throw error;
   }
 };
 
-/** **************************************
- * Sign up
- *************************************** */
-export const signUp = async ({ email, password, firstName, lastName }) => {
+// New: Sign up with Supabase Auth and insert extra info in user_modelexport const signUpWithPassword = async ({ email, password, name, role = 'user' }) => {
   try {
-    // Mock sign up - just create a session like sign in
-    const mockToken = `mock-signup-token-${Date.now()}`;
-    sessionStorage.setItem('user-email', email);
-    sessionStorage.setItem(STORAGE_KEY, mockToken);
+    // Sign up with Supabase Auth
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw new Error(error.message);
+    const user = data.user;
+    if (!user) throw new Error('No user returned from Supabase Auth');
+
+    // Insert extra info into user_model
+    const { error: insertError } = await supabase.from('user_model').insert([
+      {
+        id: user.id, // Link to Supabase Auth user
+        email: user.email,
+        name,
+        role,
+      }
+    ]);
+    if (insertError) throw new Error(insertError.message);
+    return { user };
   } catch (error) {
     console.error('Error during sign up:', error);
-    throw error;
-  }
-};
-
-/** **************************************
- * Sign out
- *************************************** */
-export const signOut = async () => {
-  try {
-    await setSession(null);
-    // Clear user email from session storage
-    sessionStorage.removeItem('user-email');
-  } catch (error) {
-    console.error('Error during sign out:', error);
     throw error;
   }
 };

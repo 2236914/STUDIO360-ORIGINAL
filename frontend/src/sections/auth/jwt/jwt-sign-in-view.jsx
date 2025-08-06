@@ -24,6 +24,7 @@ import { Form, Field } from 'src/components/hook-form';
 
 import { useAuthContext } from 'src/auth/hooks';
 import { signInWithPassword } from 'src/auth/context/jwt';
+import { setSession } from 'src/auth/context/jwt/utils';
 
 // ----------------------------------------------------------------------
 
@@ -50,8 +51,8 @@ export function JwtSignInView() {
   const password = useBoolean();
 
   const defaultValues = {
-    email: 'seller@studio360.com',
-    password: '@demo1',
+    email: '',
+    password: '',
   };
 
   const methods = useForm({
@@ -121,7 +122,7 @@ export function JwtSignInView() {
         <Field.Text
           name="password"
           label="Password"
-          placeholder="6+ characters"
+          placeholder="Enter your password"
           type={password.value ? 'text' : 'password'}
           InputLabelProps={{ shrink: true }}
           InputProps={{
@@ -153,20 +154,6 @@ export function JwtSignInView() {
   return (
     <>
       {renderHead}
-
-      <Alert severity="info" sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>
-          Demo Accounts:
-        </Typography>
-        <Stack spacing={0.5}>
-          <Typography variant="body2">
-            <strong>Seller:</strong> seller@studio360.com / @demo1
-          </Typography>
-          <Typography variant="body2">
-            <strong>Admin IT:</strong> admin@studio360.com / @demo1
-          </Typography>
-        </Stack>
-      </Alert>
 
       {!!errorMsg && (
         <Alert severity="error" sx={{ mb: 3 }}>

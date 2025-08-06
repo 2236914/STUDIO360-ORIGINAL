@@ -22,8 +22,9 @@ import { useBoolean } from 'src/hooks/use-boolean';
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
 
-import { signUp } from 'src/auth/context/jwt';
+import { signUpWithPassword } from 'src/auth/context/jwt/action';
 import { useAuthContext } from 'src/auth/hooks';
+import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
 
@@ -38,6 +39,8 @@ export const SignUpSchema = zod.object({
     .string()
     .min(1, { message: 'Password is required!' })
     .min(6, { message: 'Password must be at least 6 characters!' }),
+  // Role is not user-editable, always set as 'seller' for sign-up
+  role: zod.literal('seller'),
 });
 
 // ----------------------------------------------------------------------
@@ -52,10 +55,12 @@ export function JwtSignUpView() {
   const [errorMsg, setErrorMsg] = useState('');
 
   const defaultValues = {
-    firstName: 'Hello',
-    lastName: 'Friend',
-    email: 'hello@gmail.com',
-    password: '@demo1',
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    // role is not shown in the form, always 'seller'
+    role: 'seller',
   };
 
   const methods = useForm({
@@ -70,15 +75,29 @@ export function JwtSignUpView() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      await signUp({
+      // Check if a seller already exists
+      const { data: existingSeller, error: sellerError } = await supabase
+        .from('user_model')
+        .select('id')
+        .eq('role', 'seller')
+        .limit(1)
+        .maybeSingle();
+      if (sellerError) throw sellerError;
+      if (existingSeller) {
+        setErrorMsg('A seller account already exists. Only one seller is allowed.');
+        return;
+      }
+
+      await signUpWithPassword({
         email: data.email,
         password: data.password,
-        firstName: data.firstName,
-        lastName: data.lastName,
+        name: `${data.firstName} ${data.lastName}`,
+        role: 'seller',
       });
-      await checkUserSession?.();
-
-      router.refresh();
+      setErrorMsg('Account created successfully! Please sign in.');
+      setTimeout(() => {
+        router.push(paths.auth.jwt.signIn);
+      }, 1500);
     } catch (error) {
       console.error(error);
       setErrorMsg(error instanceof Error ? error.message : error);
@@ -113,7 +132,7 @@ export function JwtSignUpView() {
       <Field.Text
         name="password"
         label="Password"
-        placeholder="6+ characters"
+        placeholder="Enter a password with at least 6 characters"
         type={password.value ? 'text' : 'password'}
         InputLabelProps={{ shrink: true }}
         InputProps={{

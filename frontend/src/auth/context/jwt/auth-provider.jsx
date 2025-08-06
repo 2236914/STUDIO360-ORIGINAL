@@ -12,23 +12,7 @@ import { setSession, isValidToken, removeSession } from './utils';
 
 // ----------------------------------------------------------------------
 
-// Mock user data for demo purposes
-const MOCK_USERS = {
-  'seller@studio360.com': {
-    id: 'seller-001',
-    email: 'seller@studio360.com',
-    displayName: 'Kitsch Studio',
-    role: 'seller',
-    photoURL: _mock.image.avatar(1),
-  },
-  'admin@studio360.com': {
-    id: 'admin-001',
-    email: 'admin@studio360.com',
-    displayName: 'IT Admin',
-    role: 'admin_it',
-    photoURL: _mock.image.avatar(2),
-  },
-};
+import { supabase } from './supabaseClient';
 
 export function AuthProvider({ children }) {
   const { state, setState } = useSetState({
@@ -38,29 +22,27 @@ export function AuthProvider({ children }) {
 
   const checkUserSession = useCallback(async () => {
     try {
-      const accessToken = sessionStorage.getItem(STORAGE_KEY);
-
-      if (accessToken && isValidToken(accessToken)) {
-        setSession(accessToken);
-
-        // Get user email from token or session storage
-        const userEmail = sessionStorage.getItem('user-email');
-        
-        if (userEmail && MOCK_USERS[userEmail]) {
-          const mockUser = MOCK_USERS[userEmail];
-          
-          setState({ 
-            user: { 
-              ...mockUser, 
-              accessToken,
-            }, 
-            loading: false 
-          });
-        } else {
-          // No valid user found, clear session
-          removeSession();
-          setState({ user: null, loading: false });
-        }
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      if (session && session.user) {
+        setSession(session.access_token);
+        // Optionally, fetch extra user info from user_model
+        const { data: userModel, error: userError } = await supabase
+          .from('user_model')
+          .select('id, email, name, role')
+          .eq('id', session.user.id)
+          .single();
+        setState({
+          user: {
+            id: session.user.id,
+            email: session.user.email,
+            displayName: userModel?.name || session.user.email,
+            role: userModel?.role || '',
+            photoURL: '', // You can add avatar logic here if needed
+            accessToken: session.access_token,
+          },
+          loading: false,
+        });
       } else {
         setState({ user: null, loading: false });
       }
@@ -72,6 +54,9 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
+      // Sign out from Supabase Auth
+      await supabase.auth.signOut();
+
       // Clear session
       removeSession();
       
