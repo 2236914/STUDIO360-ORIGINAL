@@ -40,6 +40,20 @@ export function isValidToken(accessToken) {
   if (!accessToken) {
     return false;
   }
+  
+  // Check if session is marked as active
+  try {
+    const sessionData = localStorage.getItem(STORAGE_KEY);
+    if (sessionData) {
+      const { isActive } = JSON.parse(sessionData);
+      if (isActive === false) {
+        return false;
+      }
+    }
+  } catch (error) {
+    console.error('Error checking session status:', error);
+    return false;
+  }
 
   try {
     // Handle mock tokens for demo
@@ -83,28 +97,46 @@ export function tokenExpired(exp) {
 // ----------------------------------------------------------------------
 
 export async function setSession(accessToken) {
+  console.log('setSession called with token:', accessToken ? 'Token exists' : 'No token');
+  
   try {
     if (accessToken) {
-      sessionStorage.setItem(STORAGE_KEY, accessToken);
-
+      console.log('Storing token in localStorage...');
+      // Store token in localStorage with a timestamp
+      const sessionData = {
+        token: accessToken,
+        timestamp: new Date().getTime(),
+        isActive: true
+      };
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionData));
+      console.log('Token stored in localStorage');
+      
+      // Set axios default auth header
+      console.log('Setting axios auth header...');
       axios.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+      console.log('Axios auth header set');
 
       // Handle mock tokens for demo
       if (accessToken.startsWith('mock-')) {
-        // Mock tokens don't need expiration handling for demo
+        console.log('Using mock token, skipping expiration check');
         return;
       }
 
+      console.log('Decoding token...');
       const decodedToken = jwtDecode(accessToken);
+      console.log('Token decoded successfully');
 
       if (decodedToken && 'exp' in decodedToken) {
+        console.log('Setting up token expiration check...');
         tokenExpired(decodedToken.exp);
+        console.log('Token expiration check set up');
       } else {
-        throw new Error('Invalid access token!');
+        console.warn('No expiration in token');
       }
     } else {
-      sessionStorage.removeItem(STORAGE_KEY);
-      delete axios.defaults.headers.common.Authorization;
+      console.log('No access token provided, removing session');
+      await removeSession();
     }
   } catch (error) {
     console.error('Error during set session:', error);
@@ -114,10 +146,47 @@ export async function setSession(accessToken) {
 
 // ----------------------------------------------------------------------
 
-export function removeSession() {
+export async function removeSession() {
+  console.log('removeSession called');
+  
   try {
-    sessionStorage.removeItem(STORAGE_KEY);
+    // Clear all auth-related data from localStorage
+    const keysToRemove = [
+      STORAGE_KEY,
+      'user-email',
+      'user-role',
+      'user-name',
+      'sb-access-token',
+      'sb-refresh-token',
+      'sb-auth-token',
+      'sb-auth-token-code-verifier'
+    ];
+    
+    console.log('Clearing storage keys...');
+    keysToRemove.forEach(key => {
+      const hadLocal = localStorage.getItem(key) !== null;
+      const hadSession = sessionStorage.getItem(key) !== null;
+      
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+      
+      if (hadLocal || hadSession) {
+        console.log(`Removed ${key} from ${hadLocal ? 'localStorage' : ''}${hadLocal && hadSession ? ' and ' : ''}${hadSession ? 'sessionStorage' : ''}`);
+      }
+    });
+    
+    // Clear axios headers
+    console.log('Clearing axios auth header...');
     delete axios.defaults.headers.common.Authorization;
+    
+    // Clear Supabase session
+    console.log('Signing out from Supabase...');
+    try {
+      await supabase.auth.signOut();
+      console.log('Successfully signed out from Supabase');
+    } catch (error) {
+      console.error('Error signing out from Supabase:', error);
+    }
   } catch (error) {
     console.error('Error during remove session:', error);
     throw error;

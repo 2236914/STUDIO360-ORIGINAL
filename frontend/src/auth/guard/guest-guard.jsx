@@ -23,7 +23,7 @@ export function GuestGuard({ children }) {
 
   const returnTo = searchParams.get('returnTo') || CONFIG.auth.redirectPath;
 
-  const checkPermissions = async () => {
+  useEffect(() => {
     if (loading) {
       return;
     }
@@ -34,11 +34,6 @@ export function GuestGuard({ children }) {
     }
 
     setIsChecking(false);
-  };
-
-  useEffect(() => {
-    checkPermissions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated, loading]);
 
   if (isChecking) {

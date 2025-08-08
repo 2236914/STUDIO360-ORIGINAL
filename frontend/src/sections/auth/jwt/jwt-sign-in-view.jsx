@@ -24,7 +24,8 @@ import { Form, Field } from 'src/components/hook-form';
 
 import { useAuthContext } from 'src/auth/hooks';
 import { signInWithPassword } from 'src/auth/context/jwt';
-import { setSession } from 'src/auth/context/jwt/utils';
+import { setSession, removeSession } from 'src/auth/context/jwt/utils';
+import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
 
@@ -67,23 +68,66 @@ export function JwtSignInView() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      await signInWithPassword({ email: data.email, password: data.password });
-      await checkUserSession?.();
-
-      router.refresh();
-    } catch (error) {
-      console.error(error);
-      // Properly handle error message conversion
-      let errorMessage = 'An error occurred during sign in.';
+      console.log('Starting sign in process...');
+      setErrorMsg('');
       
-      if (error instanceof Error) {
-        errorMessage = error.message;
+      // Clear any existing session data
+      console.log('Clearing existing session...');
+      await removeSession();
+      
+      // Perform the sign in
+      console.log('Attempting to sign in with:', { email: data.email });
+      const signInResult = await signInWithPassword({ email: data.email, password: data.password });
+      console.log('Sign in result:', signInResult);
+      
+      // Verify the session was created
+      console.log('Verifying session...');
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      console.log('Session data:', sessionData);
+      
+      if (sessionError) {
+        console.error('Session error:', sessionError);
+        throw new Error('Failed to create session. Please try again.');
+      }
+      
+      if (!sessionData?.session) {
+        console.error('No session data received');
+        throw new Error('No session data received from server');
+      }
+      
+      // Update the auth state
+      console.log('Updating auth state...');
+      await checkUserSession?.();
+      
+      // Redirect to the dashboard
+      console.log('Redirecting to dashboard...');
+      router.push(paths.dashboard.root);
+      
+    } catch (error) {
+      console.error('Sign in error:', error);
+      
+      // Clear any partial session data
+      try {
+        await removeSession();
+      } catch (cleanupError) {
+        console.error('Error during cleanup:', cleanupError);
+      }
+      
+      // Set user-friendly error message
+      let errorMessage = 'Failed to sign in. Please check your credentials and try again.';
+      
+      if (error?.message?.includes('Invalid login credentials')) {
+        errorMessage = 'Invalid email or password. Please try again.';
+      } else if (error instanceof Error) {
+        errorMessage = error.message || errorMessage;
+        console.error('Error details:', error.stack);
       } else if (typeof error === 'string') {
         errorMessage = error;
-      } else if (error && typeof error === 'object' && 'message' in error) {
+      } else if (error?.message) {
         errorMessage = String(error.message);
       }
       
+      console.log('Displaying error to user:', errorMessage);
       setErrorMsg(errorMessage);
     }
   });
