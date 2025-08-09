@@ -7,7 +7,8 @@ import packageJson from '../package.json';
 export const CONFIG = {
   site: {
     name: 'Kitsch Studio',
-    serverUrl: process.env.NEXT_PUBLIC_SERVER_URL ?? '',
+    // Ensure frontend talks to backend in dev even if env is missing
+    serverUrl: process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3001',
     assetURL: process.env.NEXT_PUBLIC_ASSET_URL ?? '',
     basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? '',
     version: packageJson.version,

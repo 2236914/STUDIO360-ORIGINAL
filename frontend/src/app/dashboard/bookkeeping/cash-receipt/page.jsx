@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -175,7 +176,8 @@ export default function CashReceiptPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('All');
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [receiptEntries, setReceiptEntries] = useState(MOCK_RECEIPT_ENTRIES);
+  const [receiptEntries, setReceiptEntries] = useState([]);
+
   const [newEntry, setNewEntry] = useState({
     date: '',
     invoiceNumber: '',
@@ -191,17 +193,28 @@ export default function CashReceiptPage() {
   // Calculate totals from current entries
   const TOTALS = calculateTotals(receiptEntries);
 
-  // Mock API function for adding entry
+  // Load entries from backend
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get('/api/bookkeeping/cash-receipts');
+        const data = res?.data?.data?.receipts;
+        if (Array.isArray(data)) setReceiptEntries(data);
+      } catch (e) {
+        console.warn('Failed to load cash receipts from API, using mock. Error:', e?.message);
+        setReceiptEntries(MOCK_RECEIPT_ENTRIES);
+      }
+    };
+    load();
+  }, []);
+
+  // Create entry via backend
   const handleAddEntry = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const nextId = Math.max(...receiptEntries.map(entry => entry.id)) + 1;
-      
-      const entryToAdd = {
-        ...newEntry,
-        id: nextId,
+      const payload = {
+        date: newEntry.date,
+        invoiceNumber: newEntry.invoiceNumber,
+        description: newEntry.description,
         netSales: parseFloat(newEntry.netSales) || 0,
         feesAndCharges: parseFloat(newEntry.feesAndCharges) || 0,
         cash: parseFloat(newEntry.cash) || 0,
@@ -209,8 +222,9 @@ export default function CashReceiptPage() {
         ownersCapital: parseFloat(newEntry.ownersCapital) || 0,
         loansPayable: parseFloat(newEntry.loansPayable) || 0,
       };
-
-      setReceiptEntries(prev => [...prev, entryToAdd]);
+      const res = await axios.post('/api/bookkeeping/cash-receipts', payload);
+      const saved = res?.data?.data?.entry;
+      if (saved) setReceiptEntries(prev => [...prev, saved]);
       setOpenAddDialog(false);
       setNewEntry({
         date: '',

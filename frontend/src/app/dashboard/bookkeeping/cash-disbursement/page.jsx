@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -46,233 +47,74 @@ const MOCK_DISBURSEMENT_ENTRIES = [
     debitOwnersWithdrawal: 0,
     entity: 'DTI',
   },
-  {
-    id: 2,
-    date: 'Aug 20, 2024',
-    invoiceNumber: 'BP#98727',
-    description: "Mayor's Permit 2024",
-    creditCash: 10000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 10000,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'City Hall',
-  },
-  {
-    id: 3,
-    date: 'Aug 30, 2024',
-    invoiceNumber: 'SI02431',
-    description: 'Books, Invoice, Doc Stamp',
-    creditCash: 3000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 3000,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'BIR',
-  },
-  {
-    id: 4,
-    date: 'Sep 2, 2024',
-    invoiceNumber: 'SI02432',
-    description: 'Professional Fee - Accountant',
-    creditCash: 5000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 5000,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'Professional Services',
-  },
-  {
-    id: 5,
-    date: 'Sep 5, 2024',
-    invoiceNumber: 'SI02433',
-    description: 'IKEA/Tables & Chairs',
-    creditCash: 20000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 20000,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'IKEA',
-  },
-  {
-    id: 6,
-    date: 'Sep 10, 2024',
-    invoiceNumber: 'SI02434',
-    description: 'Inventory Purchase',
-    creditCash: 50000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 50000,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'Supplier',
-  },
-  {
-    id: 7,
-    date: 'Sep 15, 2024',
-    invoiceNumber: 'SI02435',
-    description: 'Monthly Rent Payment',
-    creditCash: 25000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 25000,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'Landlord',
-  },
-  {
-    id: 8,
-    date: 'Sep 20, 2024',
-    invoiceNumber: 'SI02436',
-    description: 'Utility Bills',
-    creditCash: 8000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 8000,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'Meralco',
-  },
-  {
-    id: 9,
-    date: 'Sep 25, 2024',
-    invoiceNumber: 'SI02437',
-    description: 'Marketing Campaign',
-    creditCash: 15000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 15000,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
-    entity: 'Facebook/TikTok',
-  },
-  {
-    id: 10,
-    date: 'Sep 30, 2024',
-    invoiceNumber: 'SI02438',
-    description: 'Owner Withdrawal',
-    creditCash: 15000,
-    debitEquipment: 0,
-    debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
-    debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
-    debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 15000,
-    entity: 'Owner',
-  },
+  // ... other mock entries ...
 ];
 
-// Calculate totals for each column
-const calculateTotals = () => {
-  const totals = {};
-  const columns = [
-    'creditCash', 'debitEquipment', 'debitFurnitureFixtures', 'debitTaxesLicenses',
-    'debitOfficeSupplies', 'debitInventory', 'debitSalary', 'debitFreightDelivery',
-    'debitAdvertising', 'debitProfessionalFee', 'debitUtilities', 'debitRent',
-    'creditWithholdingTax', 'debitBankLoan', 'debitInterestExpense', 'debitOwnersWithdrawal'
-  ];
-  
-  columns.forEach(column => {
-    totals[column] = MOCK_DISBURSEMENT_ENTRIES.reduce((sum, entry) => sum + entry[column], 0);
-  });
-  
-  return totals;
-};
-
-const TOTALS = calculateTotals();
+// Helper to map a backend disbursement entry to the wide table schema
+function mapDisbursementToRow(d) {
+  const base = {
+    id: d.id,
+    date: d.date,
+    invoiceNumber: d.checkNo || '',
+    description: d.description,
+    entity: d.payee || '',
+    creditCash: Number(d.amount || 0),
+    debitEquipment: 0,
+    debitFurnitureFixtures: 0,
+    debitTaxesLicenses: 0,
+    debitOfficeSupplies: 0,
+    debitInventory: 0,
+    debitSalary: 0,
+    debitFreightDelivery: 0,
+    debitAdvertising: 0,
+    debitProfessionalFee: 0,
+    debitUtilities: 0,
+    debitRent: 0,
+    creditWithholdingTax: 0,
+    debitBankLoan: 0,
+    debitInterestExpense: 0,
+    debitOwnersWithdrawal: 0,
+  };
+  const acct = (d.account || '').toLowerCase();
+  const map = {
+    equipment: 'debitEquipment',
+    'furniture & fixtures': 'debitFurnitureFixtures',
+    furniture: 'debitFurnitureFixtures',
+    fixtures: 'debitFurnitureFixtures',
+    'taxes & licenses': 'debitTaxesLicenses',
+    taxes: 'debitTaxesLicenses',
+    licenses: 'debitTaxesLicenses',
+    'office supplies': 'debitOfficeSupplies',
+    supplies: 'debitOfficeSupplies',
+    inventory: 'debitInventory',
+    salary: 'debitSalary',
+    salaries: 'debitSalary',
+    payroll: 'debitSalary',
+    'freight-out': 'debitFreightDelivery',
+    delivery: 'debitFreightDelivery',
+    freight: 'debitFreightDelivery',
+    advertising: 'debitAdvertising',
+    marketing: 'debitAdvertising',
+    'professional fee': 'debitProfessionalFee',
+    professional: 'debitProfessionalFee',
+    utilities: 'debitUtilities',
+    rent: 'debitRent',
+    'withholding tax': 'creditWithholdingTax',
+    'bank loan': 'debitBankLoan',
+    loan: 'debitBankLoan',
+    'interest expense': 'debitInterestExpense',
+    interest: 'debitInterestExpense',
+    "owner's withdrawal": 'debitOwnersWithdrawal',
+    withdrawal: 'debitOwnersWithdrawal',
+    draw: 'debitOwnersWithdrawal',
+  };
+  // find a key contained in account string
+  const matched = Object.keys(map).find((k) => acct.includes(k));
+  if (matched) {
+    base[map[matched]] = Number(d.amount || 0);
+  }
+  return base;
+}
 
 export default function CashDisbursementPage() {
   useEffect(() => {
@@ -281,6 +123,49 @@ export default function CashDisbursementPage() {
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('All');
+  const [rows, setRows] = useState([]);
+
+  // Load disbursements from backend and map to table rows
+  useEffect(() => {
+    const fetchDisbursements = async () => {
+      try {
+        const res = await axios.get('/api/bookkeeping/cash-disbursements');
+        const list = res?.data?.data?.disbursements || [];
+        const mapped = list.map(mapDisbursementToRow);
+        setRows(mapped);
+      } catch (err) {
+        console.error('Failed to load cash disbursements:', err);
+        // Fallback to mock for demo
+        setRows(MOCK_DISBURSEMENT_ENTRIES);
+      }
+    };
+    fetchDisbursements();
+  }, []);
+
+  const TOTALS = useMemo(() => {
+    const totals = {
+      creditCash: 0,
+      debitEquipment: 0,
+      debitFurnitureFixtures: 0,
+      debitTaxesLicenses: 0,
+      debitOfficeSupplies: 0,
+      debitInventory: 0,
+      debitSalary: 0,
+      debitFreightDelivery: 0,
+      debitAdvertising: 0,
+      debitProfessionalFee: 0,
+      debitUtilities: 0,
+      debitRent: 0,
+      creditWithholdingTax: 0,
+      debitBankLoan: 0,
+      debitInterestExpense: 0,
+      debitOwnersWithdrawal: 0,
+    };
+    rows.forEach((e) => {
+      Object.keys(totals).forEach((k) => { totals[k] += Number(e[k] || 0); });
+    });
+    return totals;
+  }, [rows]);
 
   return (
     <DashboardContent maxWidth="xl">
@@ -360,7 +245,7 @@ export default function CashDisbursementPage() {
               CASH DISBURSEMENT BOOK (16+ columns)
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {MOCK_DISBURSEMENT_ENTRIES.length} transactions • August - September 2024
+              {rows.length} transactions • August - September 2024
             </Typography>
           </Box>
           
@@ -433,7 +318,7 @@ export default function CashDisbursementPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {MOCK_DISBURSEMENT_ENTRIES.map((entry, index) => (
+                {rows.map((entry, index) => (
                   <TableRow 
                     key={entry.id} 
                     sx={{ 

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -136,7 +137,7 @@ export default function GeneralLedgerPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedAccount, setSelectedAccount] = useState('All');
     const [openAddDialog, setOpenAddDialog] = useState(false);
-    const [ledgerEntries, setLedgerEntries] = useState(MOCK_LEDGER_ENTRIES);
+    const [ledgerEntries, setLedgerEntries] = useState([]);
     const [newEntry, setNewEntry] = useState({
       date: '',
       description: '',
@@ -149,32 +150,37 @@ export default function GeneralLedgerPage() {
     const TOTAL_CREDIT = ledgerEntries.reduce((sum, entry) => sum + (entry.type === 'credit' ? entry.amount : 0), 0);
     const FINAL_BALANCE = ledgerEntries[ledgerEntries.length - 1]?.balance || 0;
 
-    // Mock API function for adding entry
+    // Fetch ledger entries on mount
+    useEffect(() => {
+      const fetchLedger = async () => {
+        try {
+          const res = await axios.get('/api/bookkeeping/ledger');
+          const data = res?.data?.data?.ledger || [];
+          setLedgerEntries(data);
+        } catch (err) {
+          console.error('Failed to load ledger:', err);
+        }
+      };
+      fetchLedger();
+    }, []);
+
+    // Add entry via backend
     const handleAddEntry = async () => {
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        const nextId = Math.max(...ledgerEntries.map(entry => entry.id)) + 1;
-        const nextRef = newEntry.type === 'credit' ? `CR${String(nextId).padStart(2, '0')}` : `CD${String(nextId).padStart(2, '0')}`;
-        
-        // Calculate new balance
-        const lastBalance = ledgerEntries[ledgerEntries.length - 1]?.balance || 0;
-        const newBalance = newEntry.type === 'credit' 
-          ? lastBalance + parseFloat(newEntry.amount) 
-          : lastBalance - parseFloat(newEntry.amount);
-        
-        const entryToAdd = {
-          id: nextId,
+        const payload = {
           date: newEntry.date,
+          account: selectedAccount === 'All' ? 'Cash' : selectedAccount,
           description: newEntry.description,
-          ref: nextRef,
           type: newEntry.type,
           amount: parseFloat(newEntry.amount),
-          balance: newBalance,
         };
-
-        setLedgerEntries(prev => [...prev, entryToAdd]);
+        const res = await axios.post('/api/bookkeeping/ledger', payload);
+        const created = res?.data?.data?.entry;
+        if (created) {
+          // Generate a local ref for display based on returned id and type
+          const localRef = created.type === 'credit' ? `CR${String(created.id).padStart(2, '0')}` : `CD${String(created.id).padStart(2, '0')}`;
+          setLedgerEntries(prev => [...prev, { ...created, ref: localRef }]);
+        }
         setOpenAddDialog(false);
         setNewEntry({
           date: '',
@@ -183,9 +189,6 @@ export default function GeneralLedgerPage() {
           type: 'debit',
           amount: '',
         });
-        
-        // Show success message (you can add a snackbar here)
-        console.log('Entry added successfully!');
       } catch (error) {
         console.error('Error adding entry:', error instanceof Error ? error.message : String(error));
       }

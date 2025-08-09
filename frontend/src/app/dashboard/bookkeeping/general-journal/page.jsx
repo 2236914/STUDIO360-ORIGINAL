@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -109,12 +110,7 @@ const MOCK_JOURNAL_ENTRIES = [
   },
 ];
 
-const TOTAL_DEBIT = MOCK_JOURNAL_ENTRIES.reduce((sum, entry) => 
-  sum + entry.entries.reduce((entrySum, e) => entrySum + (e.type === 'debit' ? e.amount : 0), 0), 0
-);
-const TOTAL_CREDIT = MOCK_JOURNAL_ENTRIES.reduce((sum, entry) => 
-  sum + entry.entries.reduce((entrySum, e) => entrySum + (e.type === 'credit' ? e.amount : 0), 0), 0
-);
+// Totals will be computed from current journalEntries
 
 export default function GeneralJournalPage() {
   useEffect(() => {
@@ -124,7 +120,8 @@ export default function GeneralJournalPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('All');
   const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [journalEntries, setJournalEntries] = useState(MOCK_JOURNAL_ENTRIES);
+  const [journalEntries, setJournalEntries] = useState([]);
+
   const [newEntry, setNewEntry] = useState({
     date: '',
     ref: '',
@@ -134,22 +131,52 @@ export default function GeneralJournalPage() {
     ],
   });
 
-  // Mock API function for adding entry
+  // Load entries from backend
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await axios.get('/api/bookkeeping/journal');
+        const data = res?.data?.data?.journal;
+        if (Array.isArray(data)) {
+          setJournalEntries(data);
+        }
+      } catch (e) {
+        console.warn('Failed to load journal from API, using mock. Error:', e?.message);
+      }
+    };
+    load();
+  }, []);
+
+  // Compute totals based on loaded entries
+  const { totalDebit, totalCredit } = useMemo(() => {
+    const sums = (journalEntries || []).reduce(
+      (acc, entry) => {
+        (entry.entries || []).forEach((e) => {
+          if (e.type === 'debit') acc.debit += Number(e.amount) || 0;
+          if (e.type === 'credit') acc.credit += Number(e.amount) || 0;
+        });
+        return acc;
+      },
+      { debit: 0, credit: 0 }
+    );
+    return { totalDebit: sums.debit, totalCredit: sums.credit };
+  }, [journalEntries]);
+
+  // Create entry via backend
   const handleAddEntry = async () => {
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const nextId = Math.max(...journalEntries.map(entry => entry.id)) + 1;
-      const nextRef = `GJ${String(nextId).padStart(2, '0')}`;
-      
-      const entryToAdd = {
-        ...newEntry,
-        id: nextId,
-        ref: nextRef,
-      };
-
-      setJournalEntries(prev => [...prev, entryToAdd]);
+      const cleanedEntries = (newEntry.entries || []).map((e) => ({
+        account: e.account,
+        description: e.description,
+        type: e.type,
+        amount: parseFloat(e.amount) || 0,
+      }));
+      const payload = { date: newEntry.date, ref: newEntry.ref, entries: cleanedEntries };
+      const res = await axios.post('/api/bookkeeping/journal', payload);
+      const saved = res?.data?.data?.entry;
+      if (saved) {
+        setJournalEntries(prev => [...prev, saved]);
+      }
       setOpenAddDialog(false);
       setNewEntry({
         date: '',
@@ -356,12 +383,12 @@ export default function GeneralJournalPage() {
                   borderRight: `1px solid ${theme.palette.divider}`,
                 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTAL_DEBIT)}
+                    ₱{fNumber(totalDebit)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTAL_CREDIT)}
+                    ₱{fNumber(totalCredit)}
                   </Typography>
                 </TableCell>
               </TableRow>

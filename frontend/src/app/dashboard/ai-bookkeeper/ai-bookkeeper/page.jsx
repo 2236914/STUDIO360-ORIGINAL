@@ -50,40 +50,15 @@ const MOCK_SUGGESTIONS = [
   'Identify tax deductions',
 ];
 
-const MOCK_ANALYTICS = [
-  {
-    title: 'Transactions Processed',
-    value: '1,247',
-    change: '+12%',
-    trend: 'up',
-    icon: 'eva:trending-up-fill',
-    color: 'success.main',
-  },
-  {
-    title: 'Accuracy Rate',
-    value: '98.5%',
-    change: '+2.1%',
-    trend: 'up',
-    icon: 'eva:checkmark-circle-2-fill',
-    color: 'primary.main',
-  },
-  {
-    title: 'Time Saved',
-    value: '45 hrs',
-    change: '+8 hrs',
-    trend: 'up',
-    icon: 'eva:clock-fill',
-    color: 'warning.main',
-  },
-  {
-    title: 'Cost Savings',
-    value: '₱12,500',
-    change: '+₱2,300',
-    trend: 'up',
-    icon: 'eva:credit-card-fill',
-    color: 'success.main',
-  },
-];
+function getStats() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem('aiBookkeeperStats');
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 export default function AIBookkeeperPage() {
   useEffect(() => {
@@ -92,6 +67,34 @@ export default function AIBookkeeperPage() {
   const theme = useTheme();
   const [message, setMessage] = useState('');
   const [chatHistory, setChatHistory] = useState(MOCK_CHAT_HISTORY);
+  const [stats, setStats] = useState(null);
+
+  // Load stats from backend (fallback to localStorage) and subscribe to updates
+  useEffect(() => {
+    const loadLocal = () => setStats(getStats());
+    const load = async () => {
+      try {
+        const res = await fetch('/api/ai/stats');
+        if (res.ok) {
+          const json = await res.json();
+          if (json?.success) {
+            setStats(json.data || null);
+            return;
+          }
+        }
+        loadLocal();
+      } catch (_) {
+        loadLocal();
+      }
+    };
+    load();
+    window.addEventListener('storage', load);
+    const id = setInterval(load, 1500); // lightweight poll to catch same-tab updates
+    return () => {
+      window.removeEventListener('storage', load);
+      clearInterval(id);
+    };
+  }, []);
 
   const handleUploadClick = () => {
     window.location.href = '/dashboard/ai-bookkeeper/upload-process';
@@ -177,32 +180,83 @@ export default function AIBookkeeperPage() {
         </Stack>
       </Card>
 
-      {/* Analytics Cards */}
-      <Stack direction="row" spacing={3} sx={{ mb: 3 }}>
-        {MOCK_ANALYTICS.map((item) => (
-          <Card key={item.title} sx={{ p: 3, flex: 1 }}>
-            <Stack direction="row" alignItems="center" spacing={2}>
-              <Avatar sx={{ bgcolor: item.color, width: 48, height: 48 }}>
-                <Iconify icon={item.icon} width={24} />
-              </Avatar>
-              <Box>
-                <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
-                  {item.title}
-                </Typography>
-                <Typography variant="h4" sx={{ mb: 0.5 }}>
-                  {item.value}
-                </Typography>
-                <Label
-                  variant="soft"
-                  color={item.trend === 'up' ? 'success' : 'error'}
-                  sx={{ fontSize: '0.75rem' }}
-                >
-                  {item.change}
-                </Label>
-              </Box>
-            </Stack>
-          </Card>
-        ))}
+      {/* Analytics Cards (responsive) */}
+      <Stack direction={{ xs: 'column', md: 'row' }} spacing={3} sx={{ mb: 3 }}>
+        <Card sx={{ p: 3, flex: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar sx={{ bgcolor: 'success.main', width: 48, height: 48 }}>
+              <Iconify icon="eva:trending-up-fill" width={24} />
+            </Avatar>
+            <Box>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                Transactions Processed
+              </Typography>
+              <Typography variant="h4" sx={{ mb: 0.5 }}>
+                {stats?.processed ?? 0}
+              </Typography>
+              <Label variant="soft" color="success" sx={{ fontSize: '0.75rem' }}>
+                {stats ? '+live' : '+0'}
+              </Label>
+            </Box>
+          </Stack>
+        </Card>
+
+        <Card sx={{ p: 3, flex: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar sx={{ bgcolor: 'primary.main', width: 48, height: 48 }}>
+              <Iconify icon="eva:checkmark-circle-2-fill" width={24} />
+            </Avatar>
+            <Box>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                Accuracy Rate
+              </Typography>
+              <Typography variant="h4" sx={{ mb: 0.5 }}>
+                {(stats?.accuracyRate ?? 0) + '%'}
+              </Typography>
+              <Label variant="soft" color="success" sx={{ fontSize: '0.75rem' }}>
+                {stats ? '+live' : '+0%'}
+              </Label>
+            </Box>
+          </Stack>
+        </Card>
+
+        <Card sx={{ p: 3, flex: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar sx={{ bgcolor: 'warning.main', width: 48, height: 48 }}>
+              <Iconify icon="eva:clock-fill" width={24} />
+            </Avatar>
+            <Box>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                Time Saved
+              </Typography>
+              <Typography variant="h4" sx={{ mb: 0.5 }}>
+                {(stats?.timeSavedMinutes ?? 0) + ' mins'}
+              </Typography>
+              <Label variant="soft" color="success" sx={{ fontSize: '0.75rem' }}>
+                {stats ? '+live' : '+0m'}
+              </Label>
+            </Box>
+          </Stack>
+        </Card>
+
+        <Card sx={{ p: 3, flex: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar sx={{ bgcolor: 'success.main', width: 48, height: 48 }}>
+              <Iconify icon="eva:credit-card-fill" width={24} />
+            </Avatar>
+            <Box>
+              <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
+                Cost Savings
+              </Typography>
+              <Typography variant="h4" sx={{ mb: 0.5 }}>
+                {'₱' + (stats ? Number(stats.costSavings || 0).toLocaleString() : '0')}
+              </Typography>
+              <Label variant="soft" color="success" sx={{ fontSize: '0.75rem' }}>
+                {stats ? '+live' : '+₱0'}
+              </Label>
+            </Box>
+          </Stack>
+        </Card>
       </Stack>
 
       {/* Main Content */}
