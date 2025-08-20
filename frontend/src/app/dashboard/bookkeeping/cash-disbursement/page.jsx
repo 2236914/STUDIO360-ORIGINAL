@@ -333,7 +333,7 @@ export default function CashDisbursementPage() {
                     <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       <Stack spacing={0.5}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {entry.invoiceNumber && String(entry.invoiceNumber).trim() ? entry.invoiceNumber : 'N/A'}
+                          {entry.invoiceNumber}
                         </Typography>
                         <Label 
                           variant="soft" 

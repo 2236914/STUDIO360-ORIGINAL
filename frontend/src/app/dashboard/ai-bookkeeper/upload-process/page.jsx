@@ -419,12 +419,11 @@ export default function UploadProcessPage() {
         if (structured.supplier) descParts.push(structured.supplier);
         if (structured.invoiceNumber) descParts.push(`Invoice ${structured.invoiceNumber}`);
         const description = (descParts.join(' - ') || 'Document Total') + ` (${filename})`;
-        const isSales = structured?._source === 'excel';
         txns.push({
           id: id++,
           description,
             amount: structured.total,
-          aiCategory: isSales ? 'Online Sales Revenue' : 'Operating Expenses',
+            aiCategory: 'Operating Expenses',
             confidence: 90,
       suggested: true,
       structuredSource: true,
@@ -483,7 +482,6 @@ export default function UploadProcessPage() {
         const formData = new FormData();
         formData.append('file', file, file.name);
         const res = await axios.post('/api/ai/upload', formData, {
-          headers: { 'Content-Type': 'multipart/form-data' },
           onUploadProgress: (evt) => {
             const percent = Math.round((evt.loaded * 100) / (evt.total || 1));
             setUploadLogs((prev) => [...prev, `Uploading ${file.name}: ${percent}%`]);

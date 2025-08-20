@@ -33,6 +33,9 @@ const defaultAllowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3033',
   'http://localhost:3034',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3033',
+  'http://127.0.0.1:3034',
 ];
 const envOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
   .split(',')
@@ -42,9 +45,20 @@ const allowedOrigins = envOrigins.length > 0 ? envOrigins : defaultAllowedOrigin
 
 app.use(cors({
   origin: (origin, callback) => {
-    // allow requests with no origin (like mobile apps, curl) or if origin is in the list
-    if (!origin || allowedOrigins.includes(origin)) {
-      return callback(null, true);
+    // allow requests with no origin (like mobile apps, curl)
+    if (!origin) return callback(null, true);
+    // Always allow explicit env-provided origins
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    try {
+      const url = new URL(origin);
+      const host = url.hostname;
+      const isLocalhost = host === 'localhost' || host === '127.0.0.1';
+      // In development, allow any localhost/127.0.0.1 port
+      if ((process.env.NODE_ENV || 'development') !== 'production' && isLocalhost) {
+        return callback(null, true);
+      }
+    } catch (_) {
+      // fallthrough
     }
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
