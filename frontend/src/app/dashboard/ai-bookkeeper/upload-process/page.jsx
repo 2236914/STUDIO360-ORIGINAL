@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -156,7 +158,7 @@ const BOOK_OPTIONS = [
   { value: 'ledger', label: 'General Ledger' },
 ];
 
-function inferBookFromCategory(category = '') {
+function inferBookFromCategory(category = '') { // kept for backward compatibility (no longer used for primary routing)
   const c = String(category).toLowerCase();
   const incomeLike = ['online sales', 'walk-in sales', 'sales', 'revenue', 'other income'];
   const expenseLike = ['expense', 'expenses', 'utilities', 'rent', 'insurance', 'office supplies', 'advertising', 'marketing', 'travel', 'professional fees', 'platform fees', 'cost of goods sold'];
@@ -165,10 +167,19 @@ function inferBookFromCategory(category = '') {
   return 'journal';
 }
 
+function classifyCategory(category = '') {
+  const book = inferBookFromCategory(category);
+  if (book === 'cash-receipts') return 'income';
+  if (book === 'cash-disbursements') return 'expense';
+  return 'other';
+}
+
 export default function UploadProcessPage() {
   useEffect(() => {
     document.title = 'AI Bookkeeping Process | Kitsch Studio';
   }, []);
+
+  const router = useRouter();
 
   const [activeStep, setActiveStep] = useState(0);
   const [completed, setCompleted] = useState({});
@@ -178,8 +189,10 @@ export default function UploadProcessPage() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadLogs, setUploadLogs] = useState([]);
   const [ocrTexts, setOcrTexts] = useState({}); // { filename: text }
+  const [ocrStructured, setOcrStructured] = useState({}); // { filename: { date, invoiceNumber, supplier, total, currency } }
   const [transferState, setTransferState] = useState({ transferred: 0, total: 0, categories: [] });
   const [step3Initialized, setStep3Initialized] = useState(false);
+  const [lastTransferBooks, setLastTransferBooks] = useState({ counts: {}, total: 0 });
 
   const totalSteps = steps.length;
   const completedSteps = Object.keys(completed).length;
@@ -265,74 +278,87 @@ export default function UploadProcessPage() {
 
   // Transfer confirmed transactions to appropriate books
   const handleTransfer = async () => {
-    const items = transactions.map(t => {
-      const inferred = inferBookFromCategory(t.aiCategory);
-      const book = t.autoBook ? inferred : (t.book || inferred);
-      return { ...t, book };
-    });
+    // New model: every transaction goes to General Journal first.
+    // If classified as expense -> also create Cash Disbursement entry.
+    // If income -> also create Cash Receipt entry.
+    const items = transactions.slice();
     setProcessing(true);
     setTransferState({ transferred: 0, total: items.length, categories: [] });
     const categoriesSet = new Set();
+    const counts = { journal: 0, 'cash-disbursements': 0, 'cash-receipts': 0 };
     try {
       for (let i = 0; i < items.length; i++) {
         const t = items[i];
+        const amt = Math.abs(Number(t.amount) || 0);
+        const cls = classifyCategory(t.aiCategory);
         categoriesSet.add(t.aiCategory);
-        // Minimal mapping per book
-        if (t.book === 'cash-receipts') {
+        // Journal entry composition
+        let journalEntries;
+        if (cls === 'expense') {
+          journalEntries = [
+            { account: t.aiCategory || 'Expense', description: t.description, type: 'debit', amount: amt },
+            { account: 'Cash', description: t.description, type: 'credit', amount: amt },
+          ];
+        } else if (cls === 'income') {
+          journalEntries = [
+            { account: 'Cash', description: t.description, type: 'debit', amount: amt },
+            { account: t.aiCategory || 'Revenue', description: t.description, type: 'credit', amount: amt },
+          ];
+        } else { // other/unknown -> default to expense style for now
+          journalEntries = [
+            { account: t.aiCategory || 'Other', description: t.description, type: 'debit', amount: amt },
+            { account: 'Cash', description: t.description, type: 'credit', amount: amt },
+          ];
+        }
+        await axios.post('/api/bookkeeping/journal', {
+          date: new Date().toISOString().slice(0, 10),
+          ref: '',
+          entries: journalEntries,
+        });
+        counts.journal += 1;
+
+        if (cls === 'expense') {
+          const pickRef = (...vals) => {
+            for (const v of vals) {
+              const s = (v ?? '').toString().trim();
+              if (!s) continue;
+              if (/^(n\/?a|na|none|null|undefined|summary)$/i.test(s)) continue;
+              return s;
+            }
+            return '';
+          };
+          const ref = pickRef(t.invoiceNumber, t.orderSummaryNo, t.orderId);
+          await axios.post('/api/bookkeeping/cash-disbursements', {
+            date: new Date().toISOString().slice(0, 10),
+            checkNo: ref,
+            payee: 'N/A',
+            description: t.description,
+            amount: amt,
+            account: t.aiCategory,
+          });
+          counts['cash-disbursements'] += 1;
+        } else if (cls === 'income') {
           await axios.post('/api/bookkeeping/cash-receipts', {
             date: new Date().toISOString().slice(0, 10),
             invoiceNumber: '',
             description: t.description,
-            netSales: Number(t.amount) || 0,
+            netSales: amt,
             feesAndCharges: 0,
-            cash: Number(t.amount) || 0,
+            cash: amt,
             withholdingTax: 0,
             ownersCapital: 0,
             loansPayable: 0,
           });
-        } else if (t.book === 'cash-disbursements') {
-          await axios.post('/api/bookkeeping/cash-disbursements', {
-            date: new Date().toISOString().slice(0, 10),
-            checkNo: '',
-            payee: 'N/A',
-            description: t.description,
-            amount: Number(t.amount) || 0,
-            account: t.aiCategory,
-          });
-        } else if (t.book === 'ledger') {
-          // Post a simple ledger line; type based on sign (non-negative -> debit)
-          await axios.post('/api/bookkeeping/ledger', {
-            date: new Date().toISOString().slice(0, 10),
-            account: t.aiCategory || 'Uncategorized',
-            description: t.description,
-            type: (Number(t.amount) || 0) >= 0 ? 'debit' : 'credit',
-            amount: Math.abs(Number(t.amount) || 0),
-          });
-        } else {
-          // Default to general journal with a placeholder balancing entry
-          const amt = Math.abs(Number(t.amount) || 0);
-          const isExpense = inferBookFromCategory(t.aiCategory) === 'cash-disbursements';
-          const entries = isExpense
-            ? [
-                { account: t.aiCategory || 'Expense', description: t.description, type: 'debit', amount: amt },
-                { account: 'Cash', description: t.description, type: 'credit', amount: amt },
-              ]
-            : [
-                { account: 'Cash', description: t.description, type: 'debit', amount: amt },
-                { account: t.aiCategory || 'Revenue', description: t.description, type: 'credit', amount: amt },
-              ];
-          await axios.post('/api/bookkeeping/journal', {
-            date: new Date().toISOString().slice(0, 10),
-            ref: '',
-            entries,
-          });
+          counts['cash-receipts'] += 1;
         }
         setTransferState(prev => ({ ...prev, transferred: prev.transferred + 1, categories: Array.from(categoriesSet) }));
       }
-      // Mark step complete and advance to Data Transfer step
       const newCompleted = { ...completed, 2: true };
       setCompleted(newCompleted);
       setActiveStep(3);
+      setLastTransferBooks({ counts, total: items.length });
+      // Navigate to journal as the primary book for review
+      setTimeout(() => router.push('/dashboard/bookkeeping/general-journal'), 300);
     } catch (err) {
       console.error('Transfer error:', err);
     } finally {
@@ -357,10 +383,12 @@ export default function UploadProcessPage() {
   };
 
   // Very simple parser to extract line items and amounts from OCR text
-  const parseOcrToTransactions = (textsByFile) => {
+  const parseOcrToTransactions = (textsByFile, structuredByFile) => {
     const txns = [];
     let id = 1;
-    const amountRe = /(₱|php)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})?)/i;
+    // Only accept numbers that have an explicit currency symbol or code to avoid order numbers.
+    const amountRe = /(₱|\bPHP\b|\bphp\b|\$|USD|usd|EUR|eur|€)\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2})?)/i;
+    const metadataSkip = /(order\s*(summary|id|paid|date)|seller\s*name|date\s*issued|total\s*quantity|subtotal)/i;
     const categoryHints = [
       { k: 'rent', c: 'Rent Expense' },
       { k: 'utility', c: 'Utilities' },
@@ -383,7 +411,30 @@ export default function UploadProcessPage() {
       { k: 'shopee', c: 'Online Sales Revenue' },
       { k: 'tiktok', c: 'Online Sales Revenue' },
     ];
-    Object.entries(textsByFile).forEach(([filename, text]) => {
+  Object.entries(textsByFile).forEach(([filename, text]) => {
+      const structured = structuredByFile?.[filename];
+      // Prefer structured total: create one transaction representing the document total
+      if (structured && typeof structured.total === 'number' && structured.total > 0) {
+        const descParts = [];
+        if (structured.supplier) descParts.push(structured.supplier);
+        if (structured.invoiceNumber) descParts.push(`Invoice ${structured.invoiceNumber}`);
+        const description = (descParts.join(' - ') || 'Document Total') + ` (${filename})`;
+        const isSales = structured?._source === 'excel';
+        txns.push({
+          id: id++,
+          description,
+            amount: structured.total,
+          aiCategory: isSales ? 'Online Sales Revenue' : 'Operating Expenses',
+            confidence: 90,
+      suggested: true,
+      structuredSource: true,
+      sourceFile: filename,
+      invoiceNumber: structured.invoiceNumber || '',
+      orderSummaryNo: structured.orderSummaryNo || '',
+      orderId: structured.orderId || '',
+        });
+        return; // skip line-based extraction for this file
+      }
       const lines = String(text || '')
         .split(/\r?\n/)
         .map((s) => s.trim())
@@ -395,8 +446,11 @@ export default function UploadProcessPage() {
         const raw = m[2].replace(/,/g, '');
         const amt = parseFloat(raw);
         if (!isFinite(amt) || amt <= 0) continue;
-        const desc = (lines[i - 1] && !amountRe.test(lines[i - 1]) ? lines[i - 1] : lines[i])
-          .slice(0, 140);
+        // Skip if line looks like metadata (order id etc.)
+        if (metadataSkip.test(lines[i])) continue;
+        const prevLine = lines[i - 1] || '';
+        const candidateDesc = (!amountRe.test(prevLine) && prevLine && !metadataSkip.test(prevLine)) ? prevLine : lines[i];
+        const desc = candidateDesc.slice(0, 140);
         const lower = (desc || '').toLowerCase();
         const hint = categoryHints.find((h) => lower.includes(h.k));
         const aiCategory = hint ? hint.c : 'Operating Expenses';
@@ -407,6 +461,10 @@ export default function UploadProcessPage() {
           aiCategory,
           confidence: 80,
           suggested: true,
+          sourceFile: filename,
+          invoiceNumber: structured?.invoiceNumber || '',
+          orderSummaryNo: structured?.orderSummaryNo || '',
+          orderId: structured?.orderId || '',
         });
         if (txns.length >= 50) break; // safety cap
       }
@@ -420,6 +478,7 @@ export default function UploadProcessPage() {
     setUploadLogs([]);
     try {
       const results = {};
+      const structuredAccumulator = {};
       for (const file of uploadedFiles) {
         const formData = new FormData();
         formData.append('file', file, file.name);
@@ -431,12 +490,15 @@ export default function UploadProcessPage() {
           },
         });
         const text = res?.data?.data?.text || '';
+        const structured = res?.data?.data?.structured || null;
         results[file.name] = text;
+        if (structured) structuredAccumulator[file.name] = structured;
         setUploadLogs((prev) => [...prev, `Processed ${file.name} (${file.size} bytes)`]);
       }
       setOcrTexts(results);
+      setOcrStructured(structuredAccumulator);
       // Build transactions from OCR text
-      const parsed = parseOcrToTransactions(results).map(t => ({ ...t, autoBook: true }));
+      const parsed = parseOcrToTransactions(results, structuredAccumulator).map(t => ({ ...t, autoBook: true }));
       setTransactions(parsed);
 
       // Accumulate KPIs on each successful upload batch
@@ -616,19 +678,68 @@ export default function UploadProcessPage() {
               Converted text from your documents.
             </Typography>
 
-            {/* Converted OCR Text Preview */}
+            {/* Structured OCR Text Preview */}
             {Object.keys(ocrTexts || {}).length > 0 && (
               <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" sx={{ mb: 1 }}>Converted Text</Typography>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Structured Invoice Preview</Typography>
                 <Stack spacing={2}>
-                  {Object.entries(ocrTexts).map(([name, text]) => (
-                    <Card key={name} sx={{ p: 2, bgcolor: 'grey.50' }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{name}</Typography>
-                      <Typography variant="caption" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {text ? String(text).slice(0, 1000) : '(no text found)'}{text && String(text).length > 1000 ? '…' : ''}
-                      </Typography>
-                    </Card>
-                  ))}
+                  {Object.entries(ocrTexts).map(([name, raw]) => {
+                    const s = ocrStructured?.[name] || {};
+                    const na = (v) => (v === undefined || v === null || v === '' ? '[N/A]' : v);
+                    const currency = s.currency || '₱';
+                    const fmtAmt = (v) => (v === 0 || (v != null && v !== '' && !Number.isNaN(Number(v))))
+                      ? `${currency}${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : '[N/A]';
+                    // Simplified order details: Product | Qty | Price (unit)
+                    const pad = (v = '', w = 10) => String(v || '').padEnd(w).slice(0, w);
+                    const rpad = (v = '', w = 10) => String(v || '').padStart(w).slice(-w);
+                    const hdr = `${pad('Product',60)}  ${rpad('Qty',5)}  ${rpad('Price',14)}`;
+                    const itemsText = Array.isArray(s.items) && s.items.length
+                      ? [
+                          hdr,
+                          '-'.repeat(hdr.length),
+                          ...s.items.map((it) => {
+                            const prod = (it.product || '').replace(/\s+/g, ' ');
+                            const qty = (it.qty != null) ? String(it.qty) : '';
+                            const price = (it.productPrice != null) ? Number(it.productPrice) : '';
+                            const priceStr = typeof price === 'number' ? Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                            return `${pad(prod,60)}  ${rpad(qty,5)}  ${rpad(priceStr,14)}`;
+                          })
+                        ].join('\n')
+                      : '[N/A]';
+                    return (
+                      <Card key={name} sx={{ p: 2, bgcolor: 'grey.50' }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{name}</Typography>
+                        <Box sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: '0.72rem', lineHeight: 1.4 }}>
+{`Seller Name: ${na(s.supplier)}
+Seller Address: ${na(s.sellerAddress)}
+
+Buyer Name: ${na(s.buyerName)}
+Buyer Address: ${na(s.buyerAddress)}
+
+Order Summary
+Order Summary No.: ${na(s.orderSummaryNo)}
+Date Issued: ${na(s.dateIssued)}
+Order ID: ${na(s.orderId)}
+Order Paid Date: ${na(s.orderPaidDate)}
+Payment Method: ${na(s.paymentMethod)}
+
+Order Details
+${itemsText}
+
+Merchandise Subtotal: ${fmtAmt(s.merchandiseSubtotal)}
+Shipping Fee: ${fmtAmt(s.shippingFee)}
+Shipping Discount: ${fmtAmt(s.shippingDiscount)}
+Total Platform Voucher Applied: ${fmtAmt(s.platformVoucher)}
+Grand Total: ${fmtAmt(s.total)}
+`}
+                        </Box>
+                        <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
+                          Raw OCR snippet: {raw ? String(raw).slice(0, 140) : '(no text)'}{raw && String(raw).length > 140 ? '…' : ''}
+                        </Typography>
+                      </Card>
+                    );
+                  })}
                 </Stack>
               </Box>
             )}
@@ -712,7 +823,37 @@ export default function UploadProcessPage() {
 
             {transferState.transferred === transferState.total && transferState.total > 0 && (
               <Alert severity="success" sx={{ mt: 2 }}>
-                All transactions have been successfully transferred.
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    All transactions have been successfully transferred.
+                  </Typography>
+                  {/* Quick links to affected books */}
+                  {lastTransferBooks && lastTransferBooks.total > 0 && (
+                    <Stack direction="row" spacing={1} flexWrap="wrap">
+                      {Object.entries(lastTransferBooks.counts).map(([book, count]) => {
+                        const routeMap = {
+                          'cash-receipts': '/dashboard/bookkeeping/cash-receipt',
+                          'cash-disbursements': '/dashboard/bookkeeping/cash-disbursement',
+                          'journal': '/dashboard/bookkeeping/general-journal',
+                          'ledger': '/dashboard/bookkeeping/general-ledger',
+                        };
+                        const labelMap = {
+                          'cash-receipts': 'View Cash Receipt Journal',
+                          'cash-disbursements': 'View Cash Disbursement Book',
+                          'journal': 'View General Journal',
+                          'ledger': 'View General Ledger',
+                        };
+                        const dest = routeMap[book] || '/dashboard/bookkeeping/general-journal';
+                        const label = labelMap[book] || 'View Journal';
+                        return (
+                          <Button key={book} size="small" variant="outlined" onClick={() => router.push(dest)}>
+                            {label} ({count})
+                          </Button>
+                        );
+                      })}
+                    </Stack>
+                  )}
+                </Box>
               </Alert>
             )}
           </Box>

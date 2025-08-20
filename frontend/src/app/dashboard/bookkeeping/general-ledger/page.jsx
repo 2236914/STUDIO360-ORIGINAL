@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';

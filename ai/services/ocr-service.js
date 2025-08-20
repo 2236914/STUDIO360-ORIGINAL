@@ -11,6 +11,18 @@ class OCRService {
   constructor() {
     this.supportedLanguages = ['eng', 'spa', 'fra', 'deu'];
     this.imageFormats = ['jpg', 'jpeg', 'png', 'tiff', 'bmp'];
+    // Currency symbols & codes we will recognize (add more as needed)
+    this.currencySymbols = ['$', '€', '£', '¥', '₹', '₱', '₽', '₩', '₺', 'R$', 'C$', 'A$'];
+    this.currencyCodes = ['USD','EUR','GBP','JPY','CAD','AUD','MXN','CHF','CNY','RMB','SEK','NOK','DKK','ZAR','INR','BRL'];
+    this.currencyRegex = new RegExp(`(?:${[
+      ...this.currencySymbols.map(s => this.escapeForRegex(s)),
+      ...this.currencyCodes
+    ].join('|')})`, 'i');
+  }
+
+  // Escape characters with special meaning in regex
+  escapeForRegex(str) {
+    return String(str).replace(/[\\^$*+?.()|[\]{}]/g, '\\$&');
   }
 
   /**
@@ -165,21 +177,34 @@ class OCRService {
    * @returns {number} Total amount
    */
   extractTotal(text) {
-    const totalPatterns = [
-      /TOTAL[:\s]*\$?(\d+\.?\d*)/i,
-      /AMOUNT[:\s]*\$?(\d+\.?\d*)/i,
-      /BALANCE[:\s]*\$?(\d+\.?\d*)/i,
-      /\$(\d+\.?\d*)\s*$/m
-    ];
+    // Only match totals that include an explicit currency symbol or code
+    const lines = text.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
+    const keywordRegex = /(TOTAL|AMOUNT|BALANCE|GRAND\s+TOTAL)/i;
+    let candidates = [];
 
-    for (const pattern of totalPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        return parseFloat(match[1]);
+    for (const line of lines) {
+      if (!keywordRegex.test(line)) continue;
+      if (!this.currencyRegex.test(line)) continue; // require currency indicator
+      const amount = this.extractCurrencyAmountFromLine(line);
+      if (amount !== null) candidates.push(amount);
+    }
+
+    // Fallback: last line with a currency amount if no keyworded line found
+    if (candidates.length === 0) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (this.currencyRegex.test(lines[i])) {
+          const amount = this.extractCurrencyAmountFromLine(lines[i]);
+            if (amount !== null) {
+              candidates.push(amount);
+              break;
+            }
+        }
       }
     }
 
-    return null;
+    if (candidates.length === 0) return null;
+    // Heuristic: maximum amount usually the total
+    return Math.max(...candidates);
   }
 
   /**
@@ -188,20 +213,15 @@ class OCRService {
    * @returns {number} Tax amount
    */
   extractTax(text) {
-    const taxPatterns = [
-      /TAX[:\s]*\$?(\d+\.?\d*)/i,
-      /SALES\s+TAX[:\s]*\$?(\d+\.?\d*)/i,
-      /VAT[:\s]*\$?(\d+\.?\d*)/i
-    ];
-
-    for (const pattern of taxPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        return parseFloat(match[1]);
-      }
+    const taxKeywords = /(TAX|SALES\s+TAX|VAT|GST|IVA)/i;
+    const lines = text.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (!taxKeywords.test(line)) continue;
+      if (!this.currencyRegex.test(line)) continue; // ignore if no currency symbol/code
+      const amount = this.extractCurrencyAmountFromLine(line);
+      if (amount !== null) return amount;
     }
-
-    return 0;
+    return 0; // default
   }
 
   /**
@@ -210,18 +230,14 @@ class OCRService {
    * @returns {number} Subtotal amount
    */
   extractSubtotal(text) {
-    const subtotalPatterns = [
-      /SUBTOTAL[:\s]*\$?(\d+\.?\d*)/i,
-      /SUB\s+TOTAL[:\s]*\$?(\d+\.?\d*)/i
-    ];
-
-    for (const pattern of subtotalPatterns) {
-      const match = text.match(pattern);
-      if (match) {
-        return parseFloat(match[1]);
-      }
+    const subtotalKeywords = /(SUB\s*TOTAL)/i;
+    const lines = text.split(/\n|\r/).map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (!subtotalKeywords.test(line)) continue;
+      if (!this.currencyRegex.test(line)) continue;
+      const amount = this.extractCurrencyAmountFromLine(line);
+      if (amount !== null) return amount;
     }
-
     return null;
   }
 
@@ -231,22 +247,30 @@ class OCRService {
    * @returns {Array} Array of items with descriptions and prices
    */
   extractItems(text) {
-    const lines = text.split('\n');
+    const lines = text.split(/\n|\r/);
     const items = [];
+    // Pattern requires a currency symbol or code either before or after amount
+    const currencyGroup = '(?:' + [
+      ...this.currencySymbols.map(s => this.escapeForRegex(s)),
+      ...this.currencyCodes
+    ].join('|') + ')';
+    const amountPattern = '(?:' + currencyGroup + '\\s?([0-9]{1,3}(?:[0-9,]*)(?:\\.[0-9]{2})?)|([0-9]{1,3}(?:[0-9,]*)(?:\\.[0-9]{2})?)\\s?' + currencyGroup + ')';
+  const itemRegex = new RegExp(`^(.+?)\\s+${amountPattern}$`, 'i');
 
-    // Simple item extraction pattern
-    const itemPattern = /^(.+?)\s+\$?(\d+\.?\d*)$/;
-
-    for (const line of lines) {
-      const match = line.match(itemPattern);
-      if (match && !this.isHeaderOrFooter(match[1])) {
-        items.push({
-          description: match[1].trim(),
-          price: parseFloat(match[2])
-        });
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      const match = line.match(itemRegex);
+      if (match) {
+        const desc = match[1].trim();
+        if (this.isHeaderOrFooter(desc)) continue;
+        const amountStr = match[2] || match[3];
+        const price = this.parseAmount(amountStr);
+        if (!isNaN(price)) {
+          items.push({ description: desc, price });
+        }
       }
     }
-
     return items;
   }
 
@@ -315,6 +339,36 @@ class OCRService {
     );
     
     return totalConfidence / words.length;
+  }
+
+  /**
+   * Extract the first currency amount found in a line
+   * @param {string} line
+   * @returns {number|null}
+   */
+  extractCurrencyAmountFromLine(line) {
+    if (!this.currencyRegex.test(line)) return null;
+    // Build dynamic regex for currency with number in either order
+    const currencyPart = '(?:' + [
+      ...this.currencySymbols.map(s => this.escapeForRegex(s)),
+      ...this.currencyCodes
+    ].join('|') + ')';
+    const numberPart = '([0-9]{1,3}(?:[0-9,]*)(?:\\.[0-9]{2})?)';
+    const combined = new RegExp(`${currencyPart}\\s?${numberPart}|${numberPart}\\s?${currencyPart}`, 'i');
+    const m = line.match(combined);
+    if (!m) return null;
+    const amountStr = m[1] || m[2];
+    const amount = this.parseAmount(amountStr);
+    return isNaN(amount) ? null : amount;
+  }
+
+  /**
+   * Parse amount string removing commas
+   * @param {string} str
+   * @returns {number}
+   */
+  parseAmount(str) {
+    return parseFloat(str.replace(/,/g, ''));
   }
 }
 

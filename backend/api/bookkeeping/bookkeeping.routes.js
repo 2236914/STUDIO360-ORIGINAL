@@ -14,6 +14,13 @@ const store = {
   cashDisbursements: [], // { id, date, checkNo, payee, description, amount, account }
 };
 
+function resetStore() {
+  store.journal.length = 0;
+  store.ledger.length = 0;
+  store.cashReceipts.length = 0;
+  store.cashDisbursements.length = 0;
+}
+
 function ok(res, payload) {
   return res.json({ success: true, ...payload });
 }
@@ -165,6 +172,16 @@ router.post('/cash-disbursements', (req, res) => {
 });
 
 /**
+ * @route   POST /api/bookkeeping/cash-disbursements/reset
+ * @desc    Reset (clear) all cash disbursement entries
+ * @access  Private
+ */
+router.post('/cash-disbursements/reset', (req, res) => {
+  store.cashDisbursements.length = 0;
+  ok(res, { message: 'Cash disbursement entries cleared', data: { disbursements: [] } });
+});
+
+/**
  * @route   GET /api/bookkeeping/reports
  * @desc    Get financial reports
  * @access  Private
@@ -214,6 +231,16 @@ router.get('/accounts', (req, res) => {
       ]
     }
   });
+});
+
+/**
+ * @route   POST /api/bookkeeping/reset
+ * @desc    Reset all in-memory bookkeeping data (journal, ledger, receipts, disbursements)
+ * @access  Private
+ */
+router.post('/reset', (req, res) => {
+  resetStore();
+  ok(res, { message: 'Bookkeeping data reset', data: { journal: [], ledger: [], cashReceipts: [], cashDisbursements: [] } });
 });
 
 module.exports = router; 

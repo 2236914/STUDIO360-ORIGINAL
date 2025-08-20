@@ -201,8 +201,8 @@ export default function CashReceiptPage() {
         const data = res?.data?.data?.receipts;
         if (Array.isArray(data)) setReceiptEntries(data);
       } catch (e) {
-        console.warn('Failed to load cash receipts from API, using mock. Error:', e?.message);
-        setReceiptEntries(MOCK_RECEIPT_ENTRIES);
+        console.warn('Failed to load cash receipts from API. Error:', e?.message);
+        // Do not fallback to mock so the UI reflects actual backend state
       }
     };
     load();

@@ -11,6 +11,7 @@ axiosInstance.interceptors.response.use(
   (error) => {
     // Ensure we always return a string error message
     let errorMessage = 'Something went wrong!';
+    let extra = '';
     
     if (error.response && error.response.data) {
       if (typeof error.response.data === 'string') {
@@ -20,11 +21,23 @@ axiosInstance.interceptors.response.use(
       } else if (error.response.data.error) {
         errorMessage = String(error.response.data.error);
       }
+      // If backend provided stderr/stdout, append a short diagnostic tail
+      try {
+        const stderr = error.response.data.stderr;
+        const stdout = error.response.data.stdout;
+        const clip = (s) => (typeof s === 'string' && s.trim() ? s.trim().slice(0, 400) : '');
+        const parts = [];
+        if (stderr) parts.push(`stderr: ${clip(stderr)}`);
+        if (stdout) parts.push(`stdout: ${clip(stdout)}`);
+        extra = parts.length ? `\n${parts.join('\n')}` : '';
+      } catch (_) {
+        // ignore
+      }
     } else if (error.message) {
       errorMessage = error.message;
     }
     
-    return Promise.reject(new Error(errorMessage));
+    return Promise.reject(new Error(`${errorMessage}${extra}`));
   }
 );
 

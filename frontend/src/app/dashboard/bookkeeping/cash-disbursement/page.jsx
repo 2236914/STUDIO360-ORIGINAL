@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
+import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -135,8 +135,8 @@ export default function CashDisbursementPage() {
         setRows(mapped);
       } catch (err) {
         console.error('Failed to load cash disbursements:', err);
-        // Fallback to mock for demo
-        setRows(MOCK_DISBURSEMENT_ENTRIES);
+        // Do not fallback to mock so the UI reflects actual backend state
+        // Leave rows as-is to avoid showing sample data
       }
     };
     fetchDisbursements();
@@ -333,7 +333,7 @@ export default function CashDisbursementPage() {
                     <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       <Stack spacing={0.5}>
                         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {entry.invoiceNumber}
+                          {entry.invoiceNumber && String(entry.invoiceNumber).trim() ? entry.invoiceNumber : 'N/A'}
                         </Typography>
                         <Label 
                           variant="soft" 
