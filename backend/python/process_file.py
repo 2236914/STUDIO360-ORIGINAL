@@ -1310,6 +1310,7 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
 
     elif ext == ".pdf":
         pdf_file = fitz.open(file_path)
+        bold_total_lines: List[str] = []
         for page_num in range(len(pdf_file)):
             page = pdf_file[page_num]
             text = page.get_text()
@@ -1338,6 +1339,24 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
                         page_images.append(img)
                     except Exception:
                         pass
+            # Collect bold-ish lines that include totals / currency for better Grand Total detection
+            try:
+                tdict = page.get_text("dict")
+                for b in tdict.get('blocks', []) or []:
+                    for ln in b.get('lines', []) or []:
+                        spans = ln.get('spans', []) or []
+                        if not spans:
+                            continue
+                        line_text = ''.join([str(s.get('text') or '') for s in spans]).strip()
+                        if not line_text:
+                            continue
+                        # Heuristic bold detection via font name
+                        is_bold = any(re.search(r"bold|black|heavy|semibold|medium", str(s.get('font','')), re.I) for s in spans)
+                        if is_bold and (re.search(r"[₱$€£]", line_text) or re.search(r"total", line_text, re.I)):
+                            bold_total_lines.append(line_text)
+            except Exception:
+                pass
+
         # Try pdfplumber table extraction first (best for digital PDFs)
         try:
             plumber_items = _extract_items_from_pdfplumber(file_path)
@@ -1403,10 +1422,17 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
         except Exception:
             ocrspace_items = []
     items_hint = (plumber_items or []) or (layout_items or []) or (tesseract_items or []) or (vision_items or []) or (ocrspace_items or [])
-    return { 'text': extracted_text.strip(), 'layout_items': items_hint }
+    result: Dict[str, Any] = { 'text': extracted_text.strip(), 'layout_items': items_hint }
+    try:
+        if ext == ".pdf":
+            # Attach font hints if available
+            result['font_hints'] = { 'bold_total_lines': bold_total_lines }
+    except Exception:
+        pass
+    return result
 
 
-def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] = None) -> Dict[str, Any]:
+def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] = None, font_hints: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Lightweight heuristic parsing of common invoice/receipt fields.
 
     This is intentionally simple (regex & line scanning) so it works without
@@ -1552,6 +1578,105 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
                 found['buyerAddress'] = addr
             break
 
+    # TikTok-specific block parsing: Delivery Details / Sold By / Order Details
+    # Detect presence of TikTok style to trigger additional parsing
+    has_tiktok_markers = any(re.search(r"TikTok\s*Shop|Grand\s*total\s*\(includes\s*VAT\)", ln, re.I) for ln in lines)
+    if has_tiktok_markers:
+        # Delivery Details block: first line is buyer name, following lines until empty/next section are address
+        for i, ln in enumerate(lines):
+            if re.match(r"^\s*Delivery\s+Details\s*$", ln, re.I):
+                # collect next lines until a blank or a known header
+                addr_parts = []
+                buyer_nm = None
+                for j in range(i+1, min(i+8, len(lines))):
+                    t = lines[j].strip()
+                    if not t:
+                        break
+                    if re.match(r"^(Sold\s*By|Order\s+Details|Item\s+Description|Order\s+Summary)\b", t, re.I):
+                        break
+                    if buyer_nm is None:
+                        buyer_nm = t
+                    else:
+                        addr_parts.append(t)
+                if buyer_nm and not found.get('buyerName'):
+                    found['buyerName'] = buyer_nm
+                if addr_parts and not found.get('buyerAddress'):
+                    found['buyerAddress'] = ' '.join(addr_parts)
+                break
+        # Sold By: name can be on same or next line
+        for i, ln in enumerate(lines):
+            m = re.match(r"^\s*Sold\s*By\s*:?[\s-]*([^].]*)$", ln, re.I)
+            if m:
+                val = m.group(1).strip()
+                if val:
+                    found['supplier'] = val
+                    break
+                # else take next non-empty line
+                for j in range(i+1, min(i+4, len(lines))):
+                    t = lines[j].strip()
+                    if t and not re.match(r"^(Delivery\s+Details|Order\s+Details|Item\s+Description)\b", t, re.I):
+                        found['supplier'] = t
+                        break
+                break
+        # Order Details: Order Number and Order Date
+        for ln in lines:
+            m = re.search(r"Order\s*Number\s*[:\-]\s*([A-Za-z0-9\-]+)", ln, re.I)
+            if m and not found.get('orderId'):
+                found['orderId'] = m.group(1).strip()
+            m2 = re.search(r"Order\s*Date\s*[:\-]\s*(.+)$", ln, re.I)
+            if m2 and not found.get('dateIssued'):
+                found['dateIssued'] = m2.group(1).strip()
+        # Receipt Number / Receipt Date -> summary no / date issued if still missing
+        for ln in lines:
+            if not found.get('orderSummaryNo'):
+                m = re.search(r"Receipt\s*Number\s*[:\-]\s*([A-Za-z0-9\-]+)", ln, re.I)
+                if m:
+                    found['orderSummaryNo'] = m.group(1).strip()
+            if not found.get('dateIssued'):
+                m = re.search(r"Receipt\s*Date\s*[:\-]\s*(.+)$", ln, re.I)
+                if m:
+                    found['dateIssued'] = m.group(1).strip()
+        # Monetary lines: Subtotal / Shipping / Coupons / TikTok shipping coupons / Grand total (includes VAT)
+        for ln in lines:
+            # Subtotal
+            m = re.search(r"^\s*Subtotal\s*[:\-]?\s*([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\b", ln, re.I)
+            if m and found.get('merchandiseSubtotal') is None:
+                try:
+                    found['merchandiseSubtotal'] = float(m.group(1).replace(',', '').lstrip('₱$P').strip())
+                except Exception:
+                    pass
+            # Shipping Fee (often 'Shipping')
+            m = re.search(r"^\s*Shipping\b[^\d]*([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\b", ln, re.I)
+            if m and found.get('shippingFee') is None:
+                try:
+                    found['shippingFee'] = float(m.group(1).replace(',', '').lstrip('₱$P').strip())
+                except Exception:
+                    pass
+            # Coupons (platform voucher)
+            m = re.search(r"^\s*Coupons\b[^\d-]*(-?\s*[₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\b", ln, re.I)
+            if m and found.get('platformVoucher') is None:
+                try:
+                    val = float(m.group(1).replace(',', '').replace(' ', '').lstrip('₱$P'))
+                    found['platformVoucher'] = val if val <= 0 else -abs(val)
+                except Exception:
+                    pass
+            # TikTok shipping coupons -> shippingDiscount
+            m = re.search(r"TikTok\s*shipping\s*coupons\b[^\d-]*(-?\s*[₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\b", ln, re.I)
+            if m and found.get('shippingDiscount') is None:
+                try:
+                    val = float(m.group(1).replace(',', '').replace(' ', '').lstrip('₱$P'))
+                    found['shippingDiscount'] = val if val <= 0 else -abs(val)
+                except Exception:
+                    pass
+            # Grand total (includes VAT)
+            m = re.search(r"Grand\s*total\s*\(includes\s*VAT\)\s*[:\-]?\s*([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\b", ln, re.I)
+            if m:
+                try:
+                    found['total'] = float(m.group(1).replace(',', '').lstrip('₱$P').strip())
+                    found['grandTotal'] = found['total']
+                except Exception:
+                    pass
+
     # Fallback supplier: first line that is not date/invoice/total line and not all numbers
     if not found['supplier'] and lines:
         for line in lines:
@@ -1569,7 +1694,80 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
             found['supplier'] = line
             break
 
-    # Extract total with prioritization & scoring
+    # Extract total: prefer bold font lines when available (from PDF hints)
+    if font_hints and isinstance(font_hints.get('bold_total_lines'), list):
+        bold_lines = [str(x) for x in font_hints.get('bold_total_lines')]
+        for bl in bold_lines:
+            # Require a currency symbol on bold line for high confidence
+            if not re.search(r"[₱$€£]", bl):
+                continue
+            m = re.search(r"\bgrand\s*total\b(?:[^0-9₱$P]{0,30}|\s*\(includes\s*vat\)\s*[:\-]?)\s*([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)", bl, re.I)
+            if m:
+                try:
+                    found['total'] = float(m.group(1).replace(',', '').lstrip('₱$P').strip())
+                    found['grandTotal'] = found['total']
+                    # try currency
+                    if not found.get('currency'):
+                        if '₱' in bl or re.search(r"\bPHP\b|Peso", bl, re.I):
+                            found['currency'] = 'PHP'
+                        elif '$' in bl or re.search(r"\bUSD\b", bl):
+                            found['currency'] = 'USD'
+                    # If bold gave us total, we can skip further total detection
+                    grand_total_direct = found['total']
+                except Exception:
+                    pass
+
+    # Extract total: prefer explicit 'Grand Total' lines first (in plain text, allow next-line amount)
+    if found.get('total') is None:
+        gt_candidates: list[tuple[float,int,int,bool]] = []  # (value, score, idx, has_currency)
+        for idx, line in enumerate(lines):
+            if not re.search(r"\bGrand\s*Total\b", line, re.I):
+                continue
+            # same line amount
+            m = re.search(r"([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\s*$", line)
+            amt = None
+            has_cur = False
+            if m and re.search(r"[₱$]", m.group(1)):
+                try:
+                    amt = float(m.group(1).replace(',', '').lstrip('₱$P').strip())
+                    has_cur = True
+                except Exception:
+                    amt = None
+            if amt is None:
+                # search next 1-2 lines for currency amount
+                for k in range(1,3):
+                    if idx + k >= len(lines):
+                        break
+                    m2 = re.search(r"([₱$] ?\d[\d,]*(?:\.\d{2})?)", lines[idx+k])
+                    if m2:
+                        try:
+                            amt = float(m2.group(1).replace(',', '').lstrip('₱$').strip())
+                            has_cur = True
+                            break
+                        except Exception:
+                            pass
+                # as a fallback, accept number without currency on same line if unambiguous
+                if amt is None:
+                    m3 = re.findall(r"\d[\d,]*(?:\.\d{2})?", line)
+                    if m3:
+                        try:
+                            amt = float(m3[-1].replace(',', ''))
+                        except Exception:
+                            amt = None
+            if amt is not None:
+                score = 0
+                if re.search(r"includes\s*vat", line, re.I):
+                    score += 1
+                if has_cur:
+                    score += 3
+                # prefer later lines (near bottom)
+                score += int((idx / max(1, len(lines))) * 3)
+                gt_candidates.append((amt, score, idx, has_cur))
+        if gt_candidates:
+            gt_candidates.sort(key=lambda x: (x[1], x[3], x[0]))
+            found['total'] = gt_candidates[-1][0]
+
+    # Extract total with prioritization & scoring (fallback)
     candidate_totals: list[tuple[float, str, int]] = []  # (value, currency, score)
     for idx, line in enumerate(lines):
         if not total_keyword_regex.search(line):
@@ -1606,7 +1804,7 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         score += int((idx / max(1, len(lines))) * 3)
         candidate_totals.append((val, cur_val, score))
 
-    if candidate_totals:
+    if found['total'] is None and candidate_totals:
         # Pick by highest score; tie-breaker by largest value
         candidate_totals.sort(key=lambda x: (x[2], x[0]))
         chosen_val, chosen_cur, _ = candidate_totals[-1]
@@ -1661,10 +1859,10 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
             'shipping fee','delivery fee','ship fee','shipping cost','delivery charge','delivery charges','shipping'
         ],
         'shippingDiscount': [
-            'shipping discount','delivery discount','ship discount','shipping disc','shipping voucher'
+            'shipping discount','delivery discount','ship discount','shipping disc','shipping voucher','tiktok shipping coupons','shipping coupons'
         ],
         'platformVoucher': [
-            'platform voucher','voucher applied','platform voucher applied','voucher discount','total platform voucher applied','voucher'
+            'platform voucher','voucher applied','platform voucher applied','voucher discount','total platform voucher applied','voucher','coupon','coupons','coupons applied'
         ],
     }
 
@@ -1689,12 +1887,16 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
             return best_key, best_score
         return None
 
+    exclusion_noise = re.compile(r"receipt\s*number|tracking|awb|waybill|barcode|order\s*id|reference|ref\.?\s*no|date\b|time\b", re.I)
     for raw_line in lines:
         line_norm = _normalize_label(raw_line)
         if not line_norm:
             continue
         # Skip if clearly a grand total line to avoid overwriting
         if re.search(r"grand\s+total", raw_line, re.I):
+            continue
+        # Skip obvious metadata/receipt lines to avoid picking huge IDs as amounts
+        if exclusion_noise.search(raw_line):
             continue
         match_res = _fuzzy_match_label(line_norm)
         if not match_res:
@@ -1705,11 +1907,16 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         nums = re.findall(amount_number, raw_line)
         if not nums:
             continue
-        sign = -1 if (re.search(r"[-(]", raw_line) or 'discount' in key or 'voucher' in key) else 1
+        # Require currency for very large numbers to avoid capturing order/receipt IDs
+        has_currency = bool(currency_regex.search(raw_line))
         try:
-            val = float(nums[-1].replace(',', '')) * sign
+            candidate_val = float(nums[-1].replace(',', ''))
         except ValueError:
             continue
+        if not has_currency and candidate_val > 10000000:  # >10M without currency is suspicious
+            continue
+        sign = -1 if (re.search(r"[-(]", raw_line) or 'discount' in key or 'voucher' in key) else 1
+        val = candidate_val * sign
         found[key] = val
         if not found['currency']:
             cm = currency_regex.search(raw_line)
@@ -1730,11 +1937,16 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
             label_re = re.compile(label_pat, re.I)
             for line in lines:
                 if label_re.search(line):
+                    if exclusion_noise.search(line):
+                        continue
                     sign = -1 if re.search(r"[-(]", line) or 'discount' in key or 'voucher' in key else 1
                     nums = re.findall(amount_number, line)
                     if nums:
                         try:
                             val = float(nums[-1].replace(',', '')) * sign
+                            if not currency_regex.search(line) and abs(val) > 10000000:
+                                # Skip absurdly large values without currency
+                                continue
                             found[key] = val
                             if not found['currency']:
                                 cm = currency_regex.search(line)
@@ -1746,7 +1958,8 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
 
     # Parse items (enhanced heuristic with multi-line support & alternative formats)
     header_idx = None
-    header_regex = re.compile(r"No\b.*Product.*Qty", re.I)
+    # Accept headers that contain at least Product and Qty columns, even without explicit No/Subtotal
+    header_regex = re.compile(r"^(?=.*\bProduct\b)(?=.*\bQty\b).*", re.I)
     for i, line in enumerate(lines):
         if header_regex.search(line):
             header_idx = i
@@ -1855,6 +2068,10 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
             # Remove helper rawLines before returning
             for it in items:
                 it.pop('rawLines', None)
+            # Ensure numbering
+            for i, it in enumerate(items, start=1):
+                if not it.get('no'):
+                    it['no'] = i
             found['items'] = items
 
     # If no items parsed from text but we have layout_items from PDF coordinate parsing, use them
@@ -2077,6 +2294,9 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
                         continue
                     seen.add(key)
                     unique_items.append(it)
+                for i, it in enumerate(unique_items, start=1):
+                    if not it.get('no'):
+                        it['no'] = i
                 found['items'] = unique_items
 
     # Final conservative fallback: parse label-style rows inside 'Order Details' section
@@ -2161,6 +2381,87 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
             if items_fb:
                 found['items'] = items_fb
 
+    # Last-chance Order Details parser: within the section, pair product lines with next-line numeric-only qty
+    if not found.get('items'):
+        # Find Order Details block boundaries
+        start_idx = None
+        for i, ln in enumerate(lines):
+            if re.search(r"^\s*Order\s+Details\b", ln, re.I):
+                start_idx = i
+                break
+        if start_idx is not None:
+            stop_re = re.compile(r"Grand\s+Total|Merchandise\s+Subtotal|Shipping\s+Fee|Amount\s+Due|Total\s+Quantity", re.I)
+            block: List[str] = []
+            for j in range(start_idx + 1, len(lines)):
+                if stop_re.search(lines[j]):
+                    break
+                if lines[j].strip():
+                    block.append(lines[j].strip())
+            # Skip month/date-only lines like "June" or "June :"
+            month_re = re.compile(r"^(Jan|Feb|Mar|Apr|May|Jun|June|Jul|Aug|Sep|Sept|Oct|Nov|Dec)\b", re.I)
+            dashed_re = re.compile(r"^-{3,}$")
+            unit_num_re = re.compile(r"\b(\d{1,4})\s*(pcs|pieces?|packs?|pairs?)\b", re.I)
+            leading_unit_num_re = re.compile(r"^\s*(\d{1,4})\s*(pcs|pieces?|packs?|pairs?)\b", re.I)
+            simple_items: List[Dict[str, Any]] = []
+            i = 0
+            while i < len(block):
+                ln = block[i].strip()
+                if dashed_re.match(ln) or month_re.match(ln):
+                    i += 1
+                    continue
+                # If line ends with a small integer, parse inline item
+                m_inline = re.match(r"^(.{6,}?)\s+(\d{1,3})$", ln)
+                if m_inline:
+                    prod = m_inline.group(1).strip()
+                    try:
+                        qty = int(m_inline.group(2))
+                    except Exception:
+                        i += 1
+                        continue
+                    if len(prod.split()) >= 2:
+                        simple_items.append({
+                            'no': len(simple_items)+1,
+                            'product': prod[:200],
+                            'variation': None,
+                            'productPrice': None,
+                            'qty': qty,
+                            'subtotal': None,
+                        })
+                    i += 1
+                    continue
+                # If next line is numeric-only qty, pair with current as product (with guards)
+                if i + 1 < len(block) and re.fullmatch(r"\d{1,3}", block[i+1].strip()):
+                    prod = ln
+                    try:
+                        qty = int(block[i+1].strip())
+                    except Exception:
+                        qty = None
+                    # Guardrails: avoid treating unit counts in description (e.g., '20 packs', '50 pcs') as qty
+                    leading_unit = leading_unit_num_re.search(prod)
+                    unit_in_text = unit_num_re.search(prod)
+                    if qty is not None and qty <= 100 and len(prod.split()) >= 2 and not month_re.match(prod):
+                        # If description starts with a unit-number, and matches the next-line qty, skip pairing
+                        if leading_unit and int(leading_unit.group(1)) == qty:
+                            i += 2
+                            continue
+                        # If any unit-number appears in product and equals qty, skip pairing
+                        if unit_in_text and int(unit_in_text.group(1)) == qty:
+                            i += 2
+                            continue
+                        simple_items.append({
+                            'no': len(simple_items)+1,
+                            'product': prod[:200],
+                            'variation': None,
+                            'productPrice': None,
+                            'qty': qty,
+                            'subtotal': None,
+                        })
+                        i += 2
+                        continue
+                i += 1
+            if simple_items:
+                found['items'] = simple_items
+
     # Copy grandTotal alias for clarity
     if found['total'] is not None and 'grandTotal' not in found:
         found['grandTotal'] = found['total']
@@ -2197,6 +2498,17 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         ],
     }
 
+    # Additional synonyms for common metadata that often vary between platforms
+    meta_synonyms: Dict[str, List[str]] = {
+        'orderSummaryNo': ['order summary no', 'order summary number', 'summary no', 'receipt number', 'receipt no', 'receipt #', 'invoice no', 'ref no', 'reference no', 'reference number'],
+        'orderId': ['order id', 'order number', 'order #'],
+        'dateIssued': ['date issued', 'invoice date', 'order date', 'receipt date', 'date'],
+        'orderPaidDate': ['order paid date', 'paid date', 'date paid', 'payment date'],
+        'buyerName': ['buyer name', 'customer', 'client'],
+        'buyerAddress': ['buyer address', 'customer address', 'client address'],
+        'sellerAddress': ['seller address', 'merchant address', 'supplier address', 'vendor address'],
+    }
+
     def _parse_amount(val: str) -> Optional[float]:
         val = val.strip()
         # Remove currency symbols and stray letters at ends
@@ -2226,6 +2538,26 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
                             amt = -abs(amt)
                         found[target] = amt
                 break
+
+    # Attempt to fill common metadata fields from kv_map using broader synonyms
+    def _pick_kv(keys: List[str]) -> Optional[str]:
+        for key in keys:
+            k = key.lower()
+            if k in kv_map and kv_map[k]:
+                return kv_map[k]
+        # substring match fallback
+        for key in keys:
+            k = key.lower()
+            for kk, vv in kv_map.items():
+                if k in kk and vv:
+                    return vv
+        return None
+
+    for meta_key, keys in meta_synonyms.items():
+        if not found.get(meta_key):
+            picked = _pick_kv(keys)
+            if picked:
+                found[meta_key] = picked
 
     # Global text scanning fallback for amounts if still missing
     full_text = ' '.join(lines)
@@ -2315,6 +2647,61 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
     # Attach raw key-value map for debugging (optional)
     found['rawKeyValue'] = kv_map
 
+    # Final cleanup: remove spurious non-item lines that slipped into items
+    def _clean_items(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        cleaned: List[Dict[str, Any]] = []
+        ban = re.compile(r"(receipt\s*number|receipt\b|order\s*(summary|id|no|number)|invoice\s*(id|no|number)|buyer|seller|address|delivery|ship\s*to|bill\s*to|tracking|awb|waybill|payment|method|summary|total|voucher|subtotal|fee|discount|amount|due)", re.I)
+        for it in items:
+            prod = (it.get('product') or '').strip()
+            if not prod or ban.search(prod):
+                continue
+            price = it.get('productPrice') or it.get('price')
+            subtotal = it.get('subtotal')
+            qty = it.get('qty')
+            # Keep only if a monetary value OR an explicit qty is present (some platforms omit unit prices)
+            if not isinstance(price, (int,float)) and not isinstance(subtotal, (int,float)) and not isinstance(qty, (int,float)):
+                continue
+            # Normalize types
+            try:
+                if isinstance(price, str):
+                    price = float(price.replace(',', '').lstrip('₱$P'))
+            except Exception:
+                price = None
+            try:
+                if isinstance(subtotal, str):
+                    subtotal = float(subtotal.replace(',', '').lstrip('₱$P'))
+            except Exception:
+                subtotal = None
+            new_it = {
+                'no': it.get('no'),
+                'product': prod[:200],
+                'variation': it.get('variation') or None,
+                'productPrice': price,
+                'qty': it.get('qty'),
+                'subtotal': subtotal,
+            }
+            cleaned.append(new_it)
+        return cleaned
+
+    if found.get('items'):
+        found['items'] = _clean_items(found['items'])
+        # If items became empty, unset to allow downstream fallbacks if any (none at this point)
+        if not found['items']:
+            found['items'] = []
+
+    # Sanity checks: ensure breakdown components are reasonable relative to grand total
+    gt = found.get('grandTotal') or found.get('total')
+    if isinstance(gt, (int,float)):
+        for k in ['merchandiseSubtotal','shippingFee']:
+            v = found.get(k)
+            if isinstance(v, (int,float)) and v > gt * 5:
+                # If wildly larger than total and has no currency in nearby lines, drop it
+                found[k] = None
+        for k in ['shippingDiscount','platformVoucher']:
+            v = found.get(k)
+            if isinstance(v, (int,float)) and abs(v) > gt * 5:
+                found[k] = None
+
     return found
 
 
@@ -2395,6 +2782,124 @@ def _parse_amount_in_words(lines: list[str]) -> float | None:
     return float(total) + frac if total or frac else None
 
 
+def _build_standard_overview(found: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalize parsed fields into a single, consistent overview structure.
+
+    Output schema:
+      Seller Name, Seller Address,
+      Buyer Name, Buyer Address,
+      Order Summary: { Order Summary No., Date Issued, Order ID, Order Paid Date, Payment Method },
+      Order Details: { Items List: [{No., Product, Variation, Product Price, Qty, Subtotal}] },
+      Payment Breakdown: { Merchandise Subtotal, Shipping/Delivery Fee, Shipping/Delivery Discount, Voucher Discount, Grand Total }
+    """
+    kv = { (k or '').strip().lower(): (v or '').strip() for k, v in (found.get('rawKeyValue') or {}).items() }
+
+    # Synonyms to harvest values if primary fields are missing
+    syn = {
+        'order_id': ['order id', 'invoice no', 'ref no', 'reference no', 'reference number', 'order number'],
+        'total_amount': ['grand total', 'total amount', 'total due', 'amount due', 'amount payable', 'total'],
+        'date_issued': ['date issued', 'invoice date', 'order date', 'receipt date', 'date'],
+        'order_paid_date': ['order paid date', 'paid date', 'date paid', 'payment date'],
+        'payment_method': ['payment method', 'paid via', 'mode of payment', 'payment mode'],
+        'buyer_name': ['buyer name', 'customer', 'client'],
+        'buyer_address': ['buyer address', 'customer address', 'client address'],
+        'seller_name': ['seller name', 'merchant', 'supplier', 'vendor', 'sold by'],
+        'seller_address': ['seller address', 'merchant address', 'supplier address', 'vendor address'],
+        'order_summary_no': ['order summary no', 'order summary number', 'summary no', 'invoice no', 'ref no', 'receipt number', 'receipt no', 'receipt #'],
+    }
+
+    def pick_from_kv(keys: List[str]) -> Optional[str]:
+        for k in keys:
+            k0 = k.lower()
+            if k0 in kv and kv[k0]:
+                return kv[k0]
+        # fallback: substring match to be resilient to OCR variants
+        for k in keys:
+            k0 = k.lower()
+            for kk, vv in kv.items():
+                if k0 in kk and vv:
+                    return vv
+        return None
+
+    def to_float(v: Any) -> Optional[float]:
+        if v is None:
+            return None
+        if isinstance(v, (int, float)):
+            return float(v)
+        try:
+            s = str(v).strip()
+            s = s.replace(',', '')
+            s = s.lstrip('₱$P')
+            m = re.search(r"-?\d+(?:\.\d{2})?", s)
+            return float(m.group(0)) if m else None
+        except Exception:
+            return None
+
+    # Parties
+    seller_name = found.get('supplier') or pick_from_kv(syn['seller_name'])
+    seller_address = found.get('sellerAddress') or pick_from_kv(syn['seller_address'])
+    buyer_name = found.get('buyerName') or pick_from_kv(syn['buyer_name'])
+    buyer_address = found.get('buyerAddress') or pick_from_kv(syn['buyer_address'])
+
+    # Order summary
+    order_summary_no = found.get('orderSummaryNo') or found.get('invoiceNumber') or pick_from_kv(syn['order_summary_no'])
+    order_id = found.get('orderId') or pick_from_kv(syn['order_id'])
+    date_issued = found.get('dateIssued') or pick_from_kv(syn['date_issued']) or found.get('date')
+    order_paid_date = found.get('orderPaidDate') or pick_from_kv(syn['order_paid_date'])
+    payment_method = found.get('paymentMethod') or pick_from_kv(syn['payment_method'])
+
+    # Items
+    items_in = found.get('items') or []
+    items_list: List[Dict[str, Any]] = []
+    for it in items_in:
+        if not isinstance(it, dict):
+            continue
+        items_list.append({
+            'No.': it.get('no'),
+            'Product': it.get('product'),
+            'Variation': it.get('variation'),
+            'Product Price': to_float(it.get('productPrice') or it.get('price')),
+            'Qty': it.get('qty'),
+            'Subtotal': to_float(it.get('subtotal')),
+        })
+
+    # Payment breakdown
+    merch_sub = to_float(found.get('merchandiseSubtotal'))
+    ship_fee = to_float(found.get('shippingFee'))
+    ship_disc = to_float(found.get('shippingDiscount'))
+    voucher = to_float(found.get('platformVoucher'))
+    grand_total = to_float(found.get('grandTotal') if 'grandTotal' in found else found.get('total'))
+
+    # Present discounts as positive amounts in the overview (human-friendly)
+    ship_disc_out = abs(ship_disc) if ship_disc is not None else None
+    voucher_out = abs(voucher) if voucher is not None else None
+
+    overview = {
+        'Seller Name': seller_name,
+        'Seller Address': seller_address,
+        'Buyer Name': buyer_name,
+        'Buyer Address': buyer_address,
+        'Order Summary': {
+            'Order Summary No.': order_summary_no,
+            'Date Issued': date_issued,
+            'Order ID': order_id,
+            'Order Paid Date': order_paid_date,
+            'Payment Method': payment_method,
+        },
+        'Order Details': {
+            'Items List': items_list
+        },
+        'Payment Breakdown': {
+            'Merchandise Subtotal': merch_sub,
+            'Shipping/Delivery Fee': ship_fee,
+            'Shipping/Delivery Discount': ship_disc_out,
+            'Voucher Discount': voucher_out,
+            'Grand Total': grand_total,
+        }
+    }
+
+    return overview
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({
@@ -2418,12 +2923,15 @@ def main():
         result = process_file(file_path, poppler_path)
         text = result['text'] if isinstance(result, dict) else str(result)
         layout_items = result.get('layout_items') if isinstance(result, dict) else None
-        structured = _extract_structured(text, layout_items)
+        font_hints = result.get('font_hints') if isinstance(result, dict) else None
+        structured = _extract_structured(text, layout_items, font_hints)
+        standard_overview = _build_standard_overview(structured)
         print(json.dumps({
             "success": True,
             "error": None,
             "text": text,
-            "structured": structured
+            "structured": structured,
+            "standardOverview": standard_overview
         }))
     except Exception as e:
         print(json.dumps({

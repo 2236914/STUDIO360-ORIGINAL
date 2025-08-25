@@ -189,7 +189,8 @@ export default function UploadProcessPage() {
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [uploadLogs, setUploadLogs] = useState([]);
   const [ocrTexts, setOcrTexts] = useState({}); // { filename: text }
-  const [ocrStructured, setOcrStructured] = useState({}); // { filename: { date, invoiceNumber, supplier, total, currency } }
+  const [ocrStructured, setOcrStructured] = useState({}); // { filename: structuredObj }
+  const [ocrCanonical, setOcrCanonical] = useState({}); // { filename: canonicalObj }
   const [transferState, setTransferState] = useState({ transferred: 0, total: 0, categories: [] });
   const [step3Initialized, setStep3Initialized] = useState(false);
   const [lastTransferBooks, setLastTransferBooks] = useState({ counts: {}, total: 0 });
@@ -383,7 +384,7 @@ export default function UploadProcessPage() {
   };
 
   // Very simple parser to extract line items and amounts from OCR text
-  const parseOcrToTransactions = (textsByFile, structuredByFile) => {
+  const parseOcrToTransactions = (textsByFile, structuredByFile, canonicalByFile) => {
     const txns = [];
     let id = 1;
     // Only accept numbers that have an explicit currency symbol or code to avoid order numbers.
@@ -411,26 +412,38 @@ export default function UploadProcessPage() {
       { k: 'shopee', c: 'Online Sales Revenue' },
       { k: 'tiktok', c: 'Online Sales Revenue' },
     ];
-  Object.entries(textsByFile).forEach(([filename, text]) => {
-      const structured = structuredByFile?.[filename];
-      // Prefer structured total: create one transaction representing the document total
-      if (structured && typeof structured.total === 'number' && structured.total > 0) {
+    Object.entries(textsByFile).forEach(([filename, text]) => {
+      const structured = structuredByFile?.[filename] || {};
+      const canonical = canonicalByFile?.[filename] || null;
+      const fileUrl = canonical?.source?.fileUrl || null;
+
+      // Prefer canonical grand total and organized fields when available (format-agnostic)
+      const cFields = canonical?.fields || {};
+      const cAmts = canonical?.amounts || {};
+      const grandTotal = typeof cAmts?.grandTotal === 'number' ? cAmts.grandTotal : (
+        typeof structured?.total === 'number' ? structured.total : null
+      );
+    if (grandTotal && grandTotal > 0) {
         const descParts = [];
-        if (structured.supplier) descParts.push(structured.supplier);
-        if (structured.invoiceNumber) descParts.push(`Invoice ${structured.invoiceNumber}`);
+        const seller = cFields.sellerName || structured.supplier;
+        const inv = cFields.invoiceNumber || structured.invoiceNumber;
+        if (seller) descParts.push(seller);
+        if (inv) descParts.push(`Invoice ${inv}`);
         const description = (descParts.join(' - ') || 'Document Total') + ` (${filename})`;
         txns.push({
           id: id++,
           description,
-            amount: structured.total,
-            aiCategory: 'Operating Expenses',
-            confidence: 90,
-      suggested: true,
-      structuredSource: true,
-      sourceFile: filename,
-      invoiceNumber: structured.invoiceNumber || '',
-      orderSummaryNo: structured.orderSummaryNo || '',
-      orderId: structured.orderId || '',
+          amount: grandTotal,
+          aiCategory: 'Operating Expenses',
+          confidence: 90,
+          suggested: true,
+          structuredSource: !!structured,
+          canonicalSource: !!canonical,
+          sourceFile: filename,
+          invoiceNumber: inv || '',
+          orderSummaryNo: cFields.orderSummaryNo || structured.orderSummaryNo || '',
+          orderId: cFields.orderId || structured.orderId || '',
+      fileUrl,
         });
         return; // skip line-based extraction for this file
       }
@@ -464,11 +477,12 @@ export default function UploadProcessPage() {
           invoiceNumber: structured?.invoiceNumber || '',
           orderSummaryNo: structured?.orderSummaryNo || '',
           orderId: structured?.orderId || '',
+          fileUrl,
         });
         if (txns.length >= 50) break; // safety cap
       }
     });
-    return txns.length ? txns : steps[2].content.mockData.transactions;
+  return txns.length ? txns : steps[2].content.mockData.transactions;
   };
 
   const handleUploadFiles = async () => {
@@ -476,8 +490,9 @@ export default function UploadProcessPage() {
     setProcessing(true);
     setUploadLogs([]);
     try {
-      const results = {};
-      const structuredAccumulator = {};
+  const results = {};
+  const structuredAccumulator = {};
+  const canonicalAccumulator = {};
       for (const file of uploadedFiles) {
         const formData = new FormData();
         formData.append('file', file, file.name);
@@ -489,14 +504,17 @@ export default function UploadProcessPage() {
         });
         const text = res?.data?.data?.text || '';
         const structured = res?.data?.data?.structured || null;
+        const canonical = res?.data?.data?.canonical || null;
         results[file.name] = text;
         if (structured) structuredAccumulator[file.name] = structured;
+        if (canonical) canonicalAccumulator[file.name] = canonical;
         setUploadLogs((prev) => [...prev, `Processed ${file.name} (${file.size} bytes)`]);
       }
       setOcrTexts(results);
       setOcrStructured(structuredAccumulator);
+      setOcrCanonical(canonicalAccumulator);
       // Build transactions from OCR text
-      const parsed = parseOcrToTransactions(results, structuredAccumulator).map(t => ({ ...t, autoBook: true }));
+      const parsed = parseOcrToTransactions(results, structuredAccumulator, canonicalAccumulator).map(t => ({ ...t, autoBook: true }));
       setTransactions(parsed);
 
       // Accumulate KPIs on each successful upload batch
@@ -683,8 +701,11 @@ export default function UploadProcessPage() {
                 <Stack spacing={2}>
                   {Object.entries(ocrTexts).map(([name, raw]) => {
                     const s = ocrStructured?.[name] || {};
+                    const c = ocrCanonical?.[name] || null;
+                    const cFields = c?.fields || {};
+                    const cAmts = c?.amounts || {};
                     const na = (v) => (v === undefined || v === null || v === '' ? '[N/A]' : v);
-                    const currency = s.currency || '₱';
+                    const currency = cFields.currency || s.currency || '₱';
                     const fmtAmt = (v) => (v === 0 || (v != null && v !== '' && !Number.isNaN(Number(v))))
                       ? `${currency}${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : '[N/A]';
@@ -692,11 +713,15 @@ export default function UploadProcessPage() {
                     const pad = (v = '', w = 10) => String(v || '').padEnd(w).slice(0, w);
                     const rpad = (v = '', w = 10) => String(v || '').padStart(w).slice(-w);
                     const hdr = `${pad('Product',60)}  ${rpad('Qty',5)}  ${rpad('Price',14)}`;
-                    const itemsText = Array.isArray(s.items) && s.items.length
+                    // Prefer canonical items (order_details) then fallback to structured items
+                    const items = Array.isArray(c?.order_details) && c.order_details.length
+                      ? c.order_details
+                      : (Array.isArray(s.items) ? s.items : []);
+                    const itemsText = Array.isArray(items) && items.length
                       ? [
                           hdr,
                           '-'.repeat(hdr.length),
-                          ...s.items.map((it) => {
+                          ...items.map((it) => {
                             const prod = (it.product || '').replace(/\s+/g, ' ');
                             const qty = (it.qty != null) ? String(it.qty) : '';
                             const price = (it.productPrice != null) ? Number(it.productPrice) : '';
@@ -709,27 +734,27 @@ export default function UploadProcessPage() {
                       <Card key={name} sx={{ p: 2, bgcolor: 'grey.50' }}>
                         <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{name}</Typography>
                         <Box sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: '0.72rem', lineHeight: 1.4 }}>
-{`Seller Name: ${na(s.supplier)}
-Seller Address: ${na(s.sellerAddress)}
+{`Seller Name: ${na(cFields.sellerName || s.supplier)}
+Seller Address: ${na(cFields.sellerAddress || s.sellerAddress)}
 
-Buyer Name: ${na(s.buyerName)}
-Buyer Address: ${na(s.buyerAddress)}
+Buyer Name: ${na(cFields.buyerName || s.buyerName)}
+Buyer Address: ${na(cFields.buyerAddress || s.buyerAddress)}
 
 Order Summary
-Order Summary No.: ${na(s.orderSummaryNo)}
-Date Issued: ${na(s.dateIssued)}
-Order ID: ${na(s.orderId)}
-Order Paid Date: ${na(s.orderPaidDate)}
-Payment Method: ${na(s.paymentMethod)}
+Order Summary No.: ${na(cFields.orderSummaryNo || s.orderSummaryNo)}
+Date Issued: ${na(cFields.dateIssued || s.dateIssued)}
+Order ID: ${na(cFields.orderId || s.orderId)}
+Order Paid Date: ${na(cFields.orderPaidDate || s.orderPaidDate)}
+Payment Method: ${na(cFields.paymentMethod || s.paymentMethod)}
 
 Order Details
 ${itemsText}
 
-Merchandise Subtotal: ${fmtAmt(s.merchandiseSubtotal)}
-Shipping Fee: ${fmtAmt(s.shippingFee)}
-Shipping Discount: ${fmtAmt(s.shippingDiscount)}
-Total Platform Voucher Applied: ${fmtAmt(s.platformVoucher)}
-Grand Total: ${fmtAmt(s.total)}
+Merchandise Subtotal: ${fmtAmt(cAmts.merchandiseSubtotal ?? s.merchandiseSubtotal)}
+Shipping Fee: ${fmtAmt(cAmts.shippingFee ?? s.shippingFee)}
+Shipping Discount: ${fmtAmt(cAmts.shippingDiscount ?? s.shippingDiscount)}
+Total Platform Voucher Applied: ${fmtAmt(cAmts.platformVoucher ?? s.platformVoucher)}
+Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}
 `}
                         </Box>
                         <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
@@ -769,6 +794,21 @@ Grand Total: ${fmtAmt(s.total)}
                           ₱{Number(t.amount || 0).toLocaleString()} • {t.aiCategory}
                         </Typography>
                       </Box>
+                      {t.fileUrl ? (
+                        <Button
+                          size="small"
+                          color="info"
+                          component="a"
+                          href={t.fileUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          startIcon={<Iconify icon="eva:external-link-fill" />}
+                        >
+                          View invoice
+                        </Button>
+                      ) : (
+                        <Button size="small" disabled startIcon={<Iconify icon="eva:external-link-fill" />}>View invoice</Button>
+                      )}
                       <FormControlLabel
                         control={
                           <Switch

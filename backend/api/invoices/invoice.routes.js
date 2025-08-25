@@ -5,6 +5,92 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const { spawn } = require('child_process');
+const { extractRegexFields, deriveAmountsFromText, mapToExpected } = require('./parser.util');
+
+// Multer storage for uploads
+const uploadDir = path.join(__dirname, '..', '..', 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+const storage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    const base = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    const stamp = Date.now();
+    cb(null, `${base}-${stamp}${ext}`);
+  },
+});
+
+const allowedExt = new Set(['.pdf', '.jpg', '.jpeg', '.png', '.csv', '.xlsx']);
+const upload = multer({
+  storage,
+  limits: { fileSize: 25 * 1024 * 1024 }, // 25MB
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!allowedExt.has(ext)) {
+      return cb(new Error(`Unsupported file type: ${ext}`));
+    }
+    cb(null, true);
+  },
+});
+
+function getPythonExec() {
+  return process.env.PYTHON_PATH || 'python'; // on Windows, ensure python is on PATH
+}
+
+/**
+ * @route   POST /api/invoices/parse
+ * @desc    Upload an invoice (PDF/Image/CSV/XLSX) and get structured JSON via OCR+parsing
+ * @access  Private
+ */
+router.post('/parse', upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, message: 'No file uploaded' });
+    }
+    const filePath = req.file.path;
+    const pythonFile = path.join(__dirname, '..', '..', 'python', 'process_file.py');
+
+    const py = spawn(getPythonExec(), [pythonFile, filePath], {
+      env: {
+        ...process.env,
+        // Optional: configure binaries if installed in custom paths
+        // TESSERACT_PATH: 'C\\\\Program Files\\\\Tesseract-OCR\\\\tesseract.exe',
+        // POPPLER_PATH: path.join(__dirname, '..', '..', 'python', 'poppler', 'extracted'),
+      },
+      windowsHide: true,
+    });
+
+    let out = '';
+    let err = '';
+    py.stdout.on('data', (d) => (out += d.toString()));
+    py.stderr.on('data', (d) => (err += d.toString()));
+  py.on('close', (code) => {
+      if (code !== 0) {
+        return res.status(500).json({ success: false, message: 'OCR process failed', error: err || out });
+      }
+      try {
+    const parsed = JSON.parse(out);
+    const text = parsed?.text || '';
+    const structured = parsed?.structured || {};
+    // Regex and proximity based extraction overlay
+    const regexFields = extractRegexFields(text);
+    const amountCandidates = deriveAmountsFromText(text);
+    const extracted = mapToExpected(structured, regexFields, amountCandidates);
+    return res.json({ success: true, data: { extracted, raw: parsed } });
+      } catch (e) {
+        return res.status(500).json({ success: false, message: 'Failed to parse OCR output', error: e.message, raw: out });
+      }
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message || 'Server error' });
+  }
+});
 
 /**
  * @route   GET /api/invoices

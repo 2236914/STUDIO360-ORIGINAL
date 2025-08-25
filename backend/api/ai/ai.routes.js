@@ -9,7 +9,6 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { spawn } = require('child_process');
-const XLSX = require('xlsx');
 const crypto = require('crypto');
 
 // In-memory KPI stats (can be replaced with DB later)
@@ -32,20 +31,63 @@ const processedStore = []; // { id, originalName, storedPath, size, mimetype, ex
 
 function canonicalizeStructured({ rawText, structured, meta }) {
   const s = structured || {};
+
+  // Basic scanners for optional fields in text
+  const scanLine = (labels) => {
+    if (!rawText) return null;
+    const lines = String(rawText).split(/\r?\n/);
+    for (const lbl of labels) {
+      const re = new RegExp(`^\s*${lbl}\s*[:\-]?\s*(.+)$`, 'i');
+      for (const ln of lines) {
+        const m = ln.match(re);
+        if (m && m[1]) return m[1].trim().slice(0, 200);
+      }
+    }
+    return null;
+  };
+
+  const items = Array.isArray(s.items) ? s.items : [];
+  const itemsSnake = items.map(it => ({
+    no: it.no ?? null,
+    product: it.product ?? null,
+    variation: it.variation ?? null,
+    product_price: it.productPrice ?? null,
+    qty: it.qty ?? null,
+    subtotal: it.subtotal ?? null,
+  }));
+  const itemsRequested = items.map(it => ({
+    item_name: it.product ?? null,
+    qty: it.qty ?? null,
+    price: it.productPrice ?? null,
+    subtotal: it.subtotal ?? null,
+  }));
+
+  const paymentBreakdown = {
+    merchandiseSubtotal: s.merchandiseSubtotal ?? null,
+    shippingFee: s.shippingFee ?? null,
+    shippingDiscount: s.shippingDiscount ?? null,
+    serviceCharge: s.serviceCharge ?? null,
+    voucherDiscount: s.voucherDiscount ?? (s.platformVoucher ?? null),
+    loyaltyPointsUsed: s.loyaltyPointsUsed ?? null,
+    grandTotal: s.total ?? s.grandTotal ?? null,
+  };
+
   return {
-    schemaVersion: '1.0',
+    schemaVersion: '1.1',
     extractedAt: Date.now(),
     source: {
       originalName: meta.originalName,
       storedPath: meta.storedPath,
+  fileUrl: meta.fileUrl || null,
       mimetype: meta.mimetype,
       size: meta.size,
     },
     fields: {
       sellerName: s.supplier || null,
-  sellerAddress: s.sellerAddress || null,
-  buyerName: s.buyerName || null,
-  buyerAddress: s.buyerAddress || null,
+      sellerAddress: s.sellerAddress || null,
+      buyerName: s.buyerName || null,
+      buyerAddress: s.buyerAddress || null,
+      // Flat access to keep backward compatible consumers happy
       orderSummaryNo: s.orderSummaryNo || s.invoiceNumber || null,
       invoiceNumber: s.invoiceNumber || null,
       orderId: s.orderId || null,
@@ -55,31 +97,35 @@ function canonicalizeStructured({ rawText, structured, meta }) {
       currency: s.currency || null,
       amountInWords: s.amountInWords || null,
     },
+    // New sections matching requested schema
+    orderSummary: {
+      orderSummaryNo: s.orderSummaryNo || s.invoiceNumber || null,
+      dateIssued: s.dateIssued || s.date || null,
+      orderId: s.orderId || null,
+      orderPaidDate: s.orderPaidDate || null,
+      paymentMethod: s.paymentMethod || null,
+    },
+    orderDetails: {
+      items: itemsRequested,
+      branchName: s.branchName ?? scanLine(['Branch Name', 'Branch']) ?? null,
+      route: s.route ?? scanLine(['Route']) ?? null,
+      driver: s.driver ?? s.deliveryRider ?? scanLine(['Driver', 'Delivery Rider']) ?? null,
+    },
+    paymentBreakdown,
+    // Preserve previous groups for compatibility
     amounts: {
-      merchandiseSubtotal: s.merchandiseSubtotal ?? null,
-      shippingFee: s.shippingFee ?? null,
-      shippingDiscount: s.shippingDiscount ?? null,
-      platformVoucher: s.platformVoucher ?? null,
-      grandTotal: s.total ?? s.grandTotal ?? null,
+      ...paymentBreakdown,
       tax: s.tax ?? null,
     },
-    items: Array.isArray(s.items) ? s.items.map(it => ({
+    items: items.map(it => ({
       no: it.no ?? null,
       product: it.product ?? null,
       variation: it.variation ?? null,
       productPrice: it.productPrice ?? null,
       qty: it.qty ?? null,
       subtotal: it.subtotal ?? null,
-    })) : [],
-    // order_details: same data but with requested snake_case keys
-    order_details: Array.isArray(s.items) ? s.items.map(it => ({
-      no: it.no ?? null,
-      product: it.product ?? null,
-      variation: it.variation ?? null,
-      product_price: it.productPrice ?? null,
-      qty: it.qty ?? null,
-      subtotal: it.subtotal ?? null,
-    })) : [],
+    })),
+    order_details: itemsSnake,
     raw: {
       text: rawText,
       structured: s,
@@ -116,6 +162,10 @@ function resolvePythonExecutable() {
   }
 
   // 5) Fallback to PATH entry
+  if (process.platform === 'win32') {
+    // Try Windows Python launcher if available
+    return process.env.PYTHON || 'py';
+  }
   return process.env.PYTHON || 'python';
 }
 
@@ -211,102 +261,6 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'No file uploaded' });
     }
 
-    // Fast-path: handle CSV/XLSX directly
-    const ext = path.extname(req.file.originalname || '').toLowerCase();
-    const isExcel = ['.xlsx', '.xls', '.csv'].includes(ext);
-    if (isExcel) {
-      try {
-        // Read workbook or CSV into first sheet
-        let wb;
-        if (ext === '.csv') {
-          const csv = fs.readFileSync(req.file.path, 'utf8');
-          wb = XLSX.read(csv, { type: 'string' });
-        } else {
-          wb = XLSX.readFile(req.file.path);
-        }
-        const sheetName = wb.SheetNames[0];
-        const sheet = wb.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-
-        // Try to map common sales/shop export headers to a canonical structure
-        // Heuristics for column names
-        const headerMap = (h) => String(h || '').trim().toLowerCase();
-        const pick = (obj, keys) => {
-          for (const k of keys) {
-            const v = obj[k];
-            if (v !== undefined && v !== null && String(v).trim() !== '') return v;
-          }
-          return '';
-        };
-
-        const canonicalItems = [];
-        let grandTotal = 0;
-        let currency = 'PHP';
-        for (const r of rows) {
-          // Build a lower-key alias object for robust access
-          const low = {};
-          for (const [k, v] of Object.entries(r)) low[headerMap(k)] = v;
-          // Typical marketplaces: order id, order number, product, quantity, unit price, net/gross amount
-          const orderId = pick(low, ['order id', 'order_id', 'orderid', 'order #', 'order no', 'order number', 'transaction id']);
-          const orderSummaryNo = pick(low, ['order summary no', 'order summary no.', 'order summary', 'reference no', 'reference number']);
-          const invoiceNumber = pick(low, ['invoice number', 'invoice no', 'invoice #']);
-          const product = pick(low, ['product name', 'product', 'item name', 'item']);
-          const qtyRaw = pick(low, ['qty', 'quantity', 'item qty', 'units']);
-          const unitRaw = pick(low, ['unit price', 'price', 'product price', 'unit_amount']);
-          const amountRaw = pick(low, ['amount', 'subtotal', 'total', 'net amount', 'grand total']);
-          const currRaw = pick(low, ['currency', 'curr', 'cur']);
-          if (currRaw) currency = String(currRaw).toUpperCase();
-          const qty = Number(String(qtyRaw).replace(/,/g, '')) || 0;
-          const productPrice = Number(String(unitRaw).replace(/,/g, '')) || 0;
-          const subtotal = Number(String(amountRaw).replace(/,/g, '')) || (qty && productPrice ? qty * productPrice : 0);
-          if (subtotal) grandTotal += subtotal;
-          canonicalItems.push({
-            no: canonicalItems.length + 1,
-            product: product || '',
-            variation: '',
-            productPrice: productPrice || null,
-            qty: qty || null,
-            subtotal: subtotal || null,
-            _ref: { orderId, orderSummaryNo, invoiceNumber },
-          });
-        }
-
-        const storedPath = path.relative(process.cwd(), req.file.path).replace(/\\/g, '/');
-        const meta = {
-          originalName: req.file.originalname,
-          storedPath,
-          size: req.file.size,
-          mimetype: req.file.mimetype
-        };
-        const structured = {
-          _source: 'excel',
-          supplier: '',
-          sellerAddress: '',
-          buyerName: '',
-          buyerAddress: '',
-          orderSummaryNo: '',
-          invoiceNumber: '',
-          orderId: '',
-          dateIssued: '',
-          orderPaidDate: '',
-          paymentMethod: '',
-          currency,
-          merchandiseSubtotal: grandTotal,
-          shippingFee: 0,
-          shippingDiscount: 0,
-          platformVoucher: 0,
-          total: grandTotal,
-          items: canonicalItems,
-        };
-        const canonical = canonicalizeStructured({ rawText: '', structured, meta });
-        const id = crypto.randomUUID();
-        processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        return res.json({ success: true, message: 'Excel parsed successfully', data: { id, ...meta, text: '', structured, canonical } });
-      } catch (e) {
-        return res.status(400).json({ success: false, message: `Failed to parse Excel/CSV: ${e.message}` });
-      }
-    }
-
     // Resolve Python path robustly (venv -> env -> common install paths -> PATH)
     const pythonPath = resolvePythonExecutable();
     const scriptPath = path.join(__dirname, '..', '..', 'python', 'process_file.py');
@@ -318,35 +272,80 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         ...process.env,
         // Allow overriding Tesseract/Poppler via env in backend process
         TESSERACT_PATH: process.env.TESSERACT_PATH || 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
-        POPPLER_PATH: process.env.POPPLER_PATH || ''
-      }
+        // Prefer bundled poppler if present; user can override via env
+        POPPLER_PATH: process.env.POPPLER_PATH || path.join(__dirname, '..', '..', 'python', 'poppler')
+      },
+      windowsHide: true
     });
 
     let stdout = '';
     let stderr = '';
+    let responded = false;
     py.stdout.on('data', (d) => { stdout += d.toString(); });
     py.stderr.on('data', (d) => { stderr += d.toString(); });
+    const toAbsoluteUrl = (storedPath) => {
+      try {
+        const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http');
+        const host = req.get('host');
+        // storedPath already normalized like 'uploads/filename.ext'
+        return `${proto}://${host}/${storedPath}`;
+      } catch (_) {
+        return `/${storedPath}`;
+      }
+    };
+
+    py.on('error', (err) => {
+      if (responded) return;
+      responded = true;
+      const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+      const meta = {
+        originalName: req.file.originalname,
+        storedPath,
+        fileUrl: toAbsoluteUrl(storedPath),
+        size: req.file.size,
+        mimetype: req.file.mimetype
+      };
+      const canonical = canonicalizeStructured({ rawText: '', structured: {}, meta });
+      if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
+      return res.json({
+        success: true,
+        message: 'Processed with fallback (Python not available)',
+        data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['python_not_found', err.message] }
+      });
+    });
 
     py.on('close', (code) => {
+      if (responded) return;
       try {
         const parsed = JSON.parse(stdout || '{}');
-        if (!parsed.success) {
-          return res.status(500).json({ success: false, message: parsed.error || 'Processing failed', stderr, pythonPath });
-        }
         const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
         const meta = {
           originalName: req.file.originalname,
           storedPath,
+          fileUrl: toAbsoluteUrl(storedPath),
           size: req.file.size,
           mimetype: req.file.mimetype
         };
+        if (!parsed.success) {
+          // Soft-fail: return canonical fallback with warnings rather than 500
+          const canonical = canonicalizeStructured({ rawText: '', structured: {}, meta });
+          if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
+          responded = true;
+          return res.json({
+            success: true,
+            message: 'Processed with fallback (python reported failure)',
+            data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['python_success_false', parsed.error || 'unknown_error', stderr] }
+          });
+        }
         const canonical = canonicalizeStructured({
           rawText: parsed.text || '',
           structured: parsed.structured || {},
           meta
         });
+        if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
+        responded = true;
         return res.json({
           success: true,
           message: 'File processed successfully',
@@ -355,11 +354,28 @@ router.post('/upload', upload.single('file'), async (req, res) => {
             ...meta,
             text: parsed.text,
             structured: parsed.structured || null,
-            canonical
+            canonical,
+            fileUrl: meta.fileUrl,
+            warnings: parsed.warnings || []
           }
         });
       } catch (e) {
-        return res.status(500).json({ success: false, message: 'Failed to parse processor output', stderr, stdout, pythonPath });
+        responded = true;
+        const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        const meta = {
+          originalName: req.file.originalname,
+          storedPath,
+          fileUrl: toAbsoluteUrl(storedPath),
+          size: req.file.size,
+          mimetype: req.file.mimetype
+        };
+        const canonical = canonicalizeStructured({ rawText: '', structured: {}, meta });
+        if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
+        return res.json({
+          success: true,
+          message: 'Processed with fallback (output parse failed)',
+          data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['parse_failed', String(e), stderr] }
+        });
       }
     });
   } catch (err) {
@@ -378,6 +394,7 @@ router.get('/processed', (req, res) => {
     id: p.id,
     originalName: p.originalName,
     storedPath: p.storedPath,
+  fileUrl: p.canonical?.source?.fileUrl || `/${p.storedPath}`,
     size: p.size,
     mimetype: p.mimetype,
     extractedAt: p.extractedAt,
@@ -396,6 +413,21 @@ router.get('/processed/:id', (req, res) => {
   const doc = processedStore.find(p => p.id === req.params.id);
   if (!doc) return res.status(404).json({ success: false, message: 'Document not found' });
   res.json({ success: true, data: doc.canonical });
+});
+
+/**
+ * @route   GET /api/ai/file/:id
+ * @desc    Stream the originally uploaded file by processed document ID
+ * @access  Private
+ */
+router.get('/file/:id', (req, res) => {
+  const doc = processedStore.find(p => p.id === req.params.id);
+  if (!doc) return res.status(404).json({ success: false, message: 'Document not found' });
+  const absPath = path.resolve(process.cwd(), doc.storedPath);
+  if (!fs.existsSync(absPath)) return res.status(404).json({ success: false, message: 'File missing on server' });
+  // Let the browser preview if possible
+  res.setHeader('Content-Disposition', `inline; filename="${doc.originalName.replace(/"/g, '')}"`);
+  return res.sendFile(absPath);
 });
 
 /**

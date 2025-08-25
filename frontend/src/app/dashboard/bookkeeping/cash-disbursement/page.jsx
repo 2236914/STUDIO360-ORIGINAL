@@ -19,7 +19,7 @@ import { fNumber } from 'src/utils/format-number';
 import { DashboardContent } from 'src/layouts/dashboard';
 import { Iconify } from 'src/components/iconify';
 import { Label } from 'src/components/label';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle, DialogContent, DialogActions, Alert } from '@mui/material';
 
 // ----------------------------------------------------------------------
 
@@ -124,6 +124,83 @@ export default function CashDisbursementPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('All');
   const [rows, setRows] = useState([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addError, setAddError] = useState('');
+  // Import invoice dialog state
+  const [importOpen, setImportOpen] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importLoading, setImportLoading] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [importResult, setImportResult] = useState(null); // { extracted, raw }
+  const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    checkNo: '',
+    payee: '',
+    description: '',
+    amount: '',
+    account: '',
+  });
+
+  const ACCEPT = '.pdf,.jpg,.jpeg,.png,.csv,.xlsx';
+  const onImportFileChange = (e) => {
+    setImportError('');
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const ok = ACCEPT.split(',').some((ext) => f.name.toLowerCase().endsWith(ext.trim()));
+    if (!ok) {
+      setImportError('Unsupported file type. Allowed: PDF, JPG, PNG, CSV, XLSX');
+      setImportFile(null);
+      return;
+    }
+    setImportFile(f);
+  };
+  const parseInvoice = async () => {
+    setImportError('');
+    if (!importFile) {
+      setImportError('Please choose a file first');
+      return;
+    }
+    setImportLoading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      const resp = await fetch(`${BACKEND_URL}/api/invoices/parse`, { method: 'POST', body: fd });
+      const data = await resp.json();
+      if (!resp.ok || !data.success) {
+        throw new Error(data.message || data.error || 'Parse failed');
+      }
+      setImportResult(data.data);
+    } catch (err) {
+      setImportError(err.message || String(err));
+    } finally {
+      setImportLoading(false);
+    }
+  };
+  const applyImportedToForm = () => {
+    const extracted = importResult?.extracted || {};
+    const isUnknown = (v) => v === undefined || v === null || v === '' || String(v).toLowerCase() === 'unknown';
+    const amount = !isUnknown(extracted.grand_total)
+      ? Number(extracted.grand_total)
+      : !isUnknown(extracted.total)
+      ? Number(extracted.total)
+      : !isUnknown(extracted.subtotal)
+      ? Number(extracted.subtotal)
+      : '';
+    const items = Array.isArray(extracted.items) ? extracted.items : [];
+    const desc = items.length ? `Imported: ${items.slice(0, 2).map((i) => i.name).filter(Boolean).join(', ')}${items.length > 2 ? '…' : ''}` : 'Imported from invoice';
+    setForm((f) => ({
+      ...f,
+      date: !isUnknown(extracted.order_date) ? extracted.order_date : f.date,
+      checkNo: !isUnknown(extracted.order_number) ? String(extracted.order_number) : f.checkNo,
+      payee: !isUnknown(extracted.seller_name) ? String(extracted.seller_name) : f.payee,
+      description: desc,
+      amount: amount,
+      account: f.account,
+    }));
+    setImportOpen(false);
+    setAddOpen(true);
+  };
 
   // Load disbursements from backend and map to table rows
   useEffect(() => {
@@ -231,8 +308,17 @@ export default function CashDisbursementPage() {
             variant="contained"
             startIcon={<Iconify icon="eva:plus-fill" />}
             sx={{ minWidth: 140 }}
+            onClick={() => { setAddError(''); setAddOpen(true); }}
           >
             + Add Entry
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<Iconify icon="mdi:upload" />}
+            sx={{ minWidth: 160 }}
+            onClick={() => { setImportError(''); setImportResult(null); setImportFile(null); setImportOpen(true); }}
+          >
+            Import invoice
           </Button>
         </Stack>
       </Card>
@@ -242,7 +328,7 @@ export default function CashDisbursementPage() {
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
-              CASH DISBURSEMENT BOOK (16+ columns)
+              CASH DISBURSEMENT BOOK 
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
               {rows.length} transactions • August - September 2024
@@ -506,6 +592,140 @@ export default function CashDisbursementPage() {
           </TableContainer>
         </Box>
       </Card>
+
+      {/* Add Entry Dialog */}
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Cash Disbursement Entry</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {addError ? <Alert severity="error">{addError}</Alert> : null}
+            <TextField
+              label="Date"
+              type="date"
+              value={form.date}
+              onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              fullWidth
+            />
+            <TextField
+              label="Check / Ref No. (optional)"
+              value={form.checkNo}
+              onChange={(e) => setForm((f) => ({ ...f, checkNo: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              label="Payee / Entity"
+              value={form.payee}
+              onChange={(e) => setForm((f) => ({ ...f, payee: e.target.value }))}
+              fullWidth
+              required
+            />
+            <TextField
+              label="Description"
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              fullWidth
+              required
+            />
+            <TextField
+              label="Amount (₱)"
+              type="number"
+              inputProps={{ step: '0.01', min: '0' }}
+              value={form.amount}
+              onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
+              fullWidth
+            />
+            <TextField
+              label="Expense Account (e.g., Utilities, Rent, Office Supplies)"
+              value={form.account}
+              onChange={(e) => setForm((f) => ({ ...f, account: e.target.value }))}
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            onClick={async () => {
+              setAddError('');
+              const payload = {
+                date: form.date,
+                checkNo: form.checkNo || '',
+                payee: form.payee?.trim(),
+                description: form.description?.trim(),
+                amount: Number(form.amount) || 0,
+                account: form.account?.trim() || '',
+              };
+              if (!payload.date || !payload.payee || !payload.description) {
+                setAddError('Please provide date, payee, and description.');
+                return;
+              }
+              try {
+                const res = await axios.post('/api/bookkeeping/cash-disbursements', payload);
+                const entry = res?.data?.data?.entry;
+                if (entry) {
+                  setRows((prev) => [...prev, mapDisbursementToRow(entry)]);
+                  setAddOpen(false);
+                  setForm({ date: new Date().toISOString().slice(0, 10), checkNo: '', payee: '', description: '', amount: '', account: '' });
+                } else {
+                  setAddError('Unexpected response from server.');
+                }
+              } catch (err) {
+                setAddError(err?.response?.data?.message || err.message || 'Failed to add entry');
+              }
+            }}
+          >
+            Save Entry
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Import Invoice Dialog */}
+      <Dialog open={importOpen} onClose={() => setImportOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Import Invoice</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            {importError ? <Alert severity="error">{importError}</Alert> : null}
+            <Button variant="outlined" component="label">
+              Choose file
+              <input type="file" accept={ACCEPT} hidden onChange={onImportFileChange} />
+            </Button>
+            {importFile ? (
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Selected: {importFile.name}
+              </Typography>
+            ) : null}
+            <Button variant="contained" onClick={parseInvoice} disabled={importLoading || !importFile}>
+              {importLoading ? 'Processing…' : 'Parse Invoice'}
+            </Button>
+            {importResult ? (
+              <Box sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" sx={{ mb: 1 }}>Preview</Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  Order/Invoice: {importResult.extracted?.order_number}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  Seller: {importResult.extracted?.seller_name}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  Date: {importResult.extracted?.order_date}
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 0.5 }}>
+                  Amount: {String(importResult.extracted?.grand_total ?? importResult.extracted?.total ?? importResult.extracted?.subtotal)}
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Items: {(importResult.extracted?.items || []).slice(0, 3).map((i) => i.name).filter(Boolean).join(', ')}
+                </Typography>
+              </Box>
+            ) : null}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportOpen(false)}>Close</Button>
+          <Button variant="contained" disabled={!importResult} onClick={applyImportedToForm}>Use in Add Entry</Button>
+        </DialogActions>
+      </Dialog>
     </DashboardContent>
   );
 } 
