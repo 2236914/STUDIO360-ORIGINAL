@@ -13,7 +13,8 @@ import { Searchbar } from '../components/searchbar';
 import { MenuButton } from '../components/menu-button';
 import { SignInButton } from '../components/sign-in-button';
 import { AccountPopover } from 'src/layouts/components/account-popover';
-import { SettingsButton } from '../components/settings-button';
+import { SettingsPopover } from 'src/components/settings';
+
 import { LanguagePopover } from '../components/language-popover';
 import { ContactsPopover } from '../components/contacts-popover';
 import { WorkspacesPopover } from '../components/workspaces-popover';
@@ -149,8 +150,8 @@ export function HeaderBase({
               {/* -- Contacts popover -- */}
               {contacts && <ContactsPopover data-slot="contacts" data={data?.contacts} />}
 
-              {/* -- Settings button -- */}
-              {settings && <SettingsButton data-slot="settings" />}
+              {/* -- Settings popover -- */}
+              {settings && <SettingsPopover data-slot="settings" />}
 
               {/* -- Account drawer -- */}
               {account && <AccountPopover data-slot="account" data={data?.account} />}

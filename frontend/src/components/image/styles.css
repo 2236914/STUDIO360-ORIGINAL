@@ -1,1 +1,29 @@
 @import 'react-lazy-load-image-component/src/effects/blur.css';
+
+/* Fix for circular lazy loading images */
+.lazy-load-image-background.blur {
+  border-radius: inherit !important;
+}
+
+.lazy-load-image-background.blur.lazy-load-image-loaded {
+  border-radius: inherit !important;
+}
+
+.lazy-load-image-background.blur.lazy-load-image-loading {
+  border-radius: inherit !important;
+}
+
+/* Ensure the blur effect respects circular containers */
+.lazy-load-image-background.blur img {
+  border-radius: inherit !important;
+}
+
+/* Fix for the wrapper element */
+.lazy-load-image-wrapper {
+  border-radius: inherit !important;
+}
+
+/* Ensure all lazy loading states maintain circular shape */
+[class*="lazy-load-image"] {
+  border-radius: inherit !important;
+}

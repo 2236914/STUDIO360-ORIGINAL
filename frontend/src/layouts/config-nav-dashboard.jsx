@@ -34,9 +34,13 @@ const ICONS = {
   analytics: icon('ic-analytics'),
   dashboard: icon('ic-dashboard'),
   parameter: icon('ic-parameter'),
-  bookkeeping: icon('ic-banking'), // Using banking icon for bookkeeping
-  taxCalculator: icon('ic-analytics'), // Using analytics icon for tax calculator
-  aiBookkeeper: icon('ic-robot'), // Using robot icon for AI bookkeeper
+  bookkeeping: icon('ic-banking'), 
+  taxDecisionTool: icon('ic-analytics'), 
+  aiBookkeeper: icon('ic-robot'),
+  inventory: icon('ic-product'),
+  invoice: icon('ic-file'),
+  account: icon('ic-user'),
+  announcement: icon('ic-blog'),
 };
 
 // ----------------------------------------------------------------------
@@ -77,12 +81,45 @@ export const navData = [
           { title: 'AI Categorization Log', path: paths.dashboard.aiBookkeeper.aiCategorization },
         ],
       },
-
       {
-        title: 'Tax Calculator',
-        path: paths.dashboard.taxCalculator,
-        icon: ICONS.taxCalculator,
+        title: 'Tax Decision Tool',
+        path: paths.dashboard.taxDecisionTool,
+        icon: ICONS.taxDecisionTool,
       },
+    ],
+  },
+  /**
+   * Shop
+   */
+  {
+    subheader: 'SHOP',
+    items: [
+      { title: 'Inventory', path: paths.dashboard.inventory.root, icon: ICONS.inventory },
+      { title: 'Orders', path: paths.dashboard.orders.root, icon: ICONS.order },
+      { title: 'Invoice', path: paths.dashboard.invoice.root, icon: ICONS.invoice },
+      { title: 'Mail', path: paths.dashboard.mail, icon: ICONS.mail },
+      { title: 'Toast Demo', path: paths.dashboard.toastDemo, icon: ICONS.blog },
+      { title: 'Chat', path: paths.dashboard.chat, icon: ICONS.chat },
+    ],
+  },
+  /**
+   * Settings
+   */
+  {
+    subheader: 'SETTINGS',
+    items: [
+      { title: 'Account', path: paths.dashboard.account, icon: ICONS.account },
+    ],
+  },
+  /**
+   * Misc
+   */
+  {
+    subheader: 'MISC',
+    items: [
+      { title: 'Announcement', path: paths.dashboard.announcement, icon: ICONS.announcement },
+      { title: 'Kanban', path: paths.dashboard.kanban, icon: ICONS.kanban },
+      { title: 'Calendar', path: paths.dashboard.calendar, icon: ICONS.calendar },
     ],
   },
 ];

@@ -6,6 +6,24 @@ const nextConfig = {
   env: {
     BUILD_STATIC_EXPORT: isStaticExport,
   },
+  reactStrictMode: false,
+  // Critical: Disable hydration warnings in development for CSS-in-JS
+  onDemandEntries: {
+    maxInactiveAge: 25 * 1000,
+    pagesBufferLength: 2,
+  },
+  experimental: {
+    // Optimize hydration
+    optimizeCss: true,
+    // React 19 compatibility
+    forceSwcTransforms: true,
+    // Improve hydration stability
+    serverComponentsHmrCache: false,
+  },
+  compiler: {
+    // Remove console.log in production
+    removeConsole: process.env.NODE_ENV === 'production',
+  },
   modularizeImports: {
     '@mui/icons-material': {
       transform: '@mui/icons-material/{{member}}',

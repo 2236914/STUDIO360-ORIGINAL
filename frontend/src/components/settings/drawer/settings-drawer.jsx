@@ -6,7 +6,6 @@ import Badge from '@mui/material/Badge';
 import Tooltip from '@mui/material/Tooltip';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import Drawer, { drawerClasses } from '@mui/material/Drawer';
 import { useTheme, useColorScheme } from '@mui/material/styles';
 
 import COLORS from 'src/theme/core/colors.json';
@@ -23,6 +22,8 @@ import { useSettingsContext } from '../context';
 import { PresetsOptions } from './presets-options';
 import { defaultSettings } from '../config-settings';
 import { FullScreenButton } from './fullscreen-button';
+import { ClientOnly } from '../../client-only';
+import { CustomDrawer } from '../../custom-drawer';
 
 // ----------------------------------------------------------------------
 
@@ -41,7 +42,18 @@ export function SettingsDrawer({
 
   const settings = useSettingsContext();
 
-  const { mode, setMode } = useColorScheme();
+  // Safely use useColorScheme with fallback
+  let mode = 'light';
+  let setMode = () => {};
+  
+  try {
+    const colorScheme = useColorScheme();
+    mode = colorScheme.mode || 'light';
+    setMode = colorScheme.setMode || (() => {});
+  } catch (error) {
+    // Fallback if useColorScheme is not available
+    console.warn('useColorScheme not available, using fallback mode');
+  }
 
   const renderHead = (
     <Box display="flex" alignItems="center" sx={{ py: 2, pr: 1, pl: 2.5 }}>
@@ -124,7 +136,8 @@ export function SettingsDrawer({
         { name: 'default', value: COLORS.primary.main },
         { name: 'cyan', value: PRIMARY_COLOR.cyan.main },
         { name: 'purple', value: PRIMARY_COLOR.purple.main },
-        { name: 'blue', value: PRIMARY_COLOR.blue.main },
+        { name: 'pink', value: PRIMARY_COLOR.pink.main },
+        { name: 'green', value: PRIMARY_COLOR.green.main },
         { name: 'orange', value: PRIMARY_COLOR.orange.main },
         { name: 'red', value: PRIMARY_COLOR.red.main },
       ]}
@@ -159,37 +172,58 @@ export function SettingsDrawer({
   );
 
   return (
-    <Drawer
-      anchor="right"
-      open={settings.openDrawer}
-      onClose={settings.onCloseDrawer}
-      slotProps={{ backdrop: { invisible: true } }}
-      sx={{
-        [`& .${drawerClasses.paper}`]: {
-          ...paper({
-            theme,
-            color: varAlpha(theme.vars.palette.background.defaultChannel, 0.9),
-          }),
-          width: 360,
+    <ClientOnly>
+      <CustomDrawer
+        anchor="right"
+        open={settings.openDrawer}
+        onClose={settings.onCloseDrawer}
+        width={320}
+        slotProps={{ backdrop: { invisible: true } }}
+        sx={{
+          ...paper({ theme }),
           ...sx,
-        },
-      }}
-    >
-      {renderHead}
+        }}
+      >
+        <Scrollbar sx={{ height: 1 }}>
+          <Stack spacing={3} sx={{ p: 3 }}>
+            {renderHead}
 
-      <Scrollbar>
-        <Stack spacing={6} sx={{ px: 2.5, pb: 5 }}>
-          <Box gap={2} display="grid" gridTemplateColumns="repeat(2, 1fr)">
-            {!hideColorScheme && renderMode}
-            {!hideContrast && renderContrast}
-            {!hideDirection && renderRTL}
-            {!hideCompact && renderCompact}
-          </Box>
-          {!(hideNavLayout && hideNavColor) && renderNav}
-          {!hidePresets && renderPresets}
-          {!hideFont && renderFont}
-        </Stack>
-      </Scrollbar>
-    </Drawer>
+            <Stack spacing={2}>
+              {!hideColorScheme && renderMode}
+
+              {!hideContrast && renderContrast}
+
+              {!hideDirection && renderRTL}
+
+              {!hideCompact && renderCompact}
+            </Stack>
+
+            {!hideNavLayout && (
+              <Stack spacing={2}>
+                <Typography variant="subtitle2">Nav</Typography>
+
+                {renderNav}
+              </Stack>
+            )}
+
+            {!hideFont && (
+              <Stack spacing={2}>
+                <Typography variant="subtitle2">Font</Typography>
+
+                {renderFont}
+              </Stack>
+            )}
+
+            {!hidePresets && (
+              <Stack spacing={2}>
+                <Typography variant="subtitle2">Presets</Typography>
+
+                {renderPresets}
+              </Stack>
+            )}
+          </Stack>
+        </Scrollbar>
+      </CustomDrawer>
+    </ClientOnly>
   );
 }

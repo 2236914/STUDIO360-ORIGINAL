@@ -52,6 +52,8 @@ export function AnalyticsKpiCards() {
       blue: theme.palette.blue?.main || '#0C68E9',
       orange: theme.palette.orange?.main || '#fda92d',
       red: theme.palette.red?.main || '#FF3030',
+      pink: theme.palette.pink?.main || '#E91E63',
+      green: theme.palette.green?.main || '#00A76F',
     };
     
     return [colorMap[settings.primaryColor]];

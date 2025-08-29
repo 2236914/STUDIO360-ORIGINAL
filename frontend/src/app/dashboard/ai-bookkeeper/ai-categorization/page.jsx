@@ -236,13 +236,13 @@ export default function AICategorizationPage() {
         {MOCK_KPI_DATA.map((kpi) => (
           <Card key={kpi.title} sx={{ p: 2, flex: 1 }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Box>
+          <Box>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
                   {kpi.title}
                 </Typography>
                 <Typography variant="h4" sx={{ color: kpi.color, fontWeight: 600, mb: 0.5 }}>
                   {kpi.value}
-                </Typography>
+            </Typography>
                 <Typography 
                   variant="caption" 
                   sx={{ 
@@ -251,8 +251,8 @@ export default function AICategorizationPage() {
                   }}
                 >
                   {kpi.change}
-                </Typography>
-              </Box>
+            </Typography>
+          </Box>
               
               {/* Mini Chart */}
               <Box sx={{ width: 60, height: 30 }}>
@@ -266,9 +266,9 @@ export default function AICategorizationPage() {
                     fill="none"
                   />
                 </svg>
-              </Box>
-            </Stack>
-          </Card>
+          </Box>
+        </Stack>
+      </Card>
         ))}
       </Stack>
 
@@ -289,10 +289,10 @@ export default function AICategorizationPage() {
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     {item.category}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     {item.count}
-                  </Typography>
+          </Typography>
                 </Stack>
                 <Box sx={{ width: '100%', height: 8, bgcolor: 'grey.100', borderRadius: 1, overflow: 'hidden' }}>
                   <Box 
@@ -342,10 +342,10 @@ export default function AICategorizationPage() {
                 <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     {item.range}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     {item.count}
-                  </Typography>
+          </Typography>
                 </Stack>
                 <Box sx={{ width: '100%', height: 8, bgcolor: 'grey.100', borderRadius: 1, overflow: 'hidden' }}>
                   <Box 

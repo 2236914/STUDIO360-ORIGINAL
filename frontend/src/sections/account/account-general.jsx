@@ -46,17 +46,17 @@ export function AccountGeneral() {
   const { user } = useMockedUser();
 
   const defaultValues = {
-    displayName: user?.displayName || '',
-    email: user?.email || '',
+    displayName: user?.displayName || 'Jaydon Frankie',
+    email: user?.email || 'user@studio360.com',
     photoURL: user?.photoURL || null,
-    phoneNumber: user?.phoneNumber || '',
-    country: user?.country || '',
-    address: user?.address || '',
-    state: user?.state || '',
-    city: user?.city || '',
-    zipCode: user?.zipCode || '',
-    about: user?.about || '',
-    isPublic: user?.isPublic || false,
+    phoneNumber: user?.phoneNumber || '(416) 555-0198',
+    country: user?.country || { code: 'CA', label: 'Canada', phone: '1' },
+    address: user?.address || '90210 Broadway Blvd',
+    state: user?.state || 'California',
+    city: user?.city || 'San Francisco',
+    zipCode: user?.zipCode || '94116',
+    about: user?.about || 'Praesent turpis. Phasellus viverra nulla ut metus varius laoreet. Phasellus tempus.',
+    isPublic: user?.isPublic || true,
   };
 
   const methods = useForm({
@@ -126,36 +126,35 @@ export function AccountGeneral() {
         </Grid>
 
         <Grid xs={12} md={8}>
-          <Card sx={{ p: 3 }}>
-            <Box
-              rowGap={3}
-              columnGap={2}
-              display="grid"
-              gridTemplateColumns={{
-                xs: 'repeat(1, 1fr)',
-                sm: 'repeat(2, 1fr)',
-              }}
-            >
-              <Field.Text name="displayName" label="Name" />
-              <Field.Text name="email" label="Email address" />
-              <Field.Phone name="phoneNumber" label="Phone number" />
-              <Field.Text name="address" label="Address" />
+          <Box
+            rowGap={3}
+            columnGap={2}
+            display="grid"
+            gridTemplateColumns={{
+              xs: 'repeat(1, 1fr)',
+              sm: 'repeat(2, 1fr)',
+            }}
+            sx={{ mb: 3 }}
+          >
+            <Field.Text name="displayName" label="Name" />
+            <Field.Text name="email" label="Email address" />
+            <Field.Phone name="phoneNumber" label="Phone number" />
+            <Field.Text name="address" label="Address" />
 
-              <Field.CountrySelect name="country" label="Country" placeholder="Choose a country" />
+            <Field.CountrySelect name="country" label="Country" placeholder="Choose a country" />
 
-              <Field.Text name="state" label="State/region" />
-              <Field.Text name="city" label="City" />
-              <Field.Text name="zipCode" label="Zip/code" />
-            </Box>
+            <Field.Text name="state" label="State/region" />
+            <Field.Text name="city" label="City" />
+            <Field.Text name="zipCode" label="Zip/code" />
+          </Box>
 
-            <Stack spacing={3} alignItems="flex-end" sx={{ mt: 3 }}>
-              <Field.Text name="about" multiline rows={4} label="About" />
+          <Field.Text name="about" multiline rows={4} label="About" sx={{ mb: 3 }} />
 
-              <LoadingButton type="submit" variant="contained" loading={isSubmitting}>
-                Save changes
-              </LoadingButton>
-            </Stack>
-          </Card>
+          <Stack direction="row" spacing={2} justifyContent="flex-end">
+            <LoadingButton type="submit" variant="contained" loading={isSubmitting}>
+              Save changes
+            </LoadingButton>
+          </Stack>
         </Grid>
       </Grid>
     </Form>

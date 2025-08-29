@@ -1,5 +1,5 @@
 import { list } from './list';
-import { card } from './card';
+import { card } from './card-safe';
 import { menu } from './menu';
 import { chip } from './chip';
 import { link } from './link';
@@ -12,14 +12,14 @@ import { paper } from './paper';
 import { badge } from './badge';
 import { radio } from './radio';
 import { appBar } from './appbar';
-import { dialog } from './dialog';
+import { dialog } from './dialog-safe';
 import { avatar } from './avatar';
 import { drawer } from './drawer';
 import { select } from './select';
 import { rating } from './rating';
-import { slider } from './slider';
+import { slider } from './slider-safe';
 import { button } from './button';
-import { fab } from './button-fab';
+import { fab } from './button-fab-safe';
 import { tooltip } from './tooltip';
 import { popover } from './popover';
 import { stepper } from './stepper';
@@ -30,7 +30,7 @@ import { backdrop } from './backdrop';
 import { progress } from './progress';
 import { timeline } from './timeline';
 import { checkbox } from './checkbox';
-import { accordion } from './accordion';
+import { accordion } from './accordion-safe';
 import { textfield } from './textfield';
 import { typography } from './typography';
 import { pagination } from './pagination';
@@ -40,7 +40,7 @@ import { treeView } from './mui-x-tree-view';
 import { buttonGroup } from './button-group';
 import { autocomplete } from './autocomplete';
 import { toggleButton } from './button-toggle';
-import { datePicker } from './mui-x-date-picker';
+import { datePicker } from './mui-x-date-picker-safe';
 
 // ----------------------------------------------------------------------
 

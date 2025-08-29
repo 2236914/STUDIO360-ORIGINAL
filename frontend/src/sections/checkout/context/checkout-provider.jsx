@@ -33,7 +33,7 @@ const initialState = {
 
 export function CheckoutProvider({ children }) {
   return (
-    <Suspense fallback={<SplashScreen />}>
+    <Suspense fallback={null}>
       <Container>{children}</Container>
     </Suspense>
   );

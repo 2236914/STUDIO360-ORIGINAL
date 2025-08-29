@@ -173,7 +173,7 @@ export function maxLine({ line, persistent }) {
 export function paper({ theme, color, dropdown }) {
   return {
     ...bgBlur({
-      color: color ?? varAlpha(theme.vars.palette.background.paperChannel, 0.9),
+      color: color ?? varAlpha(theme.vars?.palette?.background?.paperChannel || theme.palette?.background?.paper, 0.9),
       blur: 20,
     }),
     backgroundImage: `url(${CONFIG.site.basePath}/assets/cyan-blur.png), url(${CONFIG.site.basePath}/assets/red-blur.png)`,
@@ -185,7 +185,7 @@ export function paper({ theme, color, dropdown }) {
     }),
     ...(dropdown && {
       padding: theme.spacing(0.5),
-      boxShadow: theme.customShadows.dropdown,
+      boxShadow: theme.shadows[20],
       borderRadius: `${theme.shape.borderRadius * 1.25}px`,
     }),
   };

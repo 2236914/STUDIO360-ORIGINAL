@@ -7,6 +7,62 @@ import { updateCoreWithSettings, updateComponentsWithSettings } from './with-set
 
 // ----------------------------------------------------------------------
 
+// Fallback minimal theme to prevent deepmerge crashes
+function createMinimalTheme(settings) {
+  const safeSettings = {
+    colorScheme: 'light',
+    direction: 'ltr',
+    contrast: 'default',
+    navLayout: 'vertical',
+    primaryColor: 'default',
+    navColor: 'integrate',
+    compactLayout: true,
+    fontFamily: 'Barlow',
+    ...settings
+  };
+
+  return extendTheme({
+    colorSchemes: {
+      light: {
+        palette: {
+          mode: 'light',
+          primary: { main: '#007BDB' },
+          secondary: { main: '#E91E63' },
+          background: { default: '#FFFFFF', paper: '#FFFFFF' },
+          text: { primary: '#1C252E', secondary: '#637381' },
+        },
+      },
+      dark: {
+        palette: {
+          mode: 'dark',
+          primary: { main: '#007BDB' },
+          secondary: { main: '#E91E63' },
+          background: { default: '#141A21', paper: '#1C252E' },
+          text: { primary: '#FFFFFF', secondary: '#C4CDD5' },
+        },
+      },
+    },
+    direction: safeSettings.direction,
+    shape: { borderRadius: 8 },
+    typography: {
+      fontFamily: setFont(safeSettings.fontFamily),
+      h1: { fontSize: '2.5rem', fontWeight: 700 },
+      h2: { fontSize: '2rem', fontWeight: 700 },
+      h3: { fontSize: '1.75rem', fontWeight: 600 },
+      h4: { fontSize: '1.5rem', fontWeight: 600 },
+      h5: { fontSize: '1.25rem', fontWeight: 600 },
+      h6: { fontSize: '1rem', fontWeight: 600 },
+      body1: { fontSize: '1rem', lineHeight: 1.5 },
+      body2: { fontSize: '0.875rem', lineHeight: 1.43 },
+      button: { fontSize: '0.875rem', fontWeight: 600, textTransform: 'none' },
+      caption: { fontSize: '0.75rem', lineHeight: 1.66 },
+      overline: { fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' },
+    },
+    cssVarPrefix: 'studio',
+    shouldSkipGeneratingVar,
+  });
+}
+
 export function createTheme(localeComponents, settings) {
   // Handle case where only settings is passed (starter version)
   if (!settings && localeComponents) {
@@ -18,42 +74,83 @@ export function createTheme(localeComponents, settings) {
   const defaultSettings = {
     colorScheme: 'light',
     direction: 'ltr',
+    contrast: 'default',
+    navLayout: 'vertical',
+    primaryColor: 'default',
+    navColor: 'integrate',
+    compactLayout: true,
     fontFamily: 'Barlow',
   };
+  
+  const safeSettings = { ...defaultSettings, ...settings };
 
-  const safeSettings = settings || defaultSettings;
-
-  const initialTheme = {
-    colorSchemes,
-    shadows: shadows(safeSettings.colorScheme),
-    customShadows: customShadows(safeSettings.colorScheme),
+  // Create theme step by step to avoid circular references
+  
+  // 1. Create base theme with minimal structure
+  const baseTheme = {
     direction: safeSettings.direction,
     shape: { borderRadius: 8 },
-    components,
+    cssVarPrefix: 'studio',
+    shouldSkipGeneratingVar,
+  };
+
+  // 2. Add colorSchemes (which are static and safe)
+  const themeWithColorSchemes = {
+    ...baseTheme,
+    colorSchemes: colorSchemes,
+  };
+
+  // 3. Add shadows (which depend on colorScheme but are simple)
+  const themeWithShadows = {
+    ...themeWithColorSchemes,
+    shadows: shadows(safeSettings.colorScheme),
+  };
+
+  // 4. Add typography (which is mostly static)
+  const themeWithTypography = {
+    ...themeWithShadows,
     typography: {
       ...typography,
       fontFamily: setFont(safeSettings.fontFamily),
     },
-    cssVarPrefix: '',
-    shouldSkipGeneratingVar,
   };
 
-  /**
-   * 1.Update values from settings before creating theme.
-   */
-  const updateTheme = updateCoreWithSettings(initialTheme, safeSettings);
+  // 5. Update core theme with settings (this modifies colorSchemes safely)
+  const coreTheme = updateCoreWithSettings(themeWithTypography, safeSettings);
 
-  /**
-   * 2.Create theme + add locale + update component with settings.
-   */
-  const theme = extendTheme(
-    updateTheme,
-    localeComponents || {},
-    updateComponentsWithSettings(safeSettings),
-    overridesTheme
+  // 6. Get component updates
+  const componentUpdates = updateComponentsWithSettings(safeSettings);
+  
+  // 7. Create final theme with isolated parts to avoid circular references
+  const finalTheme = extendTheme(
+    // Base theme structure (already processed)
+    coreTheme,
+    // Components layer (process each separately to avoid deepmerge issues)
+    {
+      components: {
+        // Core components (these are safe)
+        ...components,
+        // Setting-based component updates (minimal to avoid circular refs)
+        ...(componentUpdates?.components || {}),
+        // CssBaseline override for consistent fonts (static, no theme refs)
+        MuiCssBaseline: {
+          styleOverrides: {
+            body: {
+              WebkitFontSmoothing: 'antialiased',
+              MozOsxFontSmoothing: 'grayscale',
+              fontFamily: setFont(safeSettings.fontFamily),
+            },
+          },
+        },
+      }
+    },
+    // Locale components (optional, minimal)
+    localeComponents && Object.keys(localeComponents).length > 0 ? localeComponents : undefined,
+    // Skip overridesTheme for now to avoid circular references
+    // overridesTheme || {}
   );
 
-  return theme;
+  return finalTheme;
 }
 
 // ----------------------------------------------------------------------
@@ -87,26 +184,3 @@ function shouldSkipGeneratingVar(keys, value) {
 
   return keys.some((key) => skipGlobalKeys?.includes(key));
 }
-
-/**
-* createTheme without @settings and @locale components.
-*
- ```jsx
-export function createTheme(): Theme {
-  const initialTheme = {
-    colorSchemes,
-    shadows: shadows('light'),
-    customShadows: customShadows('light'),
-    shape: { borderRadius: 8 },
-    components,
-    typography,
-    cssVarPrefix: '',
-    shouldSkipGeneratingVar,
-  };
-
-  const theme = extendTheme(initialTheme, overridesTheme);
-
-  return theme;
-}
- ```
-*/

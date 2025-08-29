@@ -1,7 +1,6 @@
 'use client';
 
-import Portal from '@mui/material/Portal';
-
+import { PortalWrapper } from '../portal';
 import { Iconify } from '../iconify';
 import { StyledToaster } from './styles';
 import { toasterClasses } from './classes';
@@ -10,7 +9,7 @@ import { toasterClasses } from './classes';
 
 export function Snackbar() {
   return (
-    <Portal>
+    <PortalWrapper>
       <StyledToaster
         expand
         gap={12}
@@ -48,6 +47,6 @@ export function Snackbar() {
           error: <Iconify className={toasterClasses.iconSvg} icon="solar:danger-bold" />,
         }}
       />
-    </Portal>
+    </PortalWrapper>
   );
 }

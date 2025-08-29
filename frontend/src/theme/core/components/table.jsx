@@ -37,6 +37,8 @@ const MuiTableRow = {
    *************************************** */
   styleOverrides: {
     root: ({ theme }) => ({
+      height: 'auto',
+      minHeight: '48px',
       [`&.${tableRowClasses.selected}`]: {
         backgroundColor: varAlpha(theme.vars.palette.primary.darkChannel, 0.04),
         '&:hover': { backgroundColor: varAlpha(theme.vars.palette.primary.darkChannel, 0.08) },
@@ -53,12 +55,19 @@ const MuiTableCell = {
    * STYLE
    *************************************** */
   styleOverrides: {
-    root: { borderBottomStyle: 'dashed' },
+    root: { 
+      borderBottomStyle: 'dashed',
+      borderBottomWidth: '1px',
+      paddingTop: '12px',
+      paddingBottom: '12px',
+    },
     head: ({ theme }) => ({
       fontSize: 14,
       color: theme.vars.palette.text.secondary,
       fontWeight: theme.typography.fontWeightSemiBold,
       backgroundColor: theme.vars.palette.background.neutral,
+      paddingTop: '16px',
+      paddingBottom: '16px',
     }),
     stickyHeader: ({ theme }) => ({
       backgroundColor: theme.vars.palette.background.paper,

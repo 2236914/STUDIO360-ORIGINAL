@@ -43,6 +43,23 @@ const MuiLinearProgress = {
   },
 };
 
+const MuiCircularProgress = {
+  /** **************************************
+   * STYLE
+   *************************************** */
+  styleOverrides: {
+    root: {
+      borderRadius: '50%',
+      '& .MuiCircularProgress-circle': {
+        borderRadius: '50%',
+      },
+    },
+    circle: {
+      borderRadius: '50%',
+    },
+  },
+};
+
 // ----------------------------------------------------------------------
 
-export const progress = { MuiLinearProgress };
+export const progress = { MuiLinearProgress, MuiCircularProgress };

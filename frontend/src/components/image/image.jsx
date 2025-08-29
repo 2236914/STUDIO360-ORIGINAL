@@ -21,6 +21,16 @@ const ImageWrapper = styled(Box)({
     verticalAlign: 'bottom',
     backgroundSize: 'cover !important',
   },
+  // Ensure circular lazy loading works properly
+  '& .lazy-load-image-background': {
+    borderRadius: 'inherit !important',
+  },
+  '& .lazy-load-image-wrapper': {
+    borderRadius: 'inherit !important',
+  },
+  '& .lazy-load-image-background img': {
+    borderRadius: 'inherit !important',
+  },
 });
 
 const Overlay = styled('span')({

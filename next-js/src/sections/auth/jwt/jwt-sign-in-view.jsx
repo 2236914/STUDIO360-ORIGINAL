@@ -69,7 +69,11 @@ export function JwtSignInView() {
       await signInWithPassword({ email: data.email, password: data.password });
       await checkUserSession?.();
 
-      router.refresh();
+      // Add a small delay to ensure auth state is properly set
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Redirect to dashboard after successful login
+      router.push(paths.dashboard.root);
     } catch (error) {
       console.error(error);
       setErrorMsg(error instanceof Error ? error.message : String(error));

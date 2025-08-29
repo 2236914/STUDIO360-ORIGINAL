@@ -9,9 +9,10 @@ import CodeBlockLowlightExtension from '@tiptap/extension-code-block-lowlight';
 import { useEditor, EditorContent, ReactNodeViewRenderer } from '@tiptap/react';
 
 import Stack from '@mui/material/Stack';
-import Portal from '@mui/material/Portal';
 import Backdrop from '@mui/material/Backdrop';
 import FormHelperText from '@mui/material/FormHelperText';
+
+import { PortalWrapper } from '../portal';
 
 import { Toolbar } from './toolbar';
 import { StyledRoot } from './styles';
@@ -46,6 +47,7 @@ export const Editor = forwardRef(
     const lowlight = createLowlight(common);
 
     const editor = useEditor({
+      immediatelyRender: false,
       content,
       editable,
       extensions: [
@@ -108,7 +110,7 @@ export const Editor = forwardRef(
     }, [fullScreen]);
 
     return (
-      <Portal disablePortal={!fullScreen}>
+      <PortalWrapper disablePortal={!fullScreen}>
         {fullScreen && <Backdrop open sx={{ zIndex: (theme) => theme.zIndex.modal - 1 }} />}
 
         <Stack sx={{ ...(!editable && { cursor: 'not-allowed' }), ...slotProps?.wrap }}>
@@ -141,7 +143,9 @@ export const Editor = forwardRef(
             </FormHelperText>
           )}
         </Stack>
-      </Portal>
+      </PortalWrapper>
     );
   }
 );
+
+Editor.displayName = 'Editor';

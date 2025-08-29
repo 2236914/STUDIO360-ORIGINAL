@@ -20,7 +20,9 @@ export function AuthProvider({ children }) {
       const isLoggedIn = sessionStorage.getItem('mock-auth-logged-in');
       const userEmail = sessionStorage.getItem('mock-auth-email');
       
-      if (isLoggedIn && userEmail === 'user@studio360.com') {
+      console.log('MockAuth - isLoggedIn:', isLoggedIn, 'userEmail:', userEmail);
+      
+      if (isLoggedIn === 'true' && userEmail === 'user@studio360.com') {
         const mockUser = {
           id: '8864c717-587d-472a-929a-8e5f298024da-0',
           displayName: 'Jaydon Frankie',
@@ -38,8 +40,10 @@ export function AuthProvider({ children }) {
           accessToken: 'mock-access-token',
         };
         
+        console.log('MockAuth - setting user:', mockUser);
         setState({ user: mockUser, loading: false });
       } else {
+        console.log('MockAuth - no user found, setting null');
         setState({ user: null, loading: false });
       }
     } catch (error) {

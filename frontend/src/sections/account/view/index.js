@@ -1,1 +1,1 @@
-export * from './user-account-view';
+export { AccountView } from './account-view';

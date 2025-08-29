@@ -45,6 +45,57 @@ export function fCurrency(inputValue, options) {
 
 // ----------------------------------------------------------------------
 
+// PHP-style currency formatting (similar to number_format function)
+export function fCurrencyPHP(inputValue, decimals = 2, decimalSeparator = '.', thousandsSeparator = ',') {
+  const number = processInput(inputValue);
+  if (number === null) return '';
+
+  // Convert to string with fixed decimal places
+  const numStr = number.toFixed(decimals);
+  
+  // Split into integer and decimal parts
+  const [integerPart, decimalPart] = numStr.split('.');
+  
+  // Add thousands separators to integer part
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSeparator);
+  
+  // Combine parts
+  if (decimals > 0) {
+    return `${formattedInteger}${decimalSeparator}${decimalPart}`;
+  }
+  
+  return formattedInteger;
+}
+
+// PHP-style currency with currency symbol
+export function fCurrencyPHPSymbol(inputValue, currencySymbol = '$', decimals = 2, decimalSeparator = '.', thousandsSeparator = ',') {
+  const formattedNumber = fCurrencyPHP(inputValue, decimals, decimalSeparator, thousandsSeparator);
+  return `${currencySymbol}${formattedNumber}`;
+}
+
+// PHP-style currency with custom formatting options
+export function fCurrencyPHPCustom(inputValue, options = {}) {
+  const {
+    symbol = '$',
+    decimals = 2,
+    decimalSeparator = '.',
+    thousandsSeparator = ',',
+    symbolPosition = 'before', // 'before' or 'after'
+    spaceBetween = false
+  } = options;
+
+  const formattedNumber = fCurrencyPHP(inputValue, decimals, decimalSeparator, thousandsSeparator);
+  const space = spaceBetween ? ' ' : '';
+  
+  if (symbolPosition === 'after') {
+    return `${formattedNumber}${space}${symbol}`;
+  }
+  
+  return `${symbol}${space}${formattedNumber}`;
+}
+
+// ----------------------------------------------------------------------
+
 export function fPercent(inputValue, options) {
   const locale = DEFAULT_LOCALE;
 

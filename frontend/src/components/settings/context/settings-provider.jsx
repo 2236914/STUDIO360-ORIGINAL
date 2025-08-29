@@ -16,13 +16,11 @@ export const SettingsConsumer = SettingsContext.Consumer;
 // ----------------------------------------------------------------------
 
 export function SettingsProvider({ children, settings, caches = 'localStorage' }) {
-  // Ensure settings is always defined
-  const initialSettings = settings || defaultSettings;
-  
-  const cookies = useCookies(STORAGE_KEY, initialSettings, defaultSettings);
+  const cookies = useCookies(STORAGE_KEY, settings, defaultSettings);
 
-  const localStorage = useLocalStorage(STORAGE_KEY, initialSettings);
+  const localStorage = useLocalStorage(STORAGE_KEY, settings);
 
+  // Use server-provided settings for consistent hydration
   const values = caches === 'cookie' ? cookies : localStorage;
 
   const [openDrawer, setOpenDrawer] = useState(false);
