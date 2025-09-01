@@ -1,0 +1,63 @@
+{
+  "name": "AI Assistant (Simple)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "ai-assistant",
+        "responseMode": "lastNode",
+        "options": {
+          "responseData": "json"
+        {
+          "parameters": {
+            "functionCode": "// Input payload from backend:\\n// { type, sessionId, message, history, context }\\nconst input = items[0].json || {};\\nconst text = String(input.message || '').trim();\\nconst lower = text.toLowerCase();\\n\\nfunction replyFor(msg) {\\n  if (\\/\\\\b(hi|hello|hey|yo|sup)\\\\b\\/i.test(msg)) {\\n    return 'Hello! How can I help with your bookkeeping today?';\\n  }\\n  if (\\/(upload|receipt|invoice|excel|csv|file)\\/i.test(msg)) {\\n    return 'Go to Upload Process and add your files. I will extract totals, dates, and line items automatically.';\\n  }\\n  if (\\/categor\\/i.test(msg)) {\\n    return 'I can categorize transactions by vendor and keywords. Say “categorize recent transactions”.';\\n  }\\n  if (\\/(report|summary|monthly|statement)\\/i.test(msg)) {\\n    return 'Which period? e.g., “Generate monthly report for August 2025”.';\\n  }\\n  if (\\/(cash\\\\s*(vs|and)?\\\\s*accrual|accrual\\\\s*(vs|and)?\\\\s*cash)\\/i.test(msg)) {\\n    return 'Cash: record when money moves. Accrual: record when earned/incurred. Accrual is better for invoices/inventory.';\\n  }\\n  return 'Got it. I can help with categorization, uploads, and monthly reports. Ask me for any of those.';\\n}\\n\\nreturn [{ json: { reply: replyFor(text), echo: { sessionId: input.sessionId, received: text } } }];"
+          },
+      {
+        "name": "AI Assistant (Simple)",
+        "nodes": [
+          {
+            "parameters": {
+              "httpMethod": "POST",
+              "path": "ai-assistant",
+              "responseMode": "lastNode",
+              "options": {
+                "responseData": "json"
+              }
+            },
+            "id": "Webhook",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 1,
+            "position": [300, 300]
+          },
+          {
+            "parameters": {
+              "functionCode": "// Input payload from backend\\n// { type, sessionId, message, history, context }\\nconst input = items[0].json || {};\\nconst text = String(input.message || '').trim();\\nconst lower = text.toLowerCase();\\n\\nfunction replyFor(msg) {\\n  if (/\\\\b(hi|hello|hey|yo|sup)\\\\b/i.test(msg)) {\\n    return 'Hello! How can I help with your bookkeeping today?';\\n  }\\n  if (/(upload|receipt|invoice|excel|csv|file)/i.test(msg)) {\\n    return 'Go to Upload Process and add your files. I will extract totals, dates, and line items automatically.';\\n  }\\n  if (/categor/i.test(msg)) {\\n    return 'I can categorize transactions by vendor and keywords. Say “categorize recent transactions”.';\\n  }\\n  if (/(report|summary|monthly|statement)/i.test(msg)) {\\n    return 'Which period? e.g., “Generate monthly report for August 2025”.';\\n  }\\n  if (/(cash\\\\s*(vs|and)?\\\\s*accrual|accrual\\\\s*(vs|and)?\\\\s*cash)/i.test(msg)) {\\n    return 'Cash: record when money moves. Accrual: record when earned/incurred. Accrual is better for invoices/inventory.';\\n  }\\n  if (/(what\\\\s+is|explain|how\\\\s+does).*(ai|bookkeep)/i.test(msg)) {\\n    return 'AI bookkeeping uses automation to extract data from receipts/invoices, auto-categorize transactions, and build summaries to reduce manual entry.';\\n  }\\n  return 'Got it. I can help with categorization, uploads, and monthly reports. Ask me for any of those.';\\n}\\n\\nreturn [{ json: { reply: replyFor(lower), echo: { sessionId: input.sessionId, received: text } } }];"
+            },
+            "id": "Build Reply",
+            "name": "Build Reply",
+            "type": "n8n-nodes-base.function",
+            "typeVersion": 2,
+            "position": [560, 300]
+          },
+          {
+            "parameters": {
+              "responseBody": "={{$json}}",
+              "options": {}
+            },
+            "id": "Respond",
+            "name": "Respond to Webhook",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1,
+            "position": [820, 300]
+          }
+        ],
+        "connections": {
+          "Webhook": { "main": [[{ "node": "Build Reply", "type": "main", "index": 0 }]] },
+          "Build Reply": { "main": [[{ "node": "Respond to Webhook", "type": "main", "index": 0 }]] }
+        },
+        "active": true,
+        "settings": { "executionOrder": "v1" },
+        "versionId": "ai-assistant-simple-v1"
+      }
+      "name": "Webhook",

@@ -10,6 +10,8 @@ const fs = require('fs');
 const multer = require('multer');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
+const { postToWebhook } = require('../../services/n8nClient');
+const { chatComplete, getConfig: getLLMConfig } = require('../../services/llmClient');
 
 // In-memory KPI stats (can be replaced with DB later)
 function freshKPI() {
@@ -133,6 +135,91 @@ function canonicalizeStructured({ rawText, structured, meta }) {
   };
 }
 
+// Lightweight local assistant for offline fallback (pattern-based)
+function localAssistantReply(input, stats) {
+  const msg = String(input || '').trim();
+  const m = msg.toLowerCase();
+  const suggest = '\n\nYou can try:\n• "Categorize recent transactions"\n• "Generate monthly report for August"\n• "Upload receipts"';
+
+  // Prefer intent answers over greetings if the message contains more than a greeting
+  const isGreeting = /\b(hi|hello|hey|yo|sup)\b/i.test(msg);
+  const hasIntent = /(what\s+is|explain|how\s+does|categor|report|summary|monthly|statement|upload|receipt|invoice|excel|csv|file|cash\s*(vs|and)?\s*accrual|accrual\s*(vs|and)?\s*cash|ebitda|cogs|cost of goods|gross\s*(margin|profit)|net\s*(profit|income)|accounts\s*(receivable|payable)|a\s*r\b|a\s*p\b|depreciation|amortization)/i.test(m);
+  if (isGreeting && !hasIntent) {
+    return 'Hi! I’m your AI Bookkeeper. I can categorize transactions, extract data from receipts, and generate quick reports.' + suggest;
+  }
+  // What is AI bookkeeping / explain
+  if (/(what\s+is|explain|how\s+does).*(ai|bookkeep)/i.test(msg) || /ai\s*bookkeep/i.test(m)) {
+    if (/bookkeep/i.test(m)) {
+      return 'AI bookkeeping uses automation to extract data from receipts/invoices, auto‑categorize transactions, and build summaries so you spend less time on manual entry. Upload files in “Upload Process” and I’ll handle extraction; then ask me to categorize or report.';
+    }
+    // Generic AI explanation
+    return 'AI (artificial intelligence) refers to software techniques that enable computers to perform tasks that typically require human intelligence—like understanding language, recognizing patterns, making predictions, and planning. In this app, AI helps read receipts, categorize transactions, and generate summaries.';
+  }
+  // Generic "what is ..." without AI — steer to LLM or provide guidance
+  if (/^\s*what\s+is\s+.+/i.test(msg)) {
+    return 'I can help with general questions too. For the best answers, enable the LLM fallback (set LLM_API_KEY in backend/.env or use the advanced n8n workflow). For bookkeeping, you can ask me to categorize or generate reports.';
+  }
+  // Categorization intent
+  if (/categor/i.test(m)) {
+    return 'To categorize, upload your receipts or a CSV/XLSX of transactions in Upload Process. I’ll group by vendor/keywords and map to categories (e.g., Office Supplies, Utilities). Then ask “categorize recent transactions”.';
+  }
+  // Report intent
+  if (/(report|summary|monthly|statement)/i.test(m)) {
+    return 'I can generate a monthly summary once your data is in. After uploading, ask “generate monthly report for <month>”.';
+  }
+  // Upload intent
+  if (/(upload|receipt|invoice|excel|csv|file)/i.test(m)) {
+    return 'Use the Upload Process screen to send receipts (PDF/images) or Excel/CSV files. I’ll extract totals, dates, and line items automatically.';
+  }
+  // Cash vs Accrual accounting
+  if (/(cash\s*(vs|and)?\s*accrual|accrual\s*(vs|and)?\s*cash)/i.test(m)) {
+    return [
+      'Cash vs Accrual (simple):',
+      '- Cash: record income when money is received and expenses when money is paid.',
+      '- Accrual: record income when earned (invoice issued) and expenses when incurred (bill received), even if cash moves later.',
+      'Use cash for simplicity/very small businesses; use accrual for inventory, invoices/credit terms, and more accurate period reporting.'
+    ].join(' ');
+  }
+  // EBITDA
+  if (/ebitda/i.test(m)) {
+    return 'EBITDA = Earnings Before Interest, Taxes, Depreciation, and Amortization. It approximates operating performance by stripping capital structure, tax, and non‑cash charges. Rough formula: Net Income + Interest + Taxes + Depreciation + Amortization.';
+  }
+  // COGS
+  if (/(cogs|cost of goods)/i.test(m)) {
+    return 'COGS (Cost of Goods Sold) are direct costs to produce/sell goods: beginning inventory + purchases − ending inventory. It excludes operating expenses like marketing or rent.';
+  }
+  // Gross vs Net
+  if (/(gross\s*(margin|profit)|net\s*(profit|income))/i.test(m)) {
+    return 'Gross profit = Revenue − COGS (before operating expenses). Gross margin = Gross profit ÷ Revenue. Net profit = All revenue − (COGS + operating expenses + interest + taxes).';
+  }
+  // Financial statements differences
+  if (/(balance\s*sheet).*?(income\s*statement|p&l)|((income\s*statement|p&l).*?balance\s*sheet)/i.test(m)) {
+    return 'Balance sheet shows what you own/owe at a point in time (assets, liabilities, equity). Income statement (P&L) shows performance over a period (revenue, expenses, profit).';
+  }
+  // AR/AP
+  if (/(accounts\s*receivable|a\s*r\b)/i.test(m)) {
+    return 'Accounts Receivable (AR): money customers owe you for invoices you’ve issued but not yet collected.';
+  }
+  if (/(accounts\s*payable|a\s*p\b)/i.test(m)) {
+    return 'Accounts Payable (AP): bills you owe suppliers that you’ve received but not yet paid.';
+  }
+  // Depreciation/amortization
+  if (/(depreciation|amortization)/i.test(m)) {
+    return 'Depreciation (tangible) and amortization (intangible) spread the cost of assets over their useful life, creating a non‑cash expense each period.';
+  }
+  // Generic explain prompts for common accounting topics
+  if (/^\s*(explain|tell\s+me\s+about)\b/i.test(msg)) {
+    return 'Here’s a simple take: I can explain bookkeeping concepts like cash vs accrual, EBITDA, COGS, margins, AR/AP, and financial statements. Ask any of those, or upload data and I’ll help categorize and report.';
+  }
+  // KPI intent
+  if (/(stats|kpi|progress|how\s+much|processed)/i.test(m)) {
+    const s = stats || {};
+    return `Live stats — processed: ${s.processed || 0}, accuracy: ${s.accuracyRate || 0}%, time saved: ${s.timeSavedMinutes || 0} mins, cost savings: ₱${Number(s.costSavings || 0).toLocaleString()}.`;
+  }
+  // Default helpful message
+  return (process.env.ASSISTANT_FALLBACK_MESSAGE || 'Assistant is warming up. Please try again in a moment.') + suggest;
+}
+
 // Attempt to resolve a working Python executable path on Windows/Unix
 function resolvePythonExecutable() {
   // 1) Project venv (Windows layout)
@@ -248,6 +335,115 @@ router.post('/stats/reset', (req, res) => {
 const upload = multer({
   storage,
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+});
+
+// --- Simple in-memory chat sessions (ephemeral; swap to Redis/DB later) ---
+const chatSessions = new Map(); // sessionId -> { history: [{role, content, ts}], createdAt }
+function getOrCreateSession(sessionId) {
+  let id = sessionId || crypto.randomUUID();
+  if (!chatSessions.has(id)) {
+    chatSessions.set(id, { history: [], createdAt: Date.now() });
+  }
+  return { id, session: chatSessions.get(id) };
+}
+
+/**
+ * @route   GET /api/ai/assistant/health
+ * @desc    Check whether n8n webhook is configured
+ */
+router.get('/assistant/health', (req, res) => {
+  const url = process.env.N8N_WEBHOOK_URL || '';
+  const configured = Boolean(url && url.startsWith('http'));
+  const masked = url ? url.replace(/:[^@/]+@/, ':***@') : null; // mask basic auth secret
+  res.json({ success: true, data: { configured, url: masked } });
+});
+
+/**
+ * @route   POST /api/ai/assistant/message
+ * @desc    Send a user message to the n8n AI workflow and return the assistant reply
+ * @body    { message: string, sessionId?: string, context?: object }
+ */
+router.post('/assistant/message', express.json(), async (req, res) => {
+  try {
+    const { message, sessionId, context } = req.body || {};
+    if (!message || typeof message !== 'string') {
+      return res.status(400).json({ success: false, message: 'message is required' });
+    }
+
+    const { id, session } = getOrCreateSession(sessionId);
+    // push user message
+    session.history.push({ role: 'user', content: message, ts: Date.now() });
+    // keep last 20 messages
+    session.history = session.history.slice(-20);
+
+    const payload = {
+      type: 'ai_assistant_message',
+      sessionId: id,
+      message,
+      history: session.history,
+      context: {
+        ...context,
+        app: 'STUDIO360',
+        page: 'ai-bookkeeper',
+      },
+    };
+
+    const resp = await postToWebhook('assistant', payload);
+    if (!resp.ok) {
+      // If a direct LLM is configured, use it as a powerful fallback
+      try {
+        const llmCfg = getLLMConfig();
+        if (llmCfg.apiKey) {
+          const system = 'You are the STUDIO360 AI Bookkeeper assistant. Be concise and helpful. If the user asks about bookkeeping tasks, guide them to upload receipts, categorize transactions, or generate reports.';
+          const llmReply = await chatComplete({
+            system,
+            messages: [
+              ...session.history.map(h => ({ role: h.role, content: String(h.content || '') })),
+              { role: 'user', content: String(message) },
+            ],
+            temperature: 0.3,
+            maxTokens: 400,
+          });
+          session.history.push({ role: 'assistant', content: llmReply, ts: Date.now() });
+          return res.json({ success: true, data: { sessionId: id, reply: llmReply, source: 'llm' } });
+        }
+      } catch (e) {
+        console.warn('LLM fallback error:', e.message || e);
+      }
+
+      // Otherwise, use the local heuristic reply
+      const hint = localAssistantReply(message, kpiStats);
+      if (resp.error) console.warn('n8n webhook error:', resp.error);
+      session.history.push({ role: 'assistant', content: hint, ts: Date.now() });
+      return res.json({ success: true, data: { sessionId: id, reply: hint, source: 'fallback' } });
+    }
+
+    const data = resp.data || {};
+    const reply =
+      (typeof data.reply === 'string' && data.reply) ||
+      (Array.isArray(data.messages) && data.messages.find(m => m.role !== 'user')?.content) ||
+      (typeof data.text === 'string' && data.text) ||
+      'Okay.';
+
+    // optionally adjust KPI stats if workflow returns deltas
+    if (data.statsDelta && typeof data.statsDelta === 'object') {
+      const d = data.statsDelta;
+      kpiStats.processed = (kpiStats.processed || 0) + Number(d.processed || 0);
+      if (typeof d.accuracyRate === 'number') kpiStats.accuracyRate = d.accuracyRate;
+      kpiStats.timeSavedMinutes = (kpiStats.timeSavedMinutes || 0) + Number(d.timeSavedMinutes || 0);
+      kpiStats.costSavings = (kpiStats.costSavings || 0) + Number(d.costSavings || 0);
+      kpiStats.txCount = (kpiStats.txCount || 0) + Number(d.txCount || 0);
+      kpiStats.docsCount = (kpiStats.docsCount || 0) + Number(d.docsCount || 0);
+      kpiStats.updatedAt = Date.now();
+    }
+
+    // store assistant reply
+    session.history.push({ role: 'assistant', content: reply, ts: Date.now() });
+
+    return res.json({ success: true, data: { sessionId: id, reply, raw: data } });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 /**
