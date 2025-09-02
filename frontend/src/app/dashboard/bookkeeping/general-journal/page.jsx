@@ -131,14 +131,25 @@ export default function GeneralJournalPage() {
     ],
   });
 
-  // Load entries from backend
+  // Load entries from backend (normalize new backend shape with `lines`)
   useEffect(() => {
     const load = async () => {
       try {
         const res = await axios.get('/api/bookkeeping/journal');
         const data = res?.data?.data?.journal;
         if (Array.isArray(data)) {
-          setJournalEntries(data);
+          const normalized = data.map((e) => ({
+            id: e.id,
+            date: e.date,
+            ref: e.ref,
+            entries: (e.lines || e.entries || []).map((ln) => ({
+              account: ln.account || ln.code || '',
+              description: ln.description || '',
+              type: Number(ln.debit || 0) > 0 ? 'debit' : 'credit',
+              amount: Number(ln.debit || ln.amount || 0) > 0 ? Number(ln.debit || ln.amount || 0) : Number(ln.credit || 0),
+            })),
+          }));
+          setJournalEntries(normalized);
         }
       } catch (e) {
         console.warn('Failed to load journal from API, using mock. Error:', e?.message);
@@ -264,6 +275,7 @@ export default function GeneralJournalPage() {
             variant="contained"
             startIcon={<Iconify icon="eva:plus-fill" />}
             onClick={() => setOpenAddDialog(true)}
+            disabled
             sx={{ minWidth: 140 }}
           >
             + Add Entry
@@ -298,8 +310,8 @@ export default function GeneralJournalPage() {
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
                 <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Account Title/Description</TableCell>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Ref</TableCell>
+                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Account Title/Particulars</TableCell>
+                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Reference</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Debit</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600 }}>Credit</TableCell>
               </TableRow>

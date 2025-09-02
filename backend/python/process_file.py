@@ -1881,6 +1881,13 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
                 extracted_text = pytesseract.image_to_string(img)
             except Exception as e:
                 warnings.append(f'tesseract_failed_image: {e}')
+            # Prepare for PaddleOCR on images as well
+            try:
+                if PaddleOCR is not None:
+                    paddle_page_images.append(img)
+                    diagnostics['counts']['pages_paddle'] += 1
+            except Exception:
+                pass
 
     elif ext == ".pdf":
         pdf_file = fitz.open(file_path)
@@ -2076,10 +2083,13 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
     else:
         items_hint = ocrspace_items or []
         items_hint_source = 'ocrspace' if ocrspace_items else None
-    # If we have PaddleOCR text lines and this is an image (or text is sparse), append as supplemental text for better currency parsing
+        # If we have PaddleOCR text lines, optionally append as supplemental text for better currency parsing
     try:
-        # Restore stable behavior: only append Paddle text when explicitly enabled
-        if os.environ.get('APPEND_PADDLE_TEXT', '0') in ('1','true','True') and paddle_lines_text:
+        append_flag = os.environ.get('APPEND_PADDLE_TEXT', '0') in ('1','true','True')
+        # Auto heuristics: append when text is very short OR has no clear currency/amount patterns and Paddle lines exist
+        text_sparse = len((extracted_text or '').strip()) < 400
+        lacks_currency = not re.search(r"[₱$]|\bPHP\b|\bUSD\b|\d[\d,]{2,}", (extracted_text or ''), re.I)
+        if paddle_lines_text and (append_flag or text_sparse or lacks_currency):
             extracted_text = (extracted_text or '').rstrip() + "\n" + paddle_lines_text
     except Exception as e:
         warnings.append(f'append_paddle_text_failed: {e}')
@@ -2171,6 +2181,9 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         'grandTotalVerifiedByBreakdown': None, # bool | None
         'grandTotalVerifiedDelta': None,    # float | None
     }
+
+    # Pre-calculate amount-in-words (if present) so we can prefer it later for Grand Total
+    amount_in_words_val = _parse_amount_in_words(lines)
 
     # Extract date (first match wins)
     for line in lines:
@@ -2543,24 +2556,24 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         found['grandTotalSource'] = 'scored_total'
         found['grandTotalConfidence'] = 0.7 if chosen_cur else 0.6
 
-    # Fallback: amount-in-words parsing if still no total
-    if found['total'] is None:
-        words_total = _parse_amount_in_words(lines)
-        if words_total is not None:
-            found['total'] = words_total
-            found['amountInWords'] = words_total
-            found['grandTotalDetectedByBold'] = False
-            found['grandTotalSource'] = 'amount_in_words'
-            found['grandTotalConfidence'] = 0.55
-            # Attempt to guess currency from text (default to PHP if 'peso' present)
+    # Prefer amount-in-words if indicated in the invoice
+    if amount_in_words_val is not None:
+        found['amountInWords'] = amount_in_words_val
+        found['total'] = amount_in_words_val
+        found['grandTotalDetectedByBold'] = False if found.get('grandTotalDetectedByBold') is None else found['grandTotalDetectedByBold']
+        found['grandTotalSource'] = 'amount_in_words'
+        # Raise confidence since textual totals are authoritative on many invoices
+        try:
+            prev_conf = float(found.get('grandTotalConfidence') or 0)
+        except Exception:
+            prev_conf = 0.0
+        found['grandTotalConfidence'] = max(prev_conf, 0.9)
+        # Guess currency from text if not set
+        if not found.get('currency'):
             for line in lines:
                 if re.search(r"peso", line, re.I):
                     found['currency'] = 'PHP'
                     break
-            if not found['currency'] and words_total is not None:
-                found['currency'] = None
-        else:
-            found['amountInWords'] = None
 
     # Final fallback: largest currency amount excluding obvious non-grand lines
     if found['total'] is None:
@@ -3455,25 +3468,27 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
 
 
 def _parse_amount_in_words(lines: list[str]) -> float | None:
-    """Attempt to parse an amount written in words (e.g., 'Three Hundred Forty Four Pesos and 60/100').
-    Supports basic English number words up to millions.
+    """Attempt to parse an amount written in words, e.g., 'Three Hundred Forty Four Pesos and 60/100'.
+    Works even when there's no explicit 'Amount in words' label if a line mentions 'peso(s)'.
     """
-    # Join searchable text with line indices
+    # Find a candidate line: prefer one with explicit label; else any line containing 'peso' with number words
     target_idx = None
+    candidate = None
     for i, line in enumerate(lines):
         if re.search(r"amount\s+in\s+words", line, re.I):
             target_idx = i
+            candidate = re.sub(r".*amount\s+in\s+words[:\-]*", "", line, flags=re.I).strip()
+            if len(candidate.split()) < 2 and i + 1 < len(lines):
+                candidate = candidate + " " + lines[i + 1].strip()
             break
-    if target_idx is None:
+    if candidate is None:
+        # Look for a generic amount-in-words line mentioning pesos
+        for i, line in enumerate(lines[-40:]):  # scan last 40 lines where totals usually appear
+            if re.search(r"peso[s]?", line, re.I) and re.search(r"\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million)\b", line, re.I):
+                candidate = line.strip()
+                break
+    if not candidate:
         return None
-
-    # The amount words may be on same line after colon or next line(s)
-    candidate = lines[target_idx]
-    # Remove the leading label
-    candidate = re.sub(r".*amount\s+in\s+words[:\-]*", "", candidate, flags=re.I).strip()
-    if len(candidate.split()) < 2 and target_idx + 1 < len(lines):
-        # Append next line if too short
-        candidate = candidate + " " + lines[target_idx + 1].strip()
 
     # Fractional part like 60/100
     frac = 0.0

@@ -175,6 +175,46 @@ function classifyCategory(category = '') {
   return 'other';
 }
 
+// Helpers: COA mapping and journal/CRJ/CDJ shaping
+const COA_CODES = {
+  CASH: '101', // Cash on Hand (default)
+  CASH_BANK: '102', // Cash in Bank (unused by default)
+  AR: '103',
+  SALES: '401',
+  OTHER_INCOME: '402',
+  PURCHASES: '501',
+  SUPPLIES: '502',
+  RENT: '503',
+  UTILITIES: '504',
+  ADVERTISING: '505',
+  DELIVERY: '506',
+  TAXES: '507',
+  MISC: '508',
+  FEES: '510',
+  CAPITAL: '301',
+};
+
+function mapExpenseCategoryToCoa(category = '') {
+  const c = String(category).toLowerCase();
+  if (c.includes('purchase') || c.includes('cogs') || c.includes('inventory')) return { code: COA_CODES.PURCHASES, label: 'Purchases (COGS)' };
+  if (c.includes('suppl')) return { code: COA_CODES.SUPPLIES, label: 'Supplies Expense' };
+  if (c.includes('rent')) return { code: COA_CODES.RENT, label: 'Rent Expense' };
+  if (c.includes('advert') || c.includes('market')) return { code: COA_CODES.ADVERTISING, label: 'Advertising / Marketing' };
+  if (c.includes('deliver') || c.includes('freight') || c.includes('shipping')) return { code: COA_CODES.DELIVERY, label: 'Delivery / Transportation' };
+  if (c.includes('tax') || c.includes('license')) return { code: COA_CODES.TAXES, label: 'Taxes & Licenses' };
+  if (c.includes('utilit') || c.includes('electric') || c.includes('water') || c.includes('internet')) return { code: COA_CODES.UTILITIES, label: 'Utilities Expense' };
+  if (c.includes('fee')) return { code: COA_CODES.FEES, label: 'Platform Fees & Charges' };
+  return { code: COA_CODES.MISC, label: 'Miscellaneous Expense' };
+}
+
+function derivePlatformCustomer(description = '') {
+  const d = String(description).toLowerCase();
+  if (d.includes('shopee')) return 'Shopee Various Customers';
+  if (d.includes('tiktok')) return 'TikTok Various Customers';
+  if (d.includes('lazada')) return 'Lazada Various Customers';
+  return '';
+}
+
 export default function UploadProcessPage() {
   useEffect(() => {
     document.title = 'AI Bookkeeping Process | Kitsch Studio';
@@ -295,63 +335,108 @@ export default function UploadProcessPage() {
         const amt = Math.abs(Number(t.amount) || 0);
         const cls = classifyCategory(t.aiCategory);
         categoriesSet.add(t.aiCategory);
-        // Journal entry composition
-        let journalEntries;
+        // Journal posting: use COA codes and debit/credit amounts
+        const particulars = t.description || '';
+        const today = new Date().toISOString().slice(0, 10);
+        const normalizeDate = (dStr) => {
+          if (!dStr) return null;
+          const d = new Date(dStr);
+          if (Number.isNaN(d.getTime())) return null;
+          return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+        };
+  const invDate = normalizeDate(t.dateIssued) || normalizeDate(t.orderDate) || normalizeDate(t.orderPaidDate) || today;
+        // Prefer a stable reference so dedupe by ref works across Journal and CRJ/CDJ
+        const pickRef = (...vals) => {
+          for (const v of vals) {
+            const s = (v ?? '').toString().trim();
+            if (!s) continue;
+            if (/^(n\/?a|na|none|null|undefined|summary)$/i.test(s)) continue;
+            return s;
+          }
+          return '';
+        };
+        const ref = pickRef(t.invoiceNumber, t.orderSummaryNo, t.orderId);
         if (cls === 'expense') {
-          journalEntries = [
-            { account: t.aiCategory || 'Expense', description: t.description, type: 'debit', amount: amt },
-            { account: 'Cash', description: t.description, type: 'credit', amount: amt },
+          const exp = mapExpenseCategoryToCoa(t.aiCategory);
+          const lines = [
+            { code: exp.code, description: exp.label, debit: amt, credit: 0 },
+            { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
           ];
+          await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
         } else if (cls === 'income') {
-          journalEntries = [
-            { account: 'Cash', description: t.description, type: 'debit', amount: amt },
-            { account: t.aiCategory || 'Revenue', description: t.description, type: 'credit', amount: amt },
+          const revenueCode = (String(t.aiCategory).toLowerCase().includes('other income')) ? COA_CODES.OTHER_INCOME : COA_CODES.SALES;
+          const lines = [
+            { code: COA_CODES.CASH, description: 'Cash received', debit: amt, credit: 0 },
+            { code: revenueCode, description: String(t.aiCategory || 'Sales Revenue'), debit: 0, credit: amt },
           ];
-        } else { // other/unknown -> default to expense style for now
-          journalEntries = [
-            { account: t.aiCategory || 'Other', description: t.description, type: 'debit', amount: amt },
-            { account: 'Cash', description: t.description, type: 'credit', amount: amt },
+          await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+        } else {
+          const exp = mapExpenseCategoryToCoa(t.aiCategory);
+          const lines = [
+            { code: exp.code, description: exp.label, debit: amt, credit: 0 },
+            { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
           ];
+          await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
         }
-        await axios.post('/api/bookkeeping/journal', {
-          date: new Date().toISOString().slice(0, 10),
-          ref: '',
-          entries: journalEntries,
-        });
         counts.journal += 1;
 
-        if (cls === 'expense') {
-          const pickRef = (...vals) => {
-            for (const v of vals) {
-              const s = (v ?? '').toString().trim();
-              if (!s) continue;
-              if (/^(n\/?a|na|none|null|undefined|summary)$/i.test(s)) continue;
-              return s;
-            }
-            return '';
+  if (cls === 'expense') {
+          // CDB-only shaping per guide: invoice date, seller as payee, omit reference, Purchases – Materials as default, enriched remarks
+          const e = mapExpenseCategoryToCoa(t.aiCategory);
+          const normalizeDate = (dStr) => {
+            if (!dStr) return null;
+            const d = new Date(dStr);
+            if (Number.isNaN(d.getTime())) return null;
+            return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
           };
-          const ref = pickRef(t.invoiceNumber, t.orderSummaryNo, t.orderId);
-          await axios.post('/api/bookkeeping/cash-disbursements', {
-            date: new Date().toISOString().slice(0, 10),
-            checkNo: ref,
-            payee: 'N/A',
-            description: t.description,
-            amount: amt,
-            account: t.aiCategory,
-          });
+          const invDate = normalizeDate(t.dateIssued) || normalizeDate(t.orderDate) || normalizeDate(t.orderPaidDate) || today;
+          const parts = [];
+          if (t.description) parts.push(String(t.description));
+          if (t.sellerName && !String(t.description || '').includes(t.sellerName)) parts.push(String(t.sellerName));
+          const ord = t.orderSummaryNo || t.orderId;
+          if (ord) parts.push(`Order ${ord}`);
+          const remarks = parts.filter(Boolean).join(' • ');
+          const payload = {
+            date: invDate,
+            // referenceNo intentionally omitted so backend generates CDB-###
+            payee: t.sellerName || 'N/A',
+            remarks,
+            cashCredit: amt,
+            purchasesDebit: 0,
+            suppliesDebit: 0,
+            rentDebit: 0,
+            advertisingDebit: 0,
+            deliveryDebit: 0,
+            taxesDebit: 0,
+            miscDebit: 0,
+          };
+          // Set the appropriate debit column (prefer Purchases – Materials)
+          if (e.code === COA_CODES.PURCHASES) payload.purchasesDebit = amt;
+          else if (e.code === COA_CODES.SUPPLIES) payload.suppliesDebit = amt;
+          else if (e.code === COA_CODES.RENT) payload.rentDebit = amt;
+          else if (e.code === COA_CODES.ADVERTISING) payload.advertisingDebit = amt;
+          else if (e.code === COA_CODES.DELIVERY) payload.deliveryDebit = amt;
+          else if (e.code === COA_CODES.TAXES) payload.taxesDebit = amt;
+          else payload.purchasesDebit = amt;
+          await axios.post('/api/bookkeeping/cash-disbursements', payload);
           counts['cash-disbursements'] += 1;
-        } else if (cls === 'income') {
-          await axios.post('/api/bookkeeping/cash-receipts', {
-            date: new Date().toISOString().slice(0, 10),
-            invoiceNumber: '',
-            description: t.description,
-            netSales: amt,
-            feesAndCharges: 0,
-            cash: amt,
-            withholdingTax: 0,
-            ownersCapital: 0,
-            loansPayable: 0,
-          });
+  } else if (cls === 'income') {
+          const platformCustomer = derivePlatformCustomer(t.description) || 'Various Customers';
+          const isOtherIncome = String(t.aiCategory).toLowerCase().includes('other income');
+          const payload = {
+            date: invDate,
+            referenceNo: ref,
+            customer: platformCustomer,
+            cashDebit: amt,
+            feesChargesDebit: 0,
+            salesReturnsDebit: 0,
+            netSalesCredit: isOtherIncome ? 0 : amt,
+            otherIncomeCredit: isOtherIncome ? amt : 0,
+            arCredit: 0,
+            ownersCapitalCredit: 0,
+            remarks: t.description,
+          };
+          await axios.post('/api/bookkeeping/cash-receipts', payload);
           counts['cash-receipts'] += 1;
         }
         setTransferState(prev => ({ ...prev, transferred: prev.transferred + 1, categories: Array.from(categoriesSet) }));
@@ -415,12 +500,12 @@ export default function UploadProcessPage() {
       { k: 'tiktok', c: 'Online Sales Revenue' },
     ];
     Object.entries(textsByFile).forEach(([filename, text]) => {
-      const structured = structuredByFile?.[filename] || {};
-      const canonical = canonicalByFile?.[filename] || null;
+  const structured = structuredByFile?.[filename] || {};
+  const canonical = canonicalByFile?.[filename] || null;
       const fileUrl = canonical?.source?.fileUrl || null;
 
       // Prefer canonical grand total and organized fields when available (format-agnostic)
-      const cFields = canonical?.fields || {};
+  const cFields = canonical?.fields || {};
       const cAmts = canonical?.amounts || {};
       const grandTotal = typeof cAmts?.grandTotal === 'number' ? cAmts.grandTotal : (
         typeof structured?.total === 'number' ? structured.total : null
@@ -445,6 +530,10 @@ export default function UploadProcessPage() {
           invoiceNumber: inv || '',
           orderSummaryNo: cFields.orderSummaryNo || structured.orderSummaryNo || '',
           orderId: cFields.orderId || structured.orderId || '',
+          sellerName: cFields.sellerName || structured.supplier || '',
+          dateIssued: cFields.dateIssued || structured.dateIssued || '',
+          orderDate: cFields.orderDate || structured.orderDate || structured.order_date || '',
+          orderPaidDate: cFields.orderPaidDate || structured.orderPaidDate || '',
       fileUrl,
         });
         return; // skip line-based extraction for this file
@@ -479,6 +568,10 @@ export default function UploadProcessPage() {
           invoiceNumber: structured?.invoiceNumber || '',
           orderSummaryNo: structured?.orderSummaryNo || '',
           orderId: structured?.orderId || '',
+          sellerName: (canonical?.fields?.sellerName) || structured?.supplier || '',
+          dateIssued: (canonical?.fields?.dateIssued) || structured?.dateIssued || '',
+          orderDate: (canonical?.fields?.orderDate) || structured?.orderDate || structured?.order_date || '',
+          orderPaidDate: (canonical?.fields?.orderPaidDate) || structured?.orderPaidDate || '',
           fileUrl,
         });
         if (txns.length >= 50) break; // safety cap

@@ -50,33 +50,39 @@ const MOCK_DISBURSEMENT_ENTRIES = [
   // ... other mock entries ...
 ];
 
-// Helper to map a backend disbursement entry to the wide table schema
+// Helper to map a backend disbursement entry to the wide table schema (extended)
 function mapDisbursementToRow(d) {
   const base = {
     id: d.id,
     date: d.date,
-    invoiceNumber: d.checkNo || '',
-    description: d.description,
+    invoiceNumber: d.referenceNo || d.checkNo || '',
+  description: d.description || d.remarks || '',
     entity: d.payee || '',
-    creditCash: Number(d.amount || 0),
+    creditCash: Number(d.cashCredit || d.amount || 0),
+    creditWithholdingTax: Number(d.withholdingTaxCredit || 0),
+    // Extended debit columns
+    debitPurchasesMaterials: Number(d.purchasesDebit || 0),
     debitEquipment: 0,
     debitFurnitureFixtures: 0,
-    debitTaxesLicenses: 0,
-    debitOfficeSupplies: 0,
-    debitInventory: 0,
+    debitTaxesLicenses: Number(d.taxesDebit || 0),
+    debitOfficeSupplies: Number(d.suppliesDebit || 0),
+    debitInventory: Number(d.inventoryDebit || 0),
     debitSalary: 0,
-    debitFreightDelivery: 0,
-    debitAdvertising: 0,
+    debitFreightDelivery: Number(d.deliveryDebit || 0),
+    debitAdvertising: Number(d.advertisingDebit || 0),
     debitProfessionalFee: 0,
-    debitUtilities: 0,
-    debitRent: 0,
-    creditWithholdingTax: 0,
-    debitBankLoan: 0,
-    debitInterestExpense: 0,
-    debitOwnersWithdrawal: 0,
+    debitUtilities: Number(d.utilitiesDebit || 0),
+    debitRent: Number(d.rentDebit || 0),
+    debitBankLoan: Number(d.bankLoanDebit || 0),
+    debitInterestExpense: Number(d.interestExpenseDebit || 0),
+    debitOwnersWithdrawal: Number(d.ownersWithdrawalDebit || 0),
+    debitMiscellaneous: Number(d.miscDebit || 0),
+    remarks: d.remarks || '',
   };
   const acct = (d.account || '').toLowerCase();
   const map = {
+    'purchases': 'debitPurchasesMaterials',
+    'materials': 'debitPurchasesMaterials',
     equipment: 'debitEquipment',
     'furniture & fixtures': 'debitFurnitureFixtures',
     furniture: 'debitFurnitureFixtures',
@@ -107,11 +113,13 @@ function mapDisbursementToRow(d) {
     "owner's withdrawal": 'debitOwnersWithdrawal',
     withdrawal: 'debitOwnersWithdrawal',
     draw: 'debitOwnersWithdrawal',
+  miscellaneous: 'debitMiscellaneous',
+  misc: 'debitMiscellaneous',
   };
   // find a key contained in account string
   const matched = Object.keys(map).find((k) => acct.includes(k));
   if (matched) {
-    base[map[matched]] = Number(d.amount || 0);
+  base[map[matched]] = Number(d.amount || 0);
   }
   return base;
 }
@@ -222,6 +230,7 @@ export default function CashDisbursementPage() {
   const TOTALS = useMemo(() => {
     const totals = {
       creditCash: 0,
+  debitPurchasesMaterials: 0,
       debitEquipment: 0,
       debitFurnitureFixtures: 0,
       debitTaxesLicenses: 0,
@@ -237,6 +246,7 @@ export default function CashDisbursementPage() {
       debitBankLoan: 0,
       debitInterestExpense: 0,
       debitOwnersWithdrawal: 0,
+  debitMiscellaneous: 0,
     };
     rows.forEach((e) => {
       Object.keys(totals).forEach((k) => { totals[k] += Number(e[k] || 0); });
@@ -347,60 +357,48 @@ export default function CashDisbursementPage() {
 
         <Box sx={{ 
           overflowX: 'auto',
-          '&::-webkit-scrollbar': {
-            height: 0,
-          },
-          '&::-webkit-scrollbar-track': {
-            background: 'transparent',
-          },
-          '&::-webkit-scrollbar-thumb': {
-            background: 'transparent',
-          },
-          '&:hover': {
-            '&::-webkit-scrollbar': {
-              height: 8,
-            },
-            '&::-webkit-scrollbar-track': {
-              background: '#f1f1f1',
-              borderRadius: 4,
-            },
-            '&::-webkit-scrollbar-thumb': {
-              background: '#c1c1c1',
-              borderRadius: 4,
-              '&:hover': {
-                background: '#a8a8a8',
-              },
-            },
-          },
+          '&::-webkit-scrollbar': { height: 10 },
+          '&::-webkit-scrollbar-track': { background: '#f1f1f1', borderRadius: 4 },
+          '&::-webkit-scrollbar-thumb': { background: '#c1c1c1', borderRadius: 4 },
         }}>
           <TableContainer component={Paper} sx={{ 
             boxShadow: 'none', 
             border: `1px solid ${theme.palette.divider}`, 
-            minWidth: 2000,
+            minWidth: 2600,
             overflow: 'hidden',
           }}>
             <Table sx={{ '& .MuiTableCell-root': { py: 1, px: 1.5, whiteSpace: 'nowrap' } }}>
               <TableHead>
+                {/* Grouped header rows */}
                 <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 100 }}>DATE</TableCell>
-                  <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 120 }}>INVOICE NUMBER</TableCell>
-                  <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>SUPPLIER / DESCRIPTION</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 120 }}>CREDIT CASH</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 120 }}>DEBIT EQUIPMENT</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 140 }}>DEBIT FURNITURE & FIXTURES</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 140 }}>DEBIT TAXES & LICENSES</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 130 }}>DEBIT OFFICE SUPPLIES</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 120 }}>DEBIT INVENTORY</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 100 }}>DEBIT SALARY</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 140 }}>DEBIT FREIGHT-OUT/DELIVERY</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 120 }}>DEBIT ADVERTISING</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 140 }}>DEBIT PROFESSIONAL FEE</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 100 }}>DEBIT UTILITIES</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 100 }}>DEBIT RENT</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 140 }}>CREDIT WITHHOLDING TAX</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 120 }}>DEBIT BANK LOAN</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 130 }}>DEBIT INTEREST EXPENSE</TableCell>
-                  <TableCell align="right" sx={{ fontWeight: 600, minWidth: 140 }}>DEBIT OWNER'S WITHDRAWAL</TableCell>
+                  <TableCell rowSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 100 }}>Date</TableCell>
+                  <TableCell rowSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 140 }}>Voucher / Ref No.</TableCell>
+                  <TableCell rowSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 220 }}>Payee / Particulars</TableCell>
+                    <TableCell align="center" colSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>CREDIT</TableCell>
+                    <TableCell align="center" colSpan={16} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>DEBIT</TableCell>
+                    <TableCell rowSpan={2} align="center" sx={{ fontWeight: 700 }}>Remarks</TableCell>
+                </TableRow>
+                <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    {/* CREDIT sub-columns */}
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Cash / Bank / eWallet</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Withholding Tax</TableCell>
+                    {/* DEBIT sub-columns (match body columns) */}
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>Purchases – Materials</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Equipment</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>Furniture & Fixtures</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 170 }}>Taxes & Licenses</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 170 }}>Office Supplies</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Inventory</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Salary</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>Freight / Delivery</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>Advertising / Marketing</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>Professional Fee</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Utilities</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Rent</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 160 }}>Bank Loan</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 180 }}>Interest Expense</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}`, minWidth: 200 }}>Owner's Withdrawal</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, minWidth: 200 }}>Miscellaneous Expense</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -441,12 +439,25 @@ export default function CashDisbursementPage() {
                       </Stack>
                     </TableCell>
                     <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                        {entry.description}
-                      </Typography>
+                      <Stack spacing={0.25}>
+                        <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                          {entry.entity || '-'}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                          {entry.description || entry.remarks || ''}
+                        </Typography>
+                      </Stack>
                     </TableCell>
+                    {/* CREDIT sub-columns */}
                     <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       {entry.creditCash > 0 ? `₱${fNumber(entry.creditCash)}` : '-'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                      {entry.creditWithholdingTax > 0 ? `₱${fNumber(entry.creditWithholdingTax)}` : '-'}
+                    </TableCell>
+                    {/* DEBIT sub-columns */}
+                    <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                      {entry.debitPurchasesMaterials > 0 ? `₱${fNumber(entry.debitPurchasesMaterials)}` : '-'}
                     </TableCell>
                     <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       {entry.debitEquipment > 0 ? `₱${fNumber(entry.debitEquipment)}` : '-'}
@@ -482,16 +493,19 @@ export default function CashDisbursementPage() {
                       {entry.debitRent > 0 ? `₱${fNumber(entry.debitRent)}` : '-'}
                     </TableCell>
                     <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                      {entry.creditWithholdingTax > 0 ? `₱${fNumber(entry.creditWithholdingTax)}` : '-'}
-                    </TableCell>
-                    <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       {entry.debitBankLoan > 0 ? `₱${fNumber(entry.debitBankLoan)}` : '-'}
                     </TableCell>
                     <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       {entry.debitInterestExpense > 0 ? `₱${fNumber(entry.debitInterestExpense)}` : '-'}
                     </TableCell>
-                    <TableCell align="right">
+                    <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                       {entry.debitOwnersWithdrawal > 0 ? `₱${fNumber(entry.debitOwnersWithdrawal)}` : '-'}
+                    </TableCell>
+                    <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                      {entry.debitMiscellaneous > 0 ? `₱${fNumber(entry.debitMiscellaneous)}` : '-'}
+                    </TableCell>
+                    <TableCell align="left">
+                      {entry.remarks || ''}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -506,9 +520,21 @@ export default function CashDisbursementPage() {
                       TOTAL
                     </Typography>
                   </TableCell>
+                  {/* CREDIT totals */}
                   <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                       ₱{fNumber(TOTALS.creditCash)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      ₱{fNumber(TOTALS.creditWithholdingTax)}
+                    </Typography>
+                  </TableCell>
+                  {/* DEBIT totals */}
+                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      ₱{fNumber(TOTALS.debitPurchasesMaterials)}
                     </Typography>
                   </TableCell>
                   <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
@@ -568,11 +594,6 @@ export default function CashDisbursementPage() {
                   </TableCell>
                   <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                      ₱{fNumber(TOTALS.creditWithholdingTax)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                       ₱{fNumber(TOTALS.debitBankLoan)}
                     </Typography>
                   </TableCell>
@@ -581,10 +602,18 @@ export default function CashDisbursementPage() {
                       ₱{fNumber(TOTALS.debitInterestExpense)}
                     </Typography>
                   </TableCell>
-                  <TableCell align="right">
+                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                     <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                       ₱{fNumber(TOTALS.debitOwnersWithdrawal)}
                     </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                      ₱{fNumber(TOTALS.debitMiscellaneous)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}></Typography>
                   </TableCell>
                 </TableRow>
               </TableBody>
@@ -649,15 +678,43 @@ export default function CashDisbursementPage() {
             variant="contained"
             onClick={async () => {
               setAddError('');
+              const amt = Number(form.amount) || 0;
+              const acc = (form.account || '').toLowerCase();
+              // Map the typed account to backend debit field
+              const debitFieldMap = [
+                { key: 'purchasesDebit', match: ['purchases', 'materials'] },
+                { key: 'suppliesDebit', match: ['office supplies', 'supplies'] },
+                { key: 'rentDebit', match: ['rent'] },
+                { key: 'advertisingDebit', match: ['advertising', 'marketing'] },
+                { key: 'deliveryDebit', match: ['delivery', 'freight', 'freight-out', 'transportation'] },
+                { key: 'taxesDebit', match: ['taxes', 'licenses', 'taxes & licenses'] },
+                { key: 'miscDebit', match: ['miscellaneous', 'misc'] },
+                { key: 'utilitiesDebit', match: ['utilities'] },
+                { key: 'bankLoanDebit', match: ['bank loan', 'loan'] },
+                { key: 'interestExpenseDebit', match: ['interest expense', 'interest'] },
+                { key: 'ownersWithdrawalDebit', match: ["owner's withdrawal", 'withdrawal', 'draw'] },
+                { key: 'inventoryDebit', match: ['inventory'] },
+              ];
+              let debitPayload = {};
+              for (const m of debitFieldMap) {
+                if (m.match.some((t) => acc.includes(t))) {
+                  debitPayload[m.key] = amt;
+                  break;
+                }
+              }
+              // Fallback: if no account matched, treat as Purchases – Materials
+              if (Object.keys(debitPayload).length === 0) {
+                debitPayload.purchasesDebit = amt;
+              }
               const payload = {
                 date: form.date,
-                checkNo: form.checkNo || '',
+                referenceNo: form.checkNo || '',
                 payee: form.payee?.trim(),
-                description: form.description?.trim(),
-                amount: Number(form.amount) || 0,
-                account: form.account?.trim() || '',
+                remarks: form.description?.trim(),
+                cashCredit: amt,
+                ...debitPayload,
               };
-              if (!payload.date || !payload.payee || !payload.description) {
+              if (!payload.date || !payload.payee || !payload.remarks) {
                 setAddError('Please provide date, payee, and description.');
                 return;
               }

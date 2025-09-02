@@ -154,17 +154,39 @@ const MOCK_RECEIPT_ENTRIES = [
   },
 ];
 
-// Calculate totals for each column
+// Calculate totals for each column (supports both old and new shapes)
 const calculateTotals = (entries) => {
-  const totals = {};
-  const columns = [
-    'netSales', 'feesAndCharges', 'cash', 'withholdingTax', 'ownersCapital', 'loansPayable'
-  ];
-  
-  columns.forEach(column => {
-    totals[column] = entries.reduce((sum, entry) => sum + entry[column], 0);
+  const totals = {
+    // new keys
+    cashDebit: 0,
+    feesChargesDebit: 0,
+    salesReturnsDebit: 0,
+    netSalesCredit: 0,
+    otherIncomeCredit: 0,
+    arCredit: 0,
+    // legacy keys for backward compat
+    netSales: 0,
+    feesAndCharges: 0,
+    cash: 0,
+    withholdingTax: 0,
+    ownersCapital: 0,
+    loansPayable: 0,
+  };
+  entries.forEach((e) => {
+    totals.cashDebit += Number(e.cashDebit || 0);
+    totals.feesChargesDebit += Number(e.feesChargesDebit || 0);
+    totals.salesReturnsDebit += Number(e.salesReturnsDebit || 0);
+    totals.netSalesCredit += Number(e.netSalesCredit || 0);
+    totals.otherIncomeCredit += Number(e.otherIncomeCredit || 0);
+    totals.arCredit += Number(e.arCredit || 0);
+    // legacy
+    totals.netSales += Number(e.netSales || 0);
+    totals.feesAndCharges += Number(e.feesAndCharges || 0);
+    totals.cash += Number(e.cash || 0);
+    totals.withholdingTax += Number(e.withholdingTax || 0);
+    totals.ownersCapital += Number(e.ownersCapital || 0);
+    totals.loansPayable += Number(e.loansPayable || 0);
   });
-  
   return totals;
 };
 
@@ -341,16 +363,23 @@ export default function CashReceiptPage() {
         <TableContainer component={Paper} sx={{ boxShadow: 'none', border: `1px solid ${theme.palette.divider}` }}>
           <Table sx={{ '& .MuiTableCell-root': { py: 1, px: 1.5 } }}>
             <TableHead>
+              {/* Grouped header row */}
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>DATE</TableCell>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>INVOICE NUMBERS</TableCell>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>CUSTOMER / DESCRIPTION</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>CREDIT NET SALES (Total)</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>DEBIT FEES AND CHARGES</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>DEBIT CASH</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>DEBIT WITHHOLDING TAX</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>CREDIT Owner's Capital</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 600 }}>CREDIT Loan's Payable</TableCell>
+                <TableCell rowSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>Date</TableCell>
+                <TableCell rowSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>OR/Reference No.</TableCell>
+                <TableCell rowSpan={2} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>Customer / Source</TableCell>
+                <TableCell align="center" colSpan={3} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>DEBIT</TableCell>
+                <TableCell align="center" colSpan={3} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}` }}>CREDIT</TableCell>
+                <TableCell rowSpan={2} align="center" sx={{ fontWeight: 700 }}>Remarks</TableCell>
+              </TableRow>
+              {/* Sub-headers row */}
+              <TableRow sx={{ bgcolor: 'grey.50' }}>
+                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>CashBank / eWallet</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Fees & Charges</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Sales Returns / Refunds</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Net Sales</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Other Income</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Accounts Receivable</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -381,62 +410,61 @@ export default function CashReceiptPage() {
                         fontWeight: 600,
                       }}
                     >
-                      {entry.invoiceNumber}
+                      {entry.referenceNo || entry.invoiceNumber}
                     </Label>
                   </TableCell>
                   <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                      {entry.description}
-                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{entry.customer || entry.description}</Typography>
                   </TableCell>
-                  <TableCell 
+                  <TableCell
                     align="right" 
                     sx={{ 
                       borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.netSales > 0 ? 600 : 400,
+                      fontWeight: entry.cashDebit > 0 || entry.cash > 0 ? 600 : 400,
                     }}
                   >
-                    {entry.netSales > 0 ? `₱${fNumber(entry.netSales)}` : '-'}
+                    {entry.cashDebit > 0 ? `₱${fNumber(entry.cashDebit)}` : (entry.cash > 0 ? `₱${fNumber(entry.cash)}` : '-')}
                   </TableCell>
                   <TableCell 
                     align="right"
                     sx={{ 
                       borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.feesAndCharges > 0 ? 600 : 400,
+                      fontWeight: (entry.feesChargesDebit || entry.feesAndCharges) > 0 ? 600 : 400,
                     }}
                   >
-                    {entry.feesAndCharges > 0 ? `₱${fNumber(entry.feesAndCharges)}` : '-'}
+                    {(entry.feesChargesDebit || entry.feesAndCharges) > 0 ? `₱${fNumber(entry.feesChargesDebit || entry.feesAndCharges)}` : '-'}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    sx={{ 
+                      borderRight: `1px solid ${theme.palette.divider}`,
+                      fontWeight: (entry.salesReturnsDebit || 0) > 0 ? 600 : 400,
+                    }}
+                  >
+                    {(entry.salesReturnsDebit || 0) > 0 ? `₱${fNumber(entry.salesReturnsDebit)}` : '-'}
                   </TableCell>
                   <TableCell 
                     align="right"
                     sx={{ 
                       borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.cash > 0 ? 600 : 400,
+                      fontWeight: (entry.netSalesCredit || entry.netSales) > 0 ? 600 : 400,
                     }}
                   >
-                    {entry.cash > 0 ? `₱${fNumber(entry.cash)}` : '-'}
+                    {(entry.netSalesCredit || entry.netSales) > 0 ? `₱${fNumber(entry.netSalesCredit || entry.netSales)}` : '-'}
                   </TableCell>
                   <TableCell 
                     align="right"
                     sx={{ 
                       borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.withholdingTax > 0 ? 600 : 400,
+                      fontWeight: (entry.otherIncomeCredit || 0) > 0 ? 600 : 400,
                     }}
                   >
-                    {entry.withholdingTax > 0 ? `₱${fNumber(entry.withholdingTax)}` : '-'}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.ownersCapital > 0 ? 600 : 400,
-                    }}
-                  >
-                    {entry.ownersCapital > 0 ? `₱${fNumber(entry.ownersCapital)}` : '-'}
+                    {(entry.otherIncomeCredit || 0) > 0 ? `₱${fNumber(entry.otherIncomeCredit)}` : '-'}
                   </TableCell>
                   <TableCell align="right">
-                    {entry.loansPayable > 0 ? `₱${fNumber(entry.loansPayable)}` : '-'}
+                    {(entry.arCredit || 0) > 0 ? `₱${fNumber(entry.arCredit)}` : '-'}
                   </TableCell>
+                  <TableCell align="right">{entry.remarks || ''}</TableCell>
                 </TableRow>
               ))}
               
@@ -450,37 +478,26 @@ export default function CashReceiptPage() {
                     TOTAL
                   </Typography>
                 </TableCell>
-                <TableCell align="right" sx={{ 
-                  borderRight: `1px solid ${theme.palette.divider}`,
-                }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTALS.netSales)}
-                  </Typography>
+                <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber((TOTALS.cashDebit || 0) + (TOTALS.cash || 0))}</Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTALS.feesAndCharges)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber((TOTALS.feesChargesDebit || 0) + (TOTALS.feesAndCharges || 0))}</Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTALS.cash)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber(TOTALS.salesReturnsDebit || 0)}</Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTALS.withholdingTax)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber((TOTALS.netSalesCredit || 0) + (TOTALS.netSales || 0))}</Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTALS.ownersCapital)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber(TOTALS.otherIncomeCredit || 0)}</Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber(TOTALS.arCredit || 0)}</Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTALS.loansPayable)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}></Typography>
                 </TableCell>
               </TableRow>
             </TableBody>

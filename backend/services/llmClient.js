@@ -1,3 +1,17 @@
+// Minimal LLM client stub
+
+function getConfig() {
+  return { apiKey: process.env.LLM_API_KEY || '' };
+}
+
+async function chatComplete({ system, messages, temperature = 0.3, maxTokens = 400 }) {
+  // Deterministic stub reply for tests
+  const last = (messages || []).slice(-1)[0];
+  const content = (last && last.content) ? String(last.content) : '';
+  return `Stub LLM reply: ${content.slice(0, 80)}`;
+}
+
+module.exports = { getConfig, chatComplete };
 /**
  * Minimal OpenAI-compatible LLM client using native fetch (Node >= 18)
  * Supports providers that expose an OpenAI-compatible Chat Completions API.

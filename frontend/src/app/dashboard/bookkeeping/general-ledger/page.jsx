@@ -135,9 +135,10 @@ export default function GeneralLedgerPage() {
   }, []);
     const theme = useTheme();
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedAccount, setSelectedAccount] = useState('All');
+  const [selectedAccount, setSelectedAccount] = useState('All');
+  const [accounts, setAccounts] = useState([]);
     const [openAddDialog, setOpenAddDialog] = useState(false);
-    const [ledgerEntries, setLedgerEntries] = useState([]);
+  const [ledgerSummary, setLedgerSummary] = useState([]);
     const [newEntry, setNewEntry] = useState({
       date: '',
       description: '',
@@ -146,17 +147,20 @@ export default function GeneralLedgerPage() {
       amount: '',
     });
 
-    const TOTAL_DEBIT = ledgerEntries.reduce((sum, entry) => sum + (entry.type === 'debit' ? entry.amount : 0), 0);
-    const TOTAL_CREDIT = ledgerEntries.reduce((sum, entry) => sum + (entry.type === 'credit' ? entry.amount : 0), 0);
-    const FINAL_BALANCE = ledgerEntries[ledgerEntries.length - 1]?.balance || 0;
+  // Filter by selected account code (from COA). 'All' shows every account.
+  const filteredRows = selectedAccount === 'All' ? ledgerSummary : ledgerSummary.filter((a) => a.code === selectedAccount);
+  const TOTAL_DEBIT = filteredRows.reduce((sum, acc) => sum + Number(acc.debit || 0), 0);
+  const TOTAL_CREDIT = filteredRows.reduce((sum, acc) => sum + Number(acc.credit || 0), 0);
 
     // Fetch ledger entries on mount
     useEffect(() => {
-      const fetchLedger = async () => {
+    const fetchLedger = async () => {
         try {
-          const res = await axios.get('/api/bookkeeping/ledger');
-          const data = res?.data?.data?.ledger || [];
-          setLedgerEntries(data);
+  const res = await axios.get('/api/bookkeeping/ledger?summary=1');
+  const data = res?.data?.data?.summary || [];
+  const acct = res?.data?.data?.accounts || [];
+  setLedgerSummary(data);
+  setAccounts(acct);
         } catch (err) {
           console.error('Failed to load ledger:', err);
         }
@@ -223,9 +227,7 @@ export default function GeneralLedgerPage() {
 
       {/* Filters & Actions */}
       <Card sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" sx={{ mb: 2 }}>
-          Filters & Actions
-        </Typography>
+    <Typography variant="h6" sx={{ mb: 2 }}>Filters & Actions</Typography>
         
         <Stack direction="row" spacing={2} alignItems="center">
           <TextField
@@ -246,22 +248,18 @@ export default function GeneralLedgerPage() {
             select
             value={selectedAccount}
             onChange={(e) => setSelectedAccount(e.target.value)}
-            sx={{ minWidth: 120 }}
+            sx={{ minWidth: 240 }}
+            label="Account (COA)"
           >
-            <MenuItem value="All">All</MenuItem>
-            <MenuItem value="Cash">Cash</MenuItem>
-            <MenuItem value="Accounts Receivable">Accounts Receivable</MenuItem>
-            <MenuItem value="Accounts Payable">Accounts Payable</MenuItem>
+            <MenuItem value="All">All Accounts</MenuItem>
+            {accounts.map((acc) => (
+              <MenuItem key={acc.code} value={acc.code}>
+                {acc.code} — {acc.title}
+              </MenuItem>
+            ))}
           </TextField>
           
-          <Button
-            variant="contained"
-            startIcon={<Iconify icon="eva:plus-fill" />}
-            onClick={() => setOpenAddDialog(true)}
-            sx={{ minWidth: 140 }}
-          >
-            + Add Entry
-          </Button>
+          {/* No manual add in summary view */}
         </Stack>
       </Card>
 
@@ -272,12 +270,10 @@ export default function GeneralLedgerPage() {
             <Typography variant="h6" sx={{ fontWeight: 700, textTransform: 'uppercase' }}>
               GENERAL LEDGER
             </Typography>
-                         <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-               {ledgerEntries.length} transactions • September 2024
-             </Typography>
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main', mt: 0.5 }}>
-              CASH
+            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+              {ledgerSummary.length} accounts • September 2024
             </Typography>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main', mt: 0.5 }}>SUMMARY (Totals per Account)</Typography>
           </Box>
           
           <Stack direction="row" spacing={1}>
@@ -291,181 +287,46 @@ export default function GeneralLedgerPage() {
           <Table sx={{ '& .MuiTableCell-root': { py: 1, px: 1.5 } }}>
             <TableHead>
               <TableRow sx={{ bgcolor: 'grey.50' }}>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Date</TableCell>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Description</TableCell>
-                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Ref</TableCell>
+                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Account Code</TableCell>
+                <TableCell sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Account Title</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Debit</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600, borderRight: `1px solid ${theme.palette.divider}` }}>Credit</TableCell>
                 <TableCell align="right" sx={{ fontWeight: 600 }}>Balance</TableCell>
               </TableRow>
             </TableHead>
-                         <TableBody>
-               {ledgerEntries.map((entry, index) => (
-                <TableRow 
-                  key={entry.id} 
-                  sx={{ 
-                    '&:hover': { bgcolor: 'grey.50' },
-                    bgcolor: index % 2 === 0 ? 'white' : 'grey.25',
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                  }}
+            <TableBody>
+              {filteredRows.map((acc, index) => (
+                <TableRow key={acc.code}
+                  sx={{ '&:hover': { bgcolor: 'grey.50' }, bgcolor: index % 2 === 0 ? 'white' : 'grey.25', borderBottom: `1px solid ${theme.palette.divider}` }}
                 >
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    {entry.date}
-                  </TableCell>
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    <Box sx={{ pl: entry.type === 'credit' ? 3 : 0 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                        {entry.description}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    <Label 
-                      variant="soft" 
-                      color={entry.type === 'credit' ? 'success' : 'error'}
-                      sx={{ 
-                        bgcolor: entry.type === 'credit' ? '#E8F5E8' : '#FFEBEE',
-                        color: entry.type === 'credit' ? '#2E7D32' : '#C62828',
-                        border: entry.type === 'credit' ? '1px solid #A5D6A7' : '1px solid #EF9A9A',
-                        borderRadius: '12px',
-                        px: 1.5,
-                        py: 0.5,
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {entry.ref}
-                    </Label>
-                  </TableCell>
-                  <TableCell 
-                    align="right" 
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.type === 'debit' ? 600 : 400,
-                    }}
-                  >
-                    {entry.type === 'debit' ? `₱${fNumber(entry.amount)}` : '-'}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.type === 'credit' ? 600 : 400,
-                    }}
-                  >
-                    {entry.type === 'credit' ? `₱${fNumber(entry.amount)}` : '-'}
-                  </TableCell>
+                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>{acc.code}</TableCell>
+                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>{acc.accountTitle}</TableCell>
+                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>₱{fNumber(acc.debit)}</TableCell>
+                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>₱{fNumber(acc.credit)}</TableCell>
                   <TableCell align="right">
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                      ₱{fNumber(entry.balance)}
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: acc.balanceSide === 'debit' ? 'error.main' : 'success.main' }}>
+                      ₱{fNumber(acc.balance)} {acc.balanceSide === 'debit' ? 'Dr' : 'Cr'}
                     </Typography>
                   </TableCell>
                 </TableRow>
               ))}
-              
-              {/* Total Row */}
-              <TableRow sx={{ 
-                bgcolor: '#E3F2FD', 
-                borderTop: `2px solid ${theme.palette.primary.main}`,
-              }}>
-                <TableCell colSpan={3} sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                    TOTAL
-                  </Typography>
+              <TableRow sx={{ bgcolor: '#E3F2FD', borderTop: `2px solid ${theme.palette.primary.main}` }}>
+                <TableCell colSpan={2} sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>TOTAL</Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTAL_DEBIT)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber(TOTAL_DEBIT)}</Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(TOTAL_CREDIT)}
-                  </Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber(TOTAL_CREDIT)}</Typography>
                 </TableCell>
-                <TableCell align="right">
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    ₱{fNumber(FINAL_BALANCE)}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-
-              {/* Cash Balance Row */}
-              <TableRow sx={{ bgcolor: 'white' }}>
-                <TableCell colSpan={5} sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    Sep 30, 2024, Cash Balance
-                  </Typography>
-                </TableCell>
-                <TableCell align="right">
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    ₱{fNumber(FINAL_BALANCE)}
-                  </Typography>
-                </TableCell>
+                <TableCell align="right" />
               </TableRow>
             </TableBody>
           </Table>
                  </TableContainer>
        </Card>
-
-       {/* Add Entry Dialog */}
-       <Dialog open={openAddDialog} onClose={() => setOpenAddDialog(false)} maxWidth="md" fullWidth>
-         <DialogTitle>Add Ledger Entry</DialogTitle>
-         <DialogContent>
-           <Stack spacing={3} sx={{ mt: 1 }}>
-             <Stack direction="row" spacing={2}>
-               <TextField
-                 label="Date"
-                 type="date"
-                 value={newEntry.date}
-                 onChange={(e) => setNewEntry({ ...newEntry, date: e.target.value })}
-                 InputLabelProps={{ shrink: true }}
-                 fullWidth
-               />
-               <TextField
-                 select
-                 label="Type"
-                 value={newEntry.type}
-                 onChange={(e) => setNewEntry({ ...newEntry, type: e.target.value })}
-                 fullWidth
-               >
-                 <MenuItem value="debit">Debit</MenuItem>
-                 <MenuItem value="credit">Credit</MenuItem>
-               </TextField>
-             </Stack>
-
-             <TextField
-               label="Description"
-               value={newEntry.description}
-               onChange={(e) => setNewEntry({ ...newEntry, description: e.target.value })}
-               fullWidth
-               multiline
-               rows={2}
-             />
-
-             <TextField
-               label="Amount"
-               type="number"
-               value={newEntry.amount}
-               onChange={(e) => setNewEntry({ ...newEntry, amount: e.target.value })}
-               InputProps={{
-                 startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-               }}
-               fullWidth
-             />
-           </Stack>
-         </DialogContent>
-         <DialogActions>
-           <Button onClick={() => setOpenAddDialog(false)}>Cancel</Button>
-           <Button 
-             variant="contained" 
-             onClick={handleAddEntry}
-             disabled={!newEntry.date || !newEntry.description || !newEntry.amount}
-           >
-             Add Entry
-           </Button>
-         </DialogActions>
-       </Dialog>
+      {/* Manual add removed in summary view */}
      </DashboardContent>
    );
  } 

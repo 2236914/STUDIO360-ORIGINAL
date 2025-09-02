@@ -1,3 +1,16 @@
+// Minimal n8n client stub to avoid hard dependency during tests/dev
+// Exports: postToWebhook(kind, payload)
+
+async function postToWebhook(kind, payload) {
+  const url = process.env.N8N_WEBHOOK_URL || '';
+  if (!url || !(url.startsWith('http') || url.startsWith('mock:'))) {
+    return { ok: false, error: 'n8n webhook not configured', data: null };
+  }
+  // Avoid network calls in this stub; treat as configured but no-op
+  return { ok: true, data: { reply: 'n8n stub response', kind } };
+}
+
+module.exports = { postToWebhook };
 /**
  * Lightweight n8n Webhook client
  * Uses native fetch (Node >=18) and supports optional header/basic auth.
