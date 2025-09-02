@@ -18,6 +18,7 @@ import IconButton from '@mui/material/IconButton';
 import LinearProgress from '@mui/material/LinearProgress';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
+import Tooltip from '@mui/material/Tooltip';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Grid from '@mui/material/Grid';
@@ -191,6 +192,7 @@ export default function UploadProcessPage() {
   const [ocrTexts, setOcrTexts] = useState({}); // { filename: text }
   const [ocrStructured, setOcrStructured] = useState({}); // { filename: structuredObj }
   const [ocrCanonical, setOcrCanonical] = useState({}); // { filename: canonicalObj }
+  const [ocrWarnings, setOcrWarnings] = useState({}); // { filename: string[] }
   const [transferState, setTransferState] = useState({ transferred: 0, total: 0, categories: [] });
   const [step3Initialized, setStep3Initialized] = useState(false);
   const [lastTransferBooks, setLastTransferBooks] = useState({ counts: {}, total: 0 });
@@ -493,6 +495,7 @@ export default function UploadProcessPage() {
   const results = {};
   const structuredAccumulator = {};
   const canonicalAccumulator = {};
+  const warningsAccumulator = {};
       for (const file of uploadedFiles) {
         const formData = new FormData();
         formData.append('file', file, file.name);
@@ -505,14 +508,17 @@ export default function UploadProcessPage() {
         const text = res?.data?.data?.text || '';
         const structured = res?.data?.data?.structured || null;
         const canonical = res?.data?.data?.canonical || null;
+        const warnings = res?.data?.data?.warnings || [];
         results[file.name] = text;
         if (structured) structuredAccumulator[file.name] = structured;
         if (canonical) canonicalAccumulator[file.name] = canonical;
+        if (Array.isArray(warnings)) warningsAccumulator[file.name] = warnings;
         setUploadLogs((prev) => [...prev, `Processed ${file.name} (${file.size} bytes)`]);
       }
       setOcrTexts(results);
       setOcrStructured(structuredAccumulator);
       setOcrCanonical(canonicalAccumulator);
+      setOcrWarnings(warningsAccumulator);
       // Build transactions from OCR text
       const parsed = parseOcrToTransactions(results, structuredAccumulator, canonicalAccumulator).map(t => ({ ...t, autoBook: true }));
       setTransactions(parsed);
@@ -704,6 +710,7 @@ export default function UploadProcessPage() {
                     const c = ocrCanonical?.[name] || null;
                     const cFields = c?.fields || {};
                     const cAmts = c?.amounts || {};
+                    const warns = ocrWarnings?.[name] || [];
                     const na = (v) => (v === undefined || v === null || v === '' ? '[N/A]' : v);
                     const currency = cFields.currency || s.currency || '₱';
                     const fmtAmt = (v) => (v === 0 || (v != null && v !== '' && !Number.isNaN(Number(v))))
@@ -733,6 +740,13 @@ export default function UploadProcessPage() {
                     return (
                       <Card key={name} sx={{ p: 2, bgcolor: 'grey.50' }}>
                         <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{name}</Typography>
+                        {Array.isArray(warns) && warns.length > 0 && (
+                          <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                            {warns.map((w, idx) => (
+                              <Chip key={idx} size="small" color="warning" variant="outlined" label={String(w).slice(0, 80)} />
+                            ))}
+                          </Stack>
+                        )}
                         <Box sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: '0.72rem', lineHeight: 1.4 }}>
 {`Seller Name: ${na(cFields.sellerName || s.supplier)}
 Seller Address: ${na(cFields.sellerAddress || s.sellerAddress)}
@@ -757,6 +771,52 @@ Total Platform Voucher Applied: ${fmtAmt(cAmts.platformVoucher ?? s.platformVouc
 Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}
 `}
                         </Box>
+                        {/* Grand Total Indicators */}
+                        {(() => {
+                          const gtDetectedBold = (cFields.grandTotalDetectedByBold ?? s.grandTotalDetectedByBold);
+                          const gtSource = (cFields.grandTotalSource ?? s.grandTotalSource);
+                          const gtConf = (typeof (cFields.grandTotalConfidence ?? s.grandTotalConfidence) === 'number')
+                            ? Number(cFields.grandTotalConfidence ?? s.grandTotalConfidence)
+                            : null;
+                          const gtVerified = (cFields.grandTotalVerifiedByBreakdown ?? s.grandTotalVerifiedByBreakdown);
+                          const gtDelta = (typeof (cFields.grandTotalVerifiedDelta ?? s.grandTotalVerifiedDelta) === 'number')
+                            ? Number(cFields.grandTotalVerifiedDelta ?? s.grandTotalVerifiedDelta)
+                            : null;
+                          const gtBoldText = (cFields.grandTotalBoldText ?? s.grandTotalBoldText) || '';
+                          const cur = currency;
+                          const prettyDelta = (d) => `${cur}${Math.abs(Number(d) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                          if (
+                            gtDetectedBold == null && gtSource == null && gtConf == null && gtVerified == null && gtDelta == null
+                          ) return null;
+                          return (
+                            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
+                              {gtVerified === true && (
+                                <Chip size="small" color="success" label="Grand total verified" icon={<Iconify icon="eva:checkmark-circle-2-fill" />} />
+                              )}
+                              {gtVerified === false && (
+                                <Chip size="small" color="warning" label={`Grand total mismatch Δ ${prettyDelta(gtDelta)}`} icon={<Iconify icon="eva:alert-triangle-fill" />} />
+                              )}
+                              {gtVerified == null && (
+                                <Chip size="small" color="default" label="Verification unavailable" />
+                              )}
+                              {gtDetectedBold === true && (
+                                gtBoldText ? (
+                                  <Tooltip title={<Box sx={{ maxWidth: 420, whiteSpace: 'pre-wrap' }}>{gtBoldText}</Box>}>
+                                    <Chip size="small" color="info" label="Detected from bold text" />
+                                  </Tooltip>
+                                ) : (
+                                  <Chip size="small" color="info" label="Detected from bold text" />
+                                )
+                              )}
+                              {gtSource && (
+                                <Chip size="small" variant="outlined" label={`Source: ${gtSource}`} />
+                              )}
+                              {typeof gtConf === 'number' && (
+                                <Chip size="small" variant="outlined" label={`Confidence: ${Math.round(gtConf * 100)}%`} />
+                              )}
+                            </Stack>
+                          );
+                        })()}
                         <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
                           Raw OCR snippet: {raw ? String(raw).slice(0, 140) : '(no text)'}{raw && String(raw).length > 140 ? '…' : ''}
                         </Typography>

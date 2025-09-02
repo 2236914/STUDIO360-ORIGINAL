@@ -39,7 +39,8 @@ function canonicalizeStructured({ rawText, structured, meta }) {
     if (!rawText) return null;
     const lines = String(rawText).split(/\r?\n/);
     for (const lbl of labels) {
-      const re = new RegExp(`^\s*${lbl}\s*[:\-]?\s*(.+)$`, 'i');
+      // Escape whitespace properly in template literal by double-escaping backslashes
+      const re = new RegExp(`^\\s*${lbl}\\s*[:\\-]?\\s*(.+)$`, 'i');
       for (const ln of lines) {
         const m = ln.match(re);
         if (m && m[1]) return m[1].trim().slice(0, 200);
@@ -98,6 +99,13 @@ function canonicalizeStructured({ rawText, structured, meta }) {
       paymentMethod: s.paymentMethod || null,
       currency: s.currency || null,
       amountInWords: s.amountInWords || null,
+  // Indicators for grand total detection
+  grandTotalDetectedByBold: typeof s.grandTotalDetectedByBold === 'boolean' ? s.grandTotalDetectedByBold : null,
+  grandTotalSource: s.grandTotalSource || null,
+  grandTotalConfidence: typeof s.grandTotalConfidence === 'number' ? s.grandTotalConfidence : null,
+  grandTotalBoldText: typeof s.grandTotalBoldText === 'string' ? s.grandTotalBoldText : null,
+  grandTotalVerifiedByBreakdown: typeof s.grandTotalVerifiedByBreakdown === 'boolean' ? s.grandTotalVerifiedByBreakdown : null,
+  grandTotalVerifiedDelta: typeof s.grandTotalVerifiedDelta === 'number' ? s.grandTotalVerifiedDelta : null,
     },
     // New sections matching requested schema
     orderSummary: {
@@ -353,7 +361,7 @@ function getOrCreateSession(sessionId) {
  */
 router.get('/assistant/health', (req, res) => {
   const url = process.env.N8N_WEBHOOK_URL || '';
-  const configured = Boolean(url && url.startsWith('http'));
+  const configured = Boolean(url && (url.startsWith('http') || url.startsWith('mock:')));
   const masked = url ? url.replace(/:[^@/]+@/, ':***@') : null; // mask basic auth secret
   res.json({ success: true, data: { configured, url: masked } });
 });
@@ -463,13 +471,43 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const filePath = req.file.path;
 
     // Spawn Python processor
+    // Resolve a Poppler bin path if we have a bundled copy
+  const bundledPopplerBin = (() => {
+      try {
+        const base = path.join(__dirname, '..', '..', 'python', 'poppler', 'extracted');
+        if (!fs.existsSync(base)) return null;
+        const entries = fs.readdirSync(base).filter((d) => d && fs.existsSync(path.join(base, d, 'Library', 'bin')));
+        if (entries.length > 0) return path.join(base, entries[0], 'Library', 'bin');
+      } catch (e) {}
+      return null;
+    })();
+
+  // Writable cache dirs for Paddle / PaddleX on Windows (avoid permissions under %USERPROFILE%)
+  const cacheRoot = path.join(__dirname, '..', '..', 'python', '.cache');
+  try { fs.mkdirSync(cacheRoot, { recursive: true }); } catch (_) {}
+  const paddlexHome = path.join(cacheRoot, 'paddlex');
+  const paddleHome = path.join(cacheRoot, 'paddle');
+  const xdgCache = path.join(cacheRoot, 'xdg');
+  try { fs.mkdirSync(paddlexHome, { recursive: true }); } catch (_) {}
+  try { fs.mkdirSync(paddleHome, { recursive: true }); } catch (_) {}
+  try { fs.mkdirSync(xdgCache, { recursive: true }); } catch (_) {}
+
     const py = spawn(pythonPath, [scriptPath, filePath], {
       env: {
         ...process.env,
         // Allow overriding Tesseract/Poppler via env in backend process
         TESSERACT_PATH: process.env.TESSERACT_PATH || 'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
-        // Prefer bundled poppler if present; user can override via env
-        POPPLER_PATH: process.env.POPPLER_PATH || path.join(__dirname, '..', '..', 'python', 'poppler')
+        // Prefer bundled poppler bin if present; user can override via env
+        POPPLER_PATH: process.env.POPPLER_PATH || bundledPopplerBin || path.join(__dirname, '..', '..', 'python', 'poppler'),
+        // Ensure Paddle is enabled by default
+        ENABLE_PADDLE_OCR: process.env.ENABLE_PADDLE_OCR || '1',
+        PADDLE_ON_PDF: process.env.PADDLE_ON_PDF || '1',
+  // Paddle caches
+  PPDX_HOME: process.env.PPDX_HOME || paddlexHome,
+  PADDLE_HOME: process.env.PADDLE_HOME || paddleHome,
+  XDG_CACHE_HOME: process.env.XDG_CACHE_HOME || xdgCache,
+  // Some Windows environments need this to avoid OpenMP/MKL conflicts
+  KMP_DUPLICATE_LIB_OK: process.env.KMP_DUPLICATE_LIB_OK || 'TRUE',
       },
       windowsHide: true
     });
@@ -552,7 +590,8 @@ router.post('/upload', upload.single('file'), async (req, res) => {
             structured: parsed.structured || null,
             canonical,
             fileUrl: meta.fileUrl,
-            warnings: parsed.warnings || []
+            warnings: parsed.warnings || [],
+            diagnostics: parsed.diagnostics || null
           }
         });
       } catch (e) {
@@ -698,6 +737,34 @@ router.get('/logs', (req, res) => {
       }
     }
   });
+});
+
+/**
+ * @route   GET /api/ai/ocr/health
+ * @desc    Check Python OCR environment availability (Python path, Tesseract, Poppler, PaddleOCR)
+ */
+router.get('/ocr/health', async (req, res) => {
+  try {
+    const pythonPath = resolvePythonExecutable();
+    const scriptPath = path.join(__dirname, '..', '..', 'python', 'process_file.py');
+    const py = spawn(pythonPath, ['-c', 'import sys,os;\nprint("python_ok")\ntry:\n import pytesseract; print("tesseract_var=", os.environ.get("TESSERACT_PATH"));\nexcept Exception as e:\n print("pytesseract_err=", e)\ntry:\n import fitz; print("pymupdf_ok")\nexcept Exception as e:\n print("pymupdf_err=", e)\ntry:\n from paddleocr import PaddleOCR; print("paddle_ok")\nexcept Exception as e:\n print("paddle_err=", e)'], {
+      env: {
+        ...process.env,
+        ENABLE_PADDLE_OCR: process.env.ENABLE_PADDLE_OCR || '1',
+        PADDLE_ON_PDF: process.env.PADDLE_ON_PDF || '1',
+      },
+      windowsHide: true
+    });
+    let out = '';
+    let err = '';
+    py.stdout.on('data', d => { out += d.toString(); });
+    py.stderr.on('data', d => { err += d.toString(); });
+    py.on('close', (code) => {
+      return res.json({ success: true, data: { pythonPath, out, err, code } });
+    });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
 });
 
 module.exports = router; 

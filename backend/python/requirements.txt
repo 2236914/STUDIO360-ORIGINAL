@@ -5,3 +5,5 @@ pdf2image>=1.16.3
 Pillow>=10.0.0
 requests>=2.31.0
 pdfplumber>=0.11.0
+# Optional: for improved OCR on tables/currency (install matching paddlepaddle for your OS)
+paddleocr>=2.7.0

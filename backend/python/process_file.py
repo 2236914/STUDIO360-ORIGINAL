@@ -32,6 +32,12 @@ except Exception as e:
     }))
     sys.exit(1)
 
+# Optional PaddleOCR (for improved table/currency OCR)
+try:
+    from paddleocr import PaddleOCR  # type: ignore
+except Exception:
+    PaddleOCR = None  # optional
+
 
 def _configure_binaries():
     """Configure platform-specific binary paths (Tesseract, Poppler)."""
@@ -1293,20 +1299,588 @@ def _extract_items_from_ocrspace(images: List[Image.Image], api_key: str) -> Lis
     return items
 
 
+def _paddle_ocr_extract_lines_and_items(images: List[Image.Image]) -> Tuple[str, List[Dict[str, Any]]]:
+    """Use PaddleOCR to get high-quality text lines and parse item rows heuristically.
+
+    Returns a tuple of (all_text_lines, items). This complements Tesseract: we keep
+    Tesseract as the primary text extractor, while Paddle helps with tables/currency.
+    """
+    if not images or PaddleOCR is None:
+        return ('', [])
+    try:
+        import numpy as np  # paddleocr depends on numpy
+    except Exception:
+        return ('', [])
+
+    try:
+        # Allow opt-out via env
+        if os.environ.get('ENABLE_PADDLE_OCR', '1') in ('0', 'false', 'False'):
+            return ('', [])
+
+        ocr = PaddleOCR(use_angle_cls=True, lang='en', show_log=False)
+    except Exception:
+        return ('', [])
+
+    all_lines: List[str] = []
+    all_items: List[Dict[str, Any]] = []
+
+    # Patterns used for parsing
+    money_pat = re.compile(r"[₱$P]?\s*\d[\d,]*(?:\.\d{2})?")
+    qty_pat = re.compile(r"\b\d{1,3}\b")
+    stop_line = re.compile(r"Grand\s+Total|Merchandise\s+Subtotal|Shipping\s+Fee|Amount\s+Due", re.I)
+
+    def to_float(x: str) -> Optional[float]:
+        try:
+            return float(x.replace(',', '').replace(' ', '').lstrip('₱$P'))
+        except Exception:
+            m = re.search(r"\d[\d,]*(?:\.\d{2})?", x)
+            return float(m.group(0).replace(',', '')) if m else None
+
+    for img in images:
+        try:
+            arr = np.array(img.convert('RGB'))
+            res = ocr.ocr(arr, cls=True)
+        except Exception:
+            continue
+        # Normalize result list
+        blocks = []
+        try:
+            # Newer PaddleOCR returns list per image
+            if isinstance(res, list) and len(res) > 0 and isinstance(res[0], list):
+                blocks = res[0]
+            elif isinstance(res, list):
+                blocks = res
+        except Exception:
+            blocks = []
+        if not blocks:
+            continue
+        # Build token list with coordinates, then group them into lines by Y proximity
+        tokens: List[Dict[str, Any]] = []
+        for entry in blocks:
+            try:
+                box, (text, conf) = entry
+                if not text:
+                    continue
+                xs = [float(p[0]) for p in box]
+                ys = [float(p[1]) for p in box]
+                x0 = float(min(xs)); y0 = float(min(ys)); x1 = float(max(xs)); y1 = float(max(ys))
+                xmid = (x0 + x1) / 2.0; ymid = (y0 + y1) / 2.0
+                tokens.append({'x0': x0, 'y0': y0, 'x1': x1, 'y1': y1, 'xmid': xmid, 'ymid': ymid, 'text': str(text)})
+            except Exception:
+                continue
+        # Group into line structures
+        tokens.sort(key=lambda t: (t['ymid'], t['xmid']))
+        lines_structs: List[Dict[str, Any]] = []
+        cur_line: List[Dict[str, Any]] = []
+        last_y: Optional[float] = None
+        for tok in tokens:
+            if last_y is None or abs(tok['ymid'] - last_y) <= 10:
+                cur_line.append(tok)
+                last_y = tok['ymid'] if last_y is None else (last_y + tok['ymid'])/2.0
+            else:
+                if cur_line:
+                    cur_line.sort(key=lambda t: t['xmid'])
+                    text = ' '.join([t['text'] for t in cur_line])
+                    lines_structs.append({'y': cur_line[0]['ymid'], 'x': cur_line[0]['xmid'], 'text': text, 'tokens': cur_line.copy()})
+                cur_line = [tok]
+                last_y = tok['ymid']
+        if cur_line:
+            cur_line.sort(key=lambda t: t['xmid'])
+            text = ' '.join([t['text'] for t in cur_line])
+            lines_structs.append({'y': cur_line[0]['ymid'], 'x': cur_line[0]['xmid'], 'text': text, 'tokens': cur_line.copy()})
+
+        lines_structs.sort(key=lambda d: (d['y'], d['x']))
+        image_lines = [d['text'].strip() for d in lines_structs if str(d['text']).strip()]
+        all_lines.extend(image_lines)
+
+        # Heuristic item parsing on Paddle lines
+        items_here: List[Dict[str, Any]] = []
+        current: Optional[Dict[str, Any]] = None
+
+        # Detect header formats (Shopee, TikTok) and parse under those sections specifically
+        def norm(s: str) -> str:
+            return re.sub(r"\s+", " ", s.strip().lower())
+
+        def map_columns(header_text: str) -> List[str]:
+            cols = [norm(c) for c in re.split(r"\s*\|\s*|\s{2,}\s*", header_text) if c.strip()]
+            mapped = []
+            for c in cols:
+                if re.search(r"^(no\.?|#)$", c):
+                    mapped.append('no')
+                elif 'item description' in c or 'product' in c or 'item' in c or 'description' in c:
+                    mapped.append('product')
+                elif 'variation' in c or 'variant' in c:
+                    mapped.append('variation')
+                elif 'qty' in c or 'quantity' in c:
+                    mapped.append('qty')
+                elif 'subtotal' in c or 'amount' in c:
+                    mapped.append('subtotal')
+                elif 'price' in c:
+                    mapped.append('price')
+                else:
+                    mapped.append('other')
+            return mapped
+
+        shopee_hdr_idx = None
+        tiktok_hdr_idx = None
+        header_cols: List[str] = []
+        for idx, ln in enumerate(image_lines):
+            ln_n = norm(ln)
+            if shopee_hdr_idx is None and (('product' in ln_n and ('qty' in ln_n or 'quantity' in ln_n)) and ('subtotal' in ln_n or 'amount' in ln_n)):
+                shopee_hdr_idx = idx
+                header_cols = map_columns(ln)
+                # Ensure we have at least product and qty columns
+                if 'product' not in header_cols or 'qty' not in header_cols:
+                    shopee_hdr_idx = None
+                    header_cols = []
+            if tiktok_hdr_idx is None and ('item description' in ln_n and ('qty' in ln_n or 'quantity' in ln_n)):
+                tiktok_hdr_idx = idx
+                if not header_cols:
+                    header_cols = map_columns(ln)
+
+        def parse_by_header(row_text: str, cols_map: List[str]) -> Optional[Dict[str, Any]]:
+            parts = [p.strip() for p in re.split(r"\s*\|\s*|\s{2,}\s*", row_text) if p.strip()]
+            # If the row has fewer parts than header, try a light fallback by not enforcing exact count
+            if not parts:
+                return None
+            values = {}
+            for i, val in enumerate(parts):
+                key = cols_map[i] if i < len(cols_map) else 'other'
+                values.setdefault(key, [])
+                values[key].append(val)
+            # Compose item fields
+            def first(keys: List[str]) -> Optional[str]:
+                for k in keys:
+                    if k in values and values[k]:
+                        return ' '.join(values[k]).strip()
+                return None
+            product = first(['product'])
+            variation = first(['variation'])
+            qty_s = first(['qty'])
+            price_s = first(['price'])
+            subtotal_s = first(['subtotal'])
+            # Parse numerics
+            qty_val = None
+            if qty_s:
+                m = re.search(r"\d{1,3}", qty_s)
+                if m:
+                    try: qty_val = int(m.group(0))
+                    except Exception: qty_val = None
+            def to_f(s: Optional[str]) -> Optional[float]:
+                if not s: return None
+                try:
+                    return float(re.sub(r"[^0-9\.]", "", s).replace(',', ''))
+                except Exception:
+                    m = re.search(r"\d[\d,]*(?:\.\d{2})?", s)
+                    return float(m.group(0).replace(',', '')) if m else None
+            price_val = to_f(price_s)
+            subtotal_val = to_f(subtotal_s)
+            if not product and qty_val is None and price_val is None and subtotal_val is None:
+                return None
+            return {
+                'no': None,
+                'product': (product or '')[:200],
+                'variation': variation,
+                'productPrice': price_val,
+                'qty': qty_val,
+                'subtotal': subtotal_val,
+            }
+
+        parsed_header_section = False
+
+    # Column-position header parse (more robust for tables)
+        try:
+            # Map header tokens to columns using synonyms
+            def col_key_for(token_text: str) -> Optional[str]:
+                t = norm(token_text)
+                if re.fullmatch(r"(no\.?|#)", t):
+                    return 'no'
+                if 'item description' in t or 'description' in t or 'product' in t or 'item' in t:
+                    return 'product'
+                if 'variation' in t or 'variant' in t:
+                    return 'variation'
+                if 'qty' in t or 'quantity' in t:
+                    return 'qty'
+                if 'unit price' in t or 'product price' in t or re.fullmatch(r"price", t):
+                    return 'price'
+                if 'subtotal' in t or (('amount' in t) and 'due' not in t):
+                    return 'subtotal'
+                return None
+
+            # Find header row by density of header keys near a common y (use line groups)
+            headers = []  # list of (key, xmid, ymid)
+            for ln in lines_structs:
+                for tok in ln['tokens']:
+                    k = col_key_for(tok['text'])
+                    if k:
+                        headers.append((k, tok['xmid'], tok['ymid']))
+            if headers:
+                # Cluster by y to find the header row
+                headers.sort(key=lambda z: z[2])
+                best_row = None
+                best_keys = []
+                for i, (k, x, y) in enumerate(headers):
+                    cluster = [(k, x, y)]
+                    for j in range(i+1, len(headers)):
+                        k2, x2, y2 = headers[j]
+                        if abs(y2 - y) <= 12:  # y proximity threshold
+                            cluster.append((k2, x2, y2))
+                        else:
+                            break
+                    # Unique keys count
+                    uniq = {}
+                    for (kk, xx, yy) in cluster:
+                        uniq.setdefault(kk, []).append((xx, yy))
+                    if len(uniq) >= 2 and ('product' in uniq and 'qty' in uniq):
+                        best_row = cluster
+                        best_keys = list(uniq.keys())
+                        break
+                if best_row:
+                    # Build column x positions from cluster
+                    col_points: List[Tuple[float, str]] = []
+                    seen = {}
+                    for (k, x, y) in best_row:
+                        # Keep the leftmost occurrence per key
+                        if k in seen and x >= seen[k]:
+                            continue
+                        seen[k] = x
+                    for k, x in seen.items():
+                        col_points.append((x, k))
+                    # Add optional columns if missing by inferring approximate positions using token distribution
+                    col_points.sort(key=lambda z: z[0])
+                    # Build ranges between midpoints
+                    ranges = []  # list of (start, end, name)
+                    for idx, (x, name) in enumerate(col_points):
+                        start = x - 30
+                        end = (col_points[idx+1][0] - 15) if idx+1 < len(col_points) else float('inf')
+                        ranges.append((start, end, name))
+                    header_y = min([y for (_, _, y) in best_row])
+
+                    # Group line tokens into rows below the header
+                    row_bins: List[List[Dict[str, Any]]] = []
+                    for ln in lines_structs:
+                        if ln['y'] <= header_y + 10:
+                            continue
+                        if stop_line.search(ln['text']):
+                            break
+                        row_bins.append(ln['tokens'])
+
+                    # Build items from row bins
+                    for row in row_bins:
+                        # Stop early if row is divider or totals
+                        row_text = ' '.join([rt['text'] for rt in row])
+                        if re.search(r"^-+$", row_text) or re.search(r"\bTOTAL\b|Grand\s+Total", row_text, re.I):
+                            break
+                        vals: Dict[str, List[str]] = {n: [] for n in ['no','product','variation','price','qty','subtotal']}
+                        for t in row:
+                            # Assign by x position
+                            name = None
+                            for start, end, nm in ranges:
+                                if start <= t['xmid'] < end:
+                                    name = nm
+                                    break
+                            if not name:
+                                continue
+                            vals.setdefault(name, []).append(t['text'])
+                        def joinv(n):
+                            return ' '.join(vals.get(n, [])).strip()
+                        no_s = joinv('no')
+                        product_s = joinv('product')
+                        variation_s = joinv('variation')
+                        price_s = joinv('price')
+                        qty_s = joinv('qty')
+                        subtotal_s = joinv('subtotal')
+
+                        # Skip empty rows
+                        if not any([product_s, qty_s, price_s, subtotal_s]):
+                            continue
+                        # Parse values
+                        no_val = None
+                        if no_s:
+                            try:
+                                no_val = int(re.sub(r"[^0-9]", "", no_s))
+                            except Exception:
+                                no_val = None
+                        def to_f2(s: str) -> Optional[float]:
+                            try:
+                                return float(re.sub(r"[^0-9\.]", "", s).replace(',', ''))
+                            except Exception:
+                                m = re.search(r"\d[\d,]*(?:\.\d{2})?", s)
+                                return float(m.group(0).replace(',', '')) if m else None
+                        price_val = to_f2(price_s) if price_s else None
+                        qty_val = None
+                        if qty_s:
+                            m = re.search(r"\d{1,3}", qty_s)
+                            if m:
+                                try:
+                                    qty_val = int(m.group(0))
+                                except Exception:
+                                    qty_val = None
+                        subtotal_val = to_f2(subtotal_s) if subtotal_s else None
+
+                        # Save item
+                        if product_s or any(v is not None for v in [qty_val, price_val, subtotal_val]):
+                            items_here.append({
+                                'no': no_val if no_val is not None else (len(items_here)+1),
+                                'product': product_s[:200] if product_s else '',
+                                'variation': variation_s or None,
+                                'productPrice': price_val,
+                                'qty': qty_val,
+                                'subtotal': subtotal_val,
+                            })
+                    if items_here:
+                        parsed_header_section = True
+        except Exception:
+            # Fall back silently
+            pass
+        if shopee_hdr_idx is not None and header_cols:
+            for ln in image_lines[shopee_hdr_idx+1:]:
+                if stop_line.search(ln) or re.search(r"^\s*$", ln):
+                    break
+                it = parse_by_header(ln, header_cols)
+                if it:
+                    items_here.append(it)
+                    parsed_header_section = True
+                # If the line looks like a divider or a totals block, stop
+                if re.search(r"^-+$", ln) or re.search(r"\bTOTAL\b|Grand\s+Total", ln, re.I):
+                    break
+        elif tiktok_hdr_idx is not None and header_cols:
+            for ln in image_lines[tiktok_hdr_idx+1:]:
+                if stop_line.search(ln) or re.search(r"^\s*$", ln):
+                    break
+                it = parse_by_header(ln, header_cols)
+                if it:
+                    # TikTok rows often miss price/subtotal; keep qty+product
+                    items_here.append(it)
+                    parsed_header_section = True
+                if re.search(r"^-+$", ln) or re.search(r"\bTOTAL\b|Grand\s+Total", ln, re.I):
+                    break
+
+        # Region-based tokens parse if header-based parsing didn't find items
+        if not parsed_header_section and lines_structs:
+            # Find y bounds around 'Order Details' block, else use the densest token region before totals
+            y_start = None
+            y_end = None
+            for ln in lines_structs:
+                if re.search(r"^\s*Order\s+Details\b", ln['text'], re.I):
+                    y_start = ln['y'] + 5
+                    break
+            for ln in lines_structs:
+                if y_start is None:
+                    break
+                if ln['y'] <= y_start:
+                    continue
+                if stop_line.search(ln['text']) or re.search(r"Total\s+Quantity", ln['text'], re.I):
+                    y_end = ln['y'] - 3
+                    break
+            if y_start is None and lines_structs:
+                # fallback: start near the first line containing 'No' and 'Product' like text
+                for ln in lines_structs[:10]:
+                    if re.search(r"product|item|description", ln['text'], re.I):
+                        y_start = ln['y'] + 5
+                        break
+            if y_end is None and lines_structs:
+                y_end = lines_structs[-1]['y'] + 3
+
+            def to_fx(s: str) -> Optional[float]:
+                try:
+                    return float(re.sub(r"[^0-9\.]", "", s).replace(',', ''))
+                except Exception:
+                    m = re.search(r"\d[\d,]*(?:\.\d{2})?", s)
+                    return float(m.group(0).replace(',', '')) if m else None
+
+            cur: Optional[Dict[str, Any]] = None
+            for ln in lines_structs:
+                if y_start is not None and ln['y'] < y_start:
+                    continue
+                if y_end is not None and ln['y'] > y_end:
+                    continue
+                if stop_line.search(ln['text']):
+                    break
+                lst = ln['tokens']
+                monies = [ (t['xmid'], t['text']) for t in lst if re.match(r"^[₱$P]?\s*\d[\d,]*(?:\.\d{2})?$", t['text']) ]
+                monies.sort(key=lambda z: z[0])
+                qty_tokens = [ t['text'] for t in lst if re.match(r"^\d{1,3}$", t['text']) ]
+                qty_val = None
+                if qty_tokens:
+                    for q in qty_tokens:
+                        try:
+                            qv = int(q)
+                            if 1 <= qv <= 999:
+                                qty_val = qv
+                                break
+                        except Exception:
+                            pass
+                price_val = to_fx(monies[-2][1]) if len(monies) >= 2 else None
+                subtotal_val = to_fx(monies[-1][1]) if len(monies) >= 1 else None
+                used_texts = set([m for _, m in monies]) | set(qty_tokens)
+                prod_parts = [ t['text'] for t in lst if t['text'] not in used_texts and not re.match(r"^(qty|quantity|subtotal|amount|price|unit)$", t['text'], re.I) and t['text'] != '|' ]
+                product_s = ' '.join(prod_parts).strip()
+
+                # Determine row start: if we have product and any numeric data, start/flush rows
+                start_new = bool(product_s and (qty_val is not None or price_val is not None or subtotal_val is not None))
+                if start_new:
+                    if cur and (cur.get('product') or cur.get('qty') is not None or cur.get('price') is not None or cur.get('subtotal') is not None):
+                        items_here.append({
+                            'no': cur.get('no') or (len(items_here)+1),
+                            'product': (cur.get('product') or '').strip()[:200],
+                            'variation': cur.get('variation'),
+                            'productPrice': cur.get('price'),
+                            'qty': cur.get('qty'),
+                            'subtotal': cur.get('subtotal'),
+                        })
+                    cur = {'no': None, 'product': product_s, 'variation': None, 'price': price_val, 'qty': qty_val, 'subtotal': subtotal_val}
+                else:
+                    # Continuation text without numeric signals; append to last product as variation/details
+                    if cur and product_s:
+                        if cur.get('variation'):
+                            cur['variation'] += ' | ' + product_s
+                        else:
+                            cur['variation'] = product_s
+
+            if cur and (cur.get('product') or cur.get('qty') is not None or cur.get('price') is not None or cur.get('subtotal') is not None):
+                items_here.append({
+                    'no': cur.get('no') or (len(items_here)+1),
+                    'product': (cur.get('product') or '').strip()[:200],
+                    'variation': cur.get('variation'),
+                    'productPrice': cur.get('price'),
+                    'qty': cur.get('qty'),
+                    'subtotal': cur.get('subtotal'),
+                })
+
+        # Fallback generic patterns if header-based parse didn't kick in
+        for ln in image_lines:
+            if stop_line.search(ln):
+                # close current item if any
+                if current and (current.get('qty') is not None or current.get('price') is not None or current.get('subtotal') is not None):
+                    items_here.append({
+                        'no': current.get('no') or (len(items_here) + 1),
+                        'product': (current.get('product') or '').strip()[:200],
+                        'variation': current.get('variation'),
+                        'productPrice': current.get('price'),
+                        'qty': current.get('qty'),
+                        'subtotal': current.get('subtotal'),
+                    })
+                current = None
+                continue
+
+            # Full row: No Product Price Qty Subtotal
+            m_full = re.match(r"^(\d{1,3})\s+(.+?)\s+([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\s+(\d{1,3})\s+([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)$", ln)
+            # Alt row: No Product  Qty x Price = Subtotal
+            m_alt = re.match(r"^(\d{1,3})\s+(.+?)\s+(\d{1,3})\s*[xX]\s*([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)\s*[=|]\s*([₱$P]?\s*\d[\d,]*(?:\.\d{2})?)$", ln)
+            if m_full or m_alt:
+                g = m_full.groups() if m_full else m_alt.groups()
+                try:
+                    no = int(g[0])
+                except Exception:
+                    no = len(items_here) + 1
+                desc = g[1].strip()
+                if m_full:
+                    price_val = to_float(g[2]); qty_val = int(g[3]); subtotal_val = to_float(g[4])
+                else:
+                    qty_val = int(g[2]); price_val = to_float(g[3]); subtotal_val = to_float(g[4])
+                product = desc
+                variation = None
+                if ' - ' in desc:
+                    parts = desc.split(' - ', 1)
+                    product = parts[0].strip(); variation = parts[1].strip()
+                items_here.append({
+                    'no': no,
+                    'product': product[:200],
+                    'variation': variation,
+                    'productPrice': price_val,
+                    'qty': qty_val,
+                    'subtotal': subtotal_val,
+                })
+                current = None
+                continue
+
+            # Continuation/variation lines (short lines without leading No.)
+            if current and not re.match(r"^\d+\s+", ln):
+                if re.search(r"Subtotal|Total", ln, re.I):
+                    continue
+                if re.match(r"(?i)(variation|color|size|type)[:\-]", ln) or ln.startswith('-') or len(ln.split()) <= 6:
+                    added = ln.lstrip('-').strip()
+                    if current.get('variation'):
+                        current['variation'] += f" | {added}"
+                    else:
+                        current['variation'] = added
+                    continue
+
+            # Loose pattern: starts with No and contains monies and a qty somewhere
+            loose = re.match(r"^(\d{1,3})\s+(.+)$", ln)
+            if loose:
+                possible_no = int(loose.group(1))
+                remainder = loose.group(2)
+                monies = money_pat.findall(remainder)
+                qtys = qty_pat.findall(remainder)
+                if len(monies) >= 2 and qtys:
+                    qty_guess = None
+                    for q in qtys:
+                        try:
+                            qv = int(q)
+                            if 1 <= qv <= 999:
+                                qty_guess = qv; break
+                        except Exception:
+                            pass
+                    price_guess = to_float(monies[0]) if monies else None
+                    subtotal_guess = to_float(monies[-1]) if monies else None
+                    if qty_guess is not None and (price_guess is not None or subtotal_guess is not None):
+                        items_here.append({
+                            'no': possible_no,
+                            'product': remainder.strip()[:200],
+                            'variation': None,
+                            'productPrice': price_guess,
+                            'qty': qty_guess,
+                            'subtotal': subtotal_guess,
+                        })
+                        continue
+
+    if items_here:
+            all_items.extend(items_here)
+
+    # Merge lines into text blob to optionally supplement Tesseract text
+    combined_text = '\n'.join(all_lines)
+    return (combined_text, all_items)
+
+
 def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, Any]:
     ext = os.path.splitext(file_path)[-1].lower()
     extracted_text = ""
     layout_items: List[Dict[str, Any]] = []
     plumber_items: List[Dict[str, Any]] = []
     tesseract_items: List[Dict[str, Any]] = []
+    paddle_items: List[Dict[str, Any]] = []
+    paddle_lines_text: str = ''
     vision_items: List[Dict[str, Any]] = []
     ocrspace_items: List[Dict[str, Any]] = []
     page_images: List[Image.Image] = []
+    paddle_page_images: List[Image.Image] = []
+    warnings: List[str] = []
+    diagnostics: Dict[str, Any] = {
+        'ext': ext,
+        'providers': {
+            'pdfplumber': bool('pdfplumber' in globals() and pdfplumber is not None),
+            'paddleocr_available': bool('PaddleOCR' in globals() and PaddleOCR is not None),
+        },
+        'counts': {
+            'pages_ocr': 0,
+            'pages_paddle': 0,
+        }
+    }
 
     if ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
-        img = Image.open(file_path)
-        extracted_text = pytesseract.image_to_string(img)
-        page_images.append(img)
+        try:
+            img = Image.open(file_path)
+            page_images.append(img)
+        except Exception as e:
+            warnings.append(f'image_open_failed: {e}')
+            img = None
+        if img is not None:
+            try:
+                extracted_text = pytesseract.image_to_string(img)
+            except Exception as e:
+                warnings.append(f'tesseract_failed_image: {e}')
 
     elif ext == ".pdf":
         pdf_file = fitz.open(file_path)
@@ -1322,21 +1896,33 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
                     if poppler_path:
                         images = convert_from_path(file_path, first_page=page_num + 1, last_page=page_num + 1, poppler_path=poppler_path)
                         if images:
-                            extracted_text += pytesseract.image_to_string(images[0]) + "\n"
+                            try:
+                                extracted_text += pytesseract.image_to_string(images[0]) + "\n"
+                            except Exception as e:
+                                warnings.append(f'tesseract_failed_pdf_page_{page_num+1}: {e}')
                             page_images.append(images[0])
+                            diagnostics['counts']['pages_ocr'] += 1
                     else:
                         # Fallback: render the page to a pixmap using PyMuPDF, then OCR
                         pix = page.get_pixmap()
                         img = Image.open(io.BytesIO(pix.tobytes("png")))
-                        extracted_text += pytesseract.image_to_string(img) + "\n"
+                        try:
+                            extracted_text += pytesseract.image_to_string(img) + "\n"
+                        except Exception as e:
+                            warnings.append(f'tesseract_failed_pdf_page_{page_num+1}: {e}')
                         page_images.append(img)
+                        diagnostics['counts']['pages_ocr'] += 1
                 except Exception:
                     # As a last resort, try PyMuPDF rasterization
                     try:
                         pix = page.get_pixmap()
                         img = Image.open(io.BytesIO(pix.tobytes("png")))
-                        extracted_text += pytesseract.image_to_string(img) + "\n"
+                        try:
+                            extracted_text += pytesseract.image_to_string(img) + "\n"
+                        except Exception as e:
+                            warnings.append(f'tesseract_failed_pdf_page_{page_num+1}: {e}')
                         page_images.append(img)
+                        diagnostics['counts']['pages_ocr'] += 1
                     except Exception:
                         pass
             # Collect bold-ish lines that include totals / currency for better Grand Total detection
@@ -1356,36 +1942,68 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
                             bold_total_lines.append(line_text)
             except Exception:
                 pass
+            # Additionally, prepare page images for PaddleOCR even when embedded text exists (controlled by env)
+            try:
+                if PaddleOCR is not None and os.environ.get('PADDLE_ON_PDF', '1') in ('1', 'true', 'True'):
+                    try:
+                        mat = fitz.Matrix(2, 2)
+                        pix_pd = page.get_pixmap(matrix=mat)
+                    except Exception:
+                        pix_pd = page.get_pixmap()
+                    img_pd = Image.open(io.BytesIO(pix_pd.tobytes("png")))
+                    paddle_page_images.append(img_pd)
+                    diagnostics['counts']['pages_paddle'] += 1
+            except Exception:
+                pass
 
         # Try pdfplumber table extraction first (best for digital PDFs)
         try:
             plumber_items = _extract_items_from_pdfplumber(file_path)
-        except Exception:
+            if not plumber_items and pdfplumber is None:
+                warnings.append('pdfplumber_unavailable')
+        except Exception as e:
+            warnings.append(f'pdfplumber_failed: {e}')
             plumber_items = []
         # Try layout-based table extraction for items
         try:
             layout_items = _extract_items_from_pdf_layout(file_path)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'layout_extract_failed: {e}')
             layout_items = []
         # Also run Tesseract TSV on rendered images (for scanned PDFs)
         try:
             if page_images:
                 tesseract_items = _extract_items_from_tesseract_images(page_images)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'tesseract_tsv_failed: {e}')
             tesseract_items = []
+        # PaddleOCR for improved table/currency (optional)
+        try:
+            enable_paddle_tables = os.environ.get('ENABLE_PADDLE_TABLES', '0') in ('1','true','True')
+            if enable_paddle_tables and (paddle_page_images or page_images):
+                if PaddleOCR is not None:
+                    paddle_lines_text, paddle_items = _paddle_ocr_extract_lines_and_items(paddle_page_images or page_images)
+                else:
+                    warnings.append('paddleocr_unavailable')
+        except Exception as e:
+            warnings.append(f'paddleocr_failed: {e}')
+            paddle_items = []
+            paddle_lines_text = ''
         # Google Vision OCR fallback if configured
         try:
             api_key = os.environ.get('GOOGLE_CLOUD_API_KEY') or os.environ.get('GOOGLE_API_KEY')
             if page_images and api_key:
                 vision_items = _extract_items_from_google_vision_images(page_images, api_key)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'google_vision_failed: {e}')
             vision_items = []
         # OCR.space fallback if configured
         try:
             ocrspace_key = os.environ.get('OCRSPACE_API_KEY')
             if page_images and ocrspace_key:
                 ocrspace_items = _extract_items_from_ocrspace(page_images, ocrspace_key)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'ocrspace_failed: {e}')
             ocrspace_items = []
 
     elif ext == ".xlsx":
@@ -1399,19 +2017,34 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
     else:
         raise ValueError(f"Unsupported file type: {ext}")
 
-    # Prefer layout-based items; if empty, use tesseract-derived items
+    # Prefer layout-based items; then PaddleOCR-derived items; then Tesseract-derived items
     if not tesseract_items and page_images:
         try:
             tesseract_items = _extract_items_from_tesseract_images(page_images)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'tesseract_tsv_failed: {e}')
             tesseract_items = []
+    # Attempt PaddleOCR if enabled and not already populated, or as a fallback when all other sources are empty
+    enable_paddle_tables = os.environ.get('ENABLE_PADDLE_TABLES', '0') in ('1','true','True')
+    items_empty_before_paddle = not (plumber_items or layout_items or tesseract_items or vision_items or ocrspace_items)
+    if (enable_paddle_tables or items_empty_before_paddle) and (paddle_page_images or page_images) and not paddle_items:
+        try:
+            if PaddleOCR is not None:
+                paddle_lines_text, paddle_items = _paddle_ocr_extract_lines_and_items(paddle_page_images or page_images)
+            else:
+                warnings.append('paddleocr_unavailable')
+        except Exception as e:
+            warnings.append(f'paddleocr_failed: {e}')
+            paddle_items = []
+            paddle_lines_text = ''
     # If still empty and Vision API key present, try Vision OCR
     if not (layout_items or tesseract_items) and page_images:
         try:
             api_key = os.environ.get('GOOGLE_CLOUD_API_KEY') or os.environ.get('GOOGLE_API_KEY')
             if api_key:
                 vision_items = _extract_items_from_google_vision_images(page_images, api_key)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'google_vision_failed: {e}')
             vision_items = []
     # If still empty and OCR.space configured, try it
     if not (layout_items or tesseract_items or vision_items) and page_images:
@@ -1419,10 +2052,56 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
             ocrspace_key = os.environ.get('OCRSPACE_API_KEY')
             if ocrspace_key:
                 ocrspace_items = _extract_items_from_ocrspace(page_images, ocrspace_key)
-        except Exception:
+        except Exception as e:
+            warnings.append(f'ocrspace_failed: {e}')
             ocrspace_items = []
-    items_hint = (plumber_items or []) or (layout_items or []) or (tesseract_items or []) or (vision_items or []) or (ocrspace_items or [])
-    result: Dict[str, Any] = { 'text': extracted_text.strip(), 'layout_items': items_hint }
+    # Item source priority: prefer digital tables via pdfplumber; (optionally Paddle tables);
+    # then layout heuristics; finally Tesseract/others.
+    items_hint_source = None
+    if plumber_items:
+        items_hint = plumber_items
+        items_hint_source = 'pdfplumber'
+    elif (enable_paddle_tables or items_empty_before_paddle) and paddle_items:
+        items_hint = paddle_items
+        items_hint_source = 'paddleocr'
+    elif layout_items:
+        items_hint = layout_items
+        items_hint_source = 'layout'
+    elif tesseract_items:
+        items_hint = tesseract_items
+        items_hint_source = 'tesseract'
+    elif vision_items:
+        items_hint = vision_items
+        items_hint_source = 'vision'
+    else:
+        items_hint = ocrspace_items or []
+        items_hint_source = 'ocrspace' if ocrspace_items else None
+    # If we have PaddleOCR text lines and this is an image (or text is sparse), append as supplemental text for better currency parsing
+    try:
+        # Restore stable behavior: only append Paddle text when explicitly enabled
+        if os.environ.get('APPEND_PADDLE_TEXT', '0') in ('1','true','True') and paddle_lines_text:
+            extracted_text = (extracted_text or '').rstrip() + "\n" + paddle_lines_text
+    except Exception as e:
+        warnings.append(f'append_paddle_text_failed: {e}')
+    # High-level warnings
+    if not (extracted_text or '').strip():
+        warnings.append('no_text_extracted')
+    if not items_hint:
+        warnings.append('no_items_detected')
+    # Diagnostics: counts per source and the chosen source
+    diagnostics.setdefault('items', {})
+    diagnostics['items']['counts'] = {
+        'pdfplumber': len(plumber_items or []),
+        'paddleocr': len(paddle_items or []),
+        'layout': len(layout_items or []),
+        'tesseract': len(tesseract_items or []),
+        'vision': len(vision_items or []),
+        'ocrspace': len(ocrspace_items or []),
+    }
+    diagnostics['items']['selectedSource'] = items_hint_source
+    diagnostics['items']['fallbackByNoItems'] = bool(items_empty_before_paddle)
+
+    result: Dict[str, Any] = { 'text': extracted_text.strip(), 'layout_items': items_hint, 'warnings': warnings, 'diagnostics': diagnostics }
     try:
         if ext == ".pdf":
             # Attach font hints if available
@@ -1484,6 +2163,13 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         'platformVoucher': None,
         'amountInWords': None,
         'items': [],                # parsed line items
+        # Grand total detection indicators
+        'grandTotalDetectedByBold': None,   # bool | None
+        'grandTotalSource': None,           # 'bold' | 'grand_total_line' | 'scored_total' | 'amount_in_words' | 'largest_currency'
+        'grandTotalConfidence': None,       # float [0..1] or None
+        'grandTotalBoldText': None,         # the bold line text used, if any
+        'grandTotalVerifiedByBreakdown': None, # bool | None
+        'grandTotalVerifiedDelta': None,    # float | None
     }
 
     # Extract date (first match wins)
@@ -1697,6 +2383,7 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
     # Extract total: prefer bold font lines when available (from PDF hints)
     if font_hints and isinstance(font_hints.get('bold_total_lines'), list):
         bold_lines = [str(x) for x in font_hints.get('bold_total_lines')]
+        # First, look for an explicit "Grand Total" on a bold line with a currency
         for bl in bold_lines:
             # Require a currency symbol on bold line for high confidence
             if not re.search(r"[₱$€£]", bl):
@@ -1706,16 +2393,54 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
                 try:
                     found['total'] = float(m.group(1).replace(',', '').lstrip('₱$P').strip())
                     found['grandTotal'] = found['total']
+                    found['grandTotalDetectedByBold'] = True
+                    found['grandTotalSource'] = 'bold'
+                    found['grandTotalConfidence'] = 0.95
+                    found['grandTotalBoldText'] = bl
                     # try currency
                     if not found.get('currency'):
                         if '₱' in bl or re.search(r"\bPHP\b|Peso", bl, re.I):
                             found['currency'] = 'PHP'
                         elif '$' in bl or re.search(r"\bUSD\b", bl):
                             found['currency'] = 'USD'
-                    # If bold gave us total, we can skip further total detection
-                    grand_total_direct = found['total']
                 except Exception:
                     pass
+        # If still no total, pick the largest bold Peso amount line that doesn't look like a component
+        if found.get('total') is None:
+            best_amt = None
+            best_line = None
+            # Exclude lines that clearly refer to non-grand components
+            non_total_kw = re.compile(r"shipping|subtotal|discount|voucher|coupon|tax|vat|handling|service|delivery", re.I)
+            for bl in bold_lines:
+                # Only consider lines with an actual Peso sign per user guidance
+                if '₱' not in bl:
+                    continue
+                if non_total_kw.search(bl):
+                    continue
+                am = re.findall(r"₱\s*([0-9][\d,]*(?:\.\d{2})?)", bl)
+                if not am:
+                    continue
+                # choose the largest amount on the line
+                try:
+                    vals = [float(x.replace(',', '')) for x in am]
+                except Exception:
+                    continue
+                cand = max(vals) if vals else None
+                if cand is None:
+                    continue
+                # Prefer the largest among all bold Peso lines
+                if best_amt is None or cand > best_amt:
+                    best_amt = cand
+                    best_line = bl
+            if best_amt is not None:
+                found['total'] = best_amt
+                found['grandTotal'] = best_amt
+                found['grandTotalDetectedByBold'] = True
+                found['grandTotalSource'] = 'bold'
+                found['grandTotalConfidence'] = 0.96
+                found['grandTotalBoldText'] = best_line
+                if not found.get('currency'):
+                    found['currency'] = 'PHP'
 
     # Extract total: prefer explicit 'Grand Total' lines first (in plain text, allow next-line amount)
     if found.get('total') is None:
@@ -1765,7 +2490,11 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
                 gt_candidates.append((amt, score, idx, has_cur))
         if gt_candidates:
             gt_candidates.sort(key=lambda x: (x[1], x[3], x[0]))
-            found['total'] = gt_candidates[-1][0]
+            best_val, best_score, _best_idx, best_has_cur = gt_candidates[-1]
+            found['total'] = best_val
+            found['grandTotalDetectedByBold'] = False if found.get('grandTotalDetectedByBold') is None else found['grandTotalDetectedByBold']
+            found['grandTotalSource'] = 'grand_total_line'
+            found['grandTotalConfidence'] = 0.85 if best_has_cur else 0.75
 
     # Extract total with prioritization & scoring (fallback)
     candidate_totals: list[tuple[float, str, int]] = []  # (value, currency, score)
@@ -1810,6 +2539,9 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         chosen_val, chosen_cur, _ = candidate_totals[-1]
         found['total'] = chosen_val
         found['currency'] = chosen_cur
+        found['grandTotalDetectedByBold'] = False
+        found['grandTotalSource'] = 'scored_total'
+        found['grandTotalConfidence'] = 0.7 if chosen_cur else 0.6
 
     # Fallback: amount-in-words parsing if still no total
     if found['total'] is None:
@@ -1817,6 +2549,9 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         if words_total is not None:
             found['total'] = words_total
             found['amountInWords'] = words_total
+            found['grandTotalDetectedByBold'] = False
+            found['grandTotalSource'] = 'amount_in_words'
+            found['grandTotalConfidence'] = 0.55
             # Attempt to guess currency from text (default to PHP if 'peso' present)
             for line in lines:
                 if re.search(r"peso", line, re.I):
@@ -1849,6 +2584,9 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         if best_val is not None:
             found['total'] = best_val
             found['currency'] = best_cur
+            found['grandTotalDetectedByBold'] = False
+            found['grandTotalSource'] = 'largest_currency'
+            found['grandTotalConfidence'] = 0.5 if best_cur else 0.45
 
     # Monetary breakdown lines with fuzzy label matching
     canonical_money_labels: Dict[str, List[str]] = {
@@ -2644,6 +3382,17 @@ def _extract_structured(text: str, layout_items: Optional[List[Dict[str, Any]]] 
         if sum_items > 0:
             found['merchandiseSubtotal'] = sum_items
 
+    # Verify grand total via breakdown arithmetic when possible
+    gt_val = found.get('grandTotal') if 'grandTotal' in found else found.get('total')
+    if isinstance(gt_val, (int, float)) and isinstance(found.get('merchandiseSubtotal'), (int, float)):
+        merch = float(found.get('merchandiseSubtotal') or 0)
+        ship_fee = float(found.get('shippingFee') or 0)
+        ship_disc = float(found.get('shippingDiscount') or 0)
+        voucher = float(found.get('platformVoucher') or 0)
+        computed = merch + ship_fee + ship_disc + voucher
+        delta = float(gt_val) - computed
+        found['grandTotalVerifiedByBreakdown'] = abs(delta) <= 0.01
+        found['grandTotalVerifiedDelta'] = round(delta, 2)
     # Attach raw key-value map for debugging (optional)
     found['rawKeyValue'] = kv_map
 
@@ -2924,6 +3673,8 @@ def main():
         text = result['text'] if isinstance(result, dict) else str(result)
         layout_items = result.get('layout_items') if isinstance(result, dict) else None
         font_hints = result.get('font_hints') if isinstance(result, dict) else None
+        warnings = result.get('warnings') if isinstance(result, dict) else []
+        diagnostics = result.get('diagnostics') if isinstance(result, dict) else None
         structured = _extract_structured(text, layout_items, font_hints)
         standard_overview = _build_standard_overview(structured)
         print(json.dumps({
@@ -2931,7 +3682,9 @@ def main():
             "error": None,
             "text": text,
             "structured": structured,
-            "standardOverview": standard_overview
+            "standardOverview": standard_overview,
+            "warnings": warnings,
+            "diagnostics": diagnostics
         }))
     except Exception as e:
         print(json.dumps({
