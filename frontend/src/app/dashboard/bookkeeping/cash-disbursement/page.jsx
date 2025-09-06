@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -361,21 +361,35 @@ export default function CashDisbursementPage() {
   };
 
   // Load disbursements from backend and map to table rows
-  useEffect(() => {
-    const fetchDisbursements = async () => {
-      try {
-        const res = await axios.get('/api/bookkeeping/cash-disbursements');
-        const list = res?.data?.data?.disbursements || [];
-        const mapped = list.map(mapDisbursementToRow);
-        setRows(mapped);
-      } catch (err) {
-        console.error('Failed to load cash disbursements:', err);
-        // Do not fallback to mock so the UI reflects actual backend state
-        // Leave rows as-is to avoid showing sample data
-      }
-    };
-    fetchDisbursements();
+  const fetchDisbursements = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/bookkeeping/cash-disbursements');
+      const list = res?.data?.data?.disbursements || [];
+      const mapped = list.map(mapDisbursementToRow);
+      setRows(mapped);
+    } catch (err) {
+      console.error('Failed to load cash disbursements:', err);
+    }
   }, []);
+
+  useEffect(() => { fetchDisbursements(); }, [fetchDisbursements]);
+
+  // Auto-refresh flag listener
+  useEffect(() => {
+    const KEY = 'cashDisbursementsNeedsRefresh';
+    const check = () => {
+      try {
+        if (window.localStorage.getItem(KEY) === '1') {
+          window.localStorage.setItem(KEY, '0');
+          fetchDisbursements();
+        }
+      } catch (_) {}
+    };
+    const onStorage = (e) => { if (e.key === KEY && e.newValue === '1') check(); };
+    window.addEventListener('storage', onStorage);
+    const timer = setInterval(check, 4000);
+    return () => { window.removeEventListener('storage', onStorage); clearInterval(timer); };
+  }, [fetchDisbursements]);
 
   const TOTALS = useMemo(() => {
     const totals = {
@@ -487,10 +501,13 @@ export default function CashDisbursementPage() {
           </Box>
           
           <Stack direction="row" spacing={1}>
-            <IconButton sx={{ color: 'success.main' }}>
+            <IconButton sx={{ color: 'text.secondary' }} title="Refresh" onClick={() => fetchDisbursements()}>
+              <Iconify icon="eva:refresh-fill" />
+            </IconButton>
+            <IconButton sx={{ color: 'success.main' }} title="Export">
               <Iconify icon="logos:excel" />
             </IconButton>
-            <IconButton sx={{ color: 'text.secondary' }}>
+            <IconButton sx={{ color: 'text.secondary' }} title="Print">
               <Iconify icon="eva:printer-fill" />
             </IconButton>
             <IconButton aria-label="scroll left" onClick={() => nudgeScroll('left')}>

@@ -7,3 +7,4 @@ requests>=2.31.0
 pdfplumber>=0.11.0
 # Optional: for improved OCR on tables/currency (install matching paddlepaddle for your OS)
 paddleocr>=2.7.0
+openpyxl>=3.1.0

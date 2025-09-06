@@ -28,6 +28,13 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Switch from '@mui/material/Switch';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Paper from '@mui/material/Paper';
 
 import { DashboardContent } from 'src/layouts/dashboard';
 import { Iconify } from 'src/components/iconify';
@@ -96,7 +103,7 @@ const steps = [
             confidence: 95,
             suggested: true
           },
-          {
+            {
             id: 3,
             description: 'Facebook Ads Campaign',
             amount: 1500,
@@ -252,6 +259,12 @@ export default function UploadProcessPage() {
   const [step3Initialized, setStep3Initialized] = useState(false);
   const [lastTransferBooks, setLastTransferBooks] = useState({ counts: {}, total: 0 });
   const [categoryOverrides, setCategoryOverrides] = useState({});
+  // Sales ingestion mode & rows
+  const [salesMode, setSalesMode] = useState(false); // true when Excel sales file uploaded
+  const [salesRows, setSalesRows] = useState([]); // normalized sales rows from backend (date, platform, order_id, etc.)
+  const [salesPosting, setSalesPosting] = useState(false);
+  const [salesPosted, setSalesPosted] = useState(false);
+  const [salesPostLog, setSalesPostLog] = useState([]); // log strings
 
   // Load overrides once on mount
   useEffect(() => { setCategoryOverrides(loadCategoryOverrides()); }, []);
@@ -356,7 +369,7 @@ export default function UploadProcessPage() {
     const categoriesSet = new Set();
     const counts = { journal: 0, 'cash-disbursements': 0, 'cash-receipts': 0 };
     try {
-      for (let i = 0; i < items.length; i++) {
+  for (let i = 0; i < items.length; i++) {
         const t = items[i];
         const amt = Math.abs(Number(t.amount) || 0);
         const cls = classifyCategory(t.aiCategory);
@@ -473,6 +486,12 @@ export default function UploadProcessPage() {
       setCompleted(newCompleted);
       setActiveStep(3);
       setLastTransferBooks({ counts, total: items.length });
+      // Set refresh flags for affected books
+      try {
+        window.localStorage.setItem('ledgerNeedsRefresh','1');
+        if (counts['cash-disbursements']>0) window.localStorage.setItem('cashDisbursementsNeedsRefresh','1');
+        if (counts['cash-receipts']>0) window.localStorage.setItem('cashReceiptsNeedsRefresh','1');
+      } catch(_) {}
       // Navigate to journal as the primary book for review
       setTimeout(() => router.push('/dashboard/bookkeeping/general-journal'), 300);
     } catch (err) {
@@ -623,9 +642,32 @@ export default function UploadProcessPage() {
   const structuredAccumulator = {};
   const canonicalAccumulator = {};
   const warningsAccumulator = {};
+      const salesAccumulator = [];
       for (const file of uploadedFiles) {
         const formData = new FormData();
         formData.append('file', file, file.name);
+        // Detect spreadsheet for sales ingestion (xlsx/xls)
+        const ext = file.name.split('.').pop()?.toLowerCase();
+        const isSpreadsheet = ['xlsx','xls'].includes(ext || '');
+        if (isSpreadsheet) {
+          try {
+            const res = await axios.post('/api/ai/sales-ingest', formData, {
+              onUploadProgress: (evt) => {
+                const percent = Math.round((evt.loaded * 100) / (evt.total || 1));
+                setUploadLogs((prev) => [...prev, `Uploading (sales) ${file.name}: ${percent}%`]);
+              },
+            });
+            const normalized = res?.data?.data?.normalized || [];
+            if (Array.isArray(normalized)) {
+              normalized.forEach(r => salesAccumulator.push(r));
+              setSalesMode(true);
+            }
+            setUploadLogs((prev) => [...prev, `Processed sales file ${file.name} (${file.size} bytes)`]);
+          } catch (e) {
+            setUploadLogs((prev) => [...prev, `Sales ingest failed for ${file.name}: ${e.message}`]);
+          }
+          continue; // skip generic OCR path
+        }
         const res = await axios.post('/api/ai/upload', formData, {
           onUploadProgress: (evt) => {
             const percent = Math.round((evt.loaded * 100) / (evt.total || 1));
@@ -642,13 +684,20 @@ export default function UploadProcessPage() {
         if (Array.isArray(warnings)) warningsAccumulator[file.name] = warnings;
         setUploadLogs((prev) => [...prev, `Processed ${file.name} (${file.size} bytes)`]);
       }
+      if (salesAccumulator.length) {
+        setSalesRows(salesAccumulator);
+      }
       setOcrTexts(results);
       setOcrStructured(structuredAccumulator);
       setOcrCanonical(canonicalAccumulator);
       setOcrWarnings(warningsAccumulator);
-      // Build transactions from OCR text
-      const parsed = parseOcrToTransactions(results, structuredAccumulator, canonicalAccumulator).map(t => ({ ...t, autoBook: true }));
-      setTransactions(parsed);
+      // Build transactions only for expense (non-sales) mode
+      if (!salesMode) {
+        const parsed = parseOcrToTransactions(results, structuredAccumulator, canonicalAccumulator).map(t => ({ ...t, autoBook: true }));
+        setTransactions(parsed);
+      } else {
+        setTransactions([]); // clear any prior expense transactions
+      }
 
       // Accumulate KPIs on each successful upload batch
       try {
@@ -688,7 +737,7 @@ export default function UploadProcessPage() {
         } catch (_) { /* ignore */ }
       } catch (_) { /* ignore */ }
       // Mark only Step 0 complete and go to AI Recognition (Step 1)
-      const newCompleted = { ...completed, 0: true };
+  const newCompleted = { ...completed, 0: true };
       setCompleted(newCompleted);
       setActiveStep(1);
     } catch (err) {
@@ -821,14 +870,99 @@ export default function UploadProcessPage() {
         return (
           <Box>
             <Typography variant="h6" sx={{ mb: 2 }}>
-              AI Recognition
+              {salesMode ? 'Sales Preview (User Confirmation)' : 'Invoice Preview (User Confirmation)'}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-              Converted text from your documents.
+              {salesMode
+                ? 'Review normalized sales data extracted from your spreadsheet. Mapping applied. Click Next to proceed to Data Transfer.'
+                : 'Review the structured invoice extraction. You can adjust categorization before transfer in the next step.'}
             </Typography>
-
-            {/* Structured OCR Text Preview */}
-            {Object.keys(ocrTexts || {}).length > 0 && (
+            {salesMode && (
+              <Card sx={{ p:2, mb:3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 2 }}>Sales Summary</Typography>
+                {salesRows.length === 0 && <Alert severity="info">No sales rows detected.</Alert>}
+                {salesRows.length > 0 && (
+                  <TableContainer component={Paper} sx={{ maxHeight: 460 }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Platform</TableCell>
+                          <TableCell>Order ID</TableCell>
+                          <TableCell align="right">Total Revenue</TableCell>
+                          <TableCell align="right">Fees & Charges</TableCell>
+                          <TableCell align="right">Withholding Tax</TableCell>
+                          <TableCell align="right">Cash Received</TableCell>
+                          <TableCell>Remarks</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {salesRows.map((r, idx) => (
+                          <TableRow key={idx} hover>
+                            <TableCell>{r.date}</TableCell>
+                            <TableCell>{r.platform}</TableCell>
+                            <TableCell>{r.order_id || r.orderId || ''}</TableCell>
+                            <TableCell align="right">{Number(r.total_revenue||0).toLocaleString()}</TableCell>
+                            <TableCell align="right">{Number(r.fees||0).toLocaleString()}</TableCell>
+                            <TableCell align="right">{Number(r.withholding_tax||0).toLocaleString()}</TableCell>
+                            <TableCell align="right">{Number(r.cash_received||0).toLocaleString()}</TableCell>
+                            <TableCell>{`To record sales for the day – ${r.platform}`}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+                {/* Field Mapping Rules */}
+                <Box sx={{ mt:3 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>📌 Field Mapping Rules</Typography>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} md={6}>
+                      <Card variant="outlined" sx={{ p:2, height: '100%' }}>
+                        <Typography variant="body2" sx={{ fontWeight:600, mb:1 }}>🟣 TikTok</Typography>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontSize:12, fontWeight:600 }}>Excel Column</TableCell>
+                              <TableCell sx={{ fontSize:12, fontWeight:600 }}>Normalized Field</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Total Revenue</TableCell><TableCell sx={{ fontSize:12 }}>Total Revenue</TableCell></TableRow>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Total Fees</TableCell><TableCell sx={{ fontSize:12 }}>Fees & Charges</TableCell></TableRow>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Adjustment Amount (Withholding)</TableCell><TableCell sx={{ fontSize:12 }}>Withholding Tax</TableCell></TableRow>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Total Settlement Amount</TableCell><TableCell sx={{ fontSize:12 }}>Cash Received</TableCell></TableRow>
+                          </TableBody>
+                        </Table>
+                      </Card>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <Card variant="outlined" sx={{ p:2, height: '100%' }}>
+                        <Typography variant="body2" sx={{ fontWeight:600, mb:1 }}>🟠 Shopee</Typography>
+                        <Table size="small">
+                          <TableHead>
+                            <TableRow>
+                              <TableCell sx={{ fontSize:12, fontWeight:600 }}>Excel Column</TableCell>
+                              <TableCell sx={{ fontSize:12, fontWeight:600 }}>Normalized Field</TableCell>
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Original Price (Purple)</TableCell><TableCell sx={{ fontSize:12 }}>Total Revenue</TableCell></TableRow>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Platform Fees (Blue)</TableCell><TableCell sx={{ fontSize:12 }}>Fees & Charges</TableCell></TableRow>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Withholding Tax (Orange)</TableCell><TableCell sx={{ fontSize:12 }}>Withholding Tax</TableCell></TableRow>
+                            <TableRow><TableCell sx={{ fontSize:12 }}>Total Released Amount (Green)</TableCell><TableCell sx={{ fontSize:12 }}>Cash Received</TableCell></TableRow>
+                          </TableBody>
+                        </Table>
+                      </Card>
+                    </Grid>
+                  </Grid>
+                  <Alert severity="info" sx={{ mt:2 }}>
+                    Mapping applied automatically during ingestion. Proceed to Data Transfer to post entries.
+                  </Alert>
+                </Box>
+              </Card>
+            )}
+            {!salesMode && Object.keys(ocrTexts || {}).length > 0 && (
               <Box sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" sx={{ mb: 1 }}>Structured Invoice Preview</Typography>
                 <Stack spacing={2}>
@@ -843,38 +977,26 @@ export default function UploadProcessPage() {
                     const fmtAmt = (v) => (v === 0 || (v != null && v !== '' && !Number.isNaN(Number(v))))
                       ? `${currency}${Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                       : '[N/A]';
-                    // Simplified order details: Product | Qty | Price (unit)
                     const pad = (v = '', w = 10) => String(v || '').padEnd(w).slice(0, w);
                     const rpad = (v = '', w = 10) => String(v || '').padStart(w).slice(-w);
                     const hdr = `${pad('Product',60)}  ${rpad('Qty',5)}  ${rpad('Price',14)}`;
-                    // Prefer canonical items (order_details) then fallback to structured items
-                    const items = Array.isArray(c?.order_details) && c.order_details.length
-                      ? c.order_details
-                      : (Array.isArray(s.items) ? s.items : []);
-                    const itemsText = Array.isArray(items) && items.length
-                      ? [
-                          hdr,
-                          '-'.repeat(hdr.length),
-                          ...items.map((it) => {
-                            const prod = (it.product || '').replace(/\s+/g, ' ');
-                            const qty = (it.qty != null) ? String(it.qty) : '';
-                            const price = (it.productPrice != null) ? Number(it.productPrice) : '';
-                            const priceStr = typeof price === 'number' ? Number(price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
-                            return `${pad(prod,60)}  ${rpad(qty,5)}  ${rpad(priceStr,14)}`;
-                          })
-                        ].join('\n')
-                      : '[N/A]';
+                    const items = Array.isArray(c?.order_details) && c.order_details.length ? c.order_details : (Array.isArray(s.items) ? s.items : []);
+                    const itemsText = Array.isArray(items) && items.length ? [hdr,'-'.repeat(hdr.length),...items.map(it => {
+                      const prod = (it.product || '').replace(/\s+/g,' ');
+                      const qty = (it.qty != null) ? String(it.qty) : '';
+                      const price = (it.productPrice != null) ? Number(it.productPrice) : '';
+                      const priceStr = typeof price === 'number' ? Number(price).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '';
+                      return `${pad(prod,60)}  ${rpad(qty,5)}  ${rpad(priceStr,14)}`;
+                    })].join('\n') : '[N/A]';
                     return (
-                      <Card key={name} sx={{ p: 2, bgcolor: 'grey.50' }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>{name}</Typography>
+                      <Card key={name} sx={{ p:2, bgcolor:'grey.50' }}>
+                        <Typography variant="body2" sx={{ fontWeight:600, mb:1 }}>{name}</Typography>
                         {Array.isArray(warns) && warns.length > 0 && (
-                          <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
-                            {warns.map((w, idx) => (
-                              <Chip key={idx} size="small" color="warning" variant="outlined" label={String(w).slice(0, 80)} />
-                            ))}
+                          <Stack direction="row" spacing={1} sx={{ mb:1, flexWrap:'wrap' }}>
+                            {warns.map((w,i) => <Chip key={i} size="small" color="warning" variant="outlined" label={String(w).slice(0,80)} />)}
                           </Stack>
                         )}
-                        <Box sx={{ fontFamily: 'monospace', whiteSpace: 'pre-wrap', fontSize: '0.72rem', lineHeight: 1.4 }}>
+                        <Box sx={{ fontFamily:'monospace', whiteSpace:'pre-wrap', fontSize:'0.72rem', lineHeight:1.4 }}>
 {`Seller Name: ${na(cFields.sellerName || s.supplier)}
 Seller Address: ${na(cFields.sellerAddress || s.sellerAddress)}
 
@@ -895,194 +1017,193 @@ Merchandise Subtotal: ${fmtAmt(cAmts.merchandiseSubtotal ?? s.merchandiseSubtota
 Shipping Fee: ${fmtAmt(cAmts.shippingFee ?? s.shippingFee)}
 Shipping Discount: ${fmtAmt(cAmts.shippingDiscount ?? s.shippingDiscount)}
 Total Platform Voucher Applied: ${fmtAmt(cAmts.platformVoucher ?? s.platformVoucher)}
-Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}
-`}
+Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
                         </Box>
-                        {/* Grand Total Indicators */}
-                        {(() => {
-                          const gtDetectedBold = (cFields.grandTotalDetectedByBold ?? s.grandTotalDetectedByBold);
-                          const gtSource = (cFields.grandTotalSource ?? s.grandTotalSource);
-                          const gtConf = (typeof (cFields.grandTotalConfidence ?? s.grandTotalConfidence) === 'number')
-                            ? Number(cFields.grandTotalConfidence ?? s.grandTotalConfidence)
-                            : null;
-                          const gtVerified = (cFields.grandTotalVerifiedByBreakdown ?? s.grandTotalVerifiedByBreakdown);
-                          const gtDelta = (typeof (cFields.grandTotalVerifiedDelta ?? s.grandTotalVerifiedDelta) === 'number')
-                            ? Number(cFields.grandTotalVerifiedDelta ?? s.grandTotalVerifiedDelta)
-                            : null;
-                          const gtBoldText = (cFields.grandTotalBoldText ?? s.grandTotalBoldText) || '';
-                          const cur = currency;
-                          const prettyDelta = (d) => `${cur}${Math.abs(Number(d) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                          if (
-                            gtDetectedBold == null && gtSource == null && gtConf == null && gtVerified == null && gtDelta == null
-                          ) return null;
-                          return (
-                            <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
-                              {gtVerified === true && (
-                                <Chip size="small" color="success" label="Grand total verified" icon={<Iconify icon="eva:checkmark-circle-2-fill" />} />
-                              )}
-                              {gtVerified === false && (
-                                <Chip size="small" color="warning" label={`Grand total mismatch Δ ${prettyDelta(gtDelta)}`} icon={<Iconify icon="eva:alert-triangle-fill" />} />
-                              )}
-                              {gtVerified == null && (
-                                <Chip size="small" color="default" label="Verification unavailable" />
-                              )}
-                              {gtDetectedBold === true && (
-                                gtBoldText ? (
-                                  <Tooltip title={<Box sx={{ maxWidth: 420, whiteSpace: 'pre-wrap' }}>{gtBoldText}</Box>}>
-                                    <Chip size="small" color="info" label="Detected from bold text" />
-                                  </Tooltip>
-                                ) : (
-                                  <Chip size="small" color="info" label="Detected from bold text" />
-                                )
-                              )}
-                              {gtSource && (
-                                <Chip size="small" variant="outlined" label={`Source: ${gtSource}`} />
-                              )}
-                              {typeof gtConf === 'number' && (
-                                <Chip size="small" variant="outlined" label={`Confidence: ${Math.round(gtConf * 100)}%`} />
-                              )}
-                            </Stack>
-                          );
-                        })()}
-                        <Typography variant="caption" sx={{ display: 'block', mt: 1, opacity: 0.6 }}>
-                          Raw OCR snippet: {raw ? String(raw).slice(0, 140) : '(no text)'}{raw && String(raw).length > 140 ? '…' : ''}
-                        </Typography>
                       </Card>
                     );
                   })}
                 </Stack>
               </Box>
             )}
-          </Box>
-        );
-
-      case 3:
-        return (
-          <Box>
-            <Typography variant="h6" sx={{ mb: 2 }}>
-              Review & Confirm
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
-              Verify each detected transaction. Auto routing is enabled by default; toggle off to override the Book. Then start transfer.
-            </Typography>
-
-            {(!transactions || transactions.length === 0) ? (
-              <Alert severity="info">No transactions detected. Upload files in Step 0 and proceed.</Alert>
-            ) : (
-              <Card sx={{ p: 2, mb: 3 }}>
+            {/* For invoice mode allow transaction editing in confirmation */}
+            {!salesMode && transactions.length > 0 && (
+              <Card sx={{ p:2, mb:3 }}>
+                <Typography variant="subtitle2" sx={{ mb:1 }}>Detected Transactions (Editable)</Typography>
                 <Stack spacing={1}>
-                  {transactions.map((t) => (
-                    <Stack key={t.id} direction="row" alignItems="center" spacing={2}>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
-                        <Typography variant="body2" noWrap title={t.description} sx={{ fontWeight: 600 }}>
-                          {t.description}
-                        </Typography>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          ₱{Number(t.amount || 0).toLocaleString()} • {t.aiCategory}
-                        </Typography>
+                  {transactions.map(t => (
+                    <Stack key={t.id} direction="row" spacing={2} alignItems="center">
+                      <Box sx={{ flex:1, minWidth:0 }}>
+                        <Typography variant="body2" noWrap title={t.description} sx={{ fontWeight:600 }}>{t.description}</Typography>
+                        <Typography variant="caption" sx={{ color:'text.secondary' }}>₱{Number(t.amount||0).toLocaleString()} • {t.aiCategory}</Typography>
                       </Box>
-                      {t.fileUrl ? (
-                        <Button
-                          size="small"
-                          color="info"
-                          component="a"
-                          href={t.fileUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          startIcon={<Iconify icon="eva:external-link-fill" />}
-                        >
-                          View invoice
-                        </Button>
-                      ) : (
-                        <Button size="small" disabled startIcon={<Iconify icon="eva:external-link-fill" />}>View invoice</Button>
-                      )}
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            size="small"
-                            checked={!!t.autoBook}
-                            onChange={(e) => setTransactions(prev => prev.map(x => x.id === t.id ? { ...x, autoBook: e.target.checked } : x))}
-                          />
-                        }
-                        label="Auto"
-                      />
-                      <TextField
-                        select
-                        size="small"
-                        label="Book"
-                        value={t.autoBook ? inferBookFromCategory(t.aiCategory) : (t.book || inferBookFromCategory(t.aiCategory))}
-                        onChange={(e) => setTransactions(prev => prev.map(x => x.id === t.id ? { ...x, book: e.target.value, autoBook: false } : x))}
-                        sx={{ minWidth: 240 }}
-                        disabled={!!t.autoBook}
-                      >
-                        {BOOK_OPTIONS.map((opt) => (
-                          <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                        ))}
+                      <FormControlLabel control={<Switch size="small" checked={!!t.autoBook} onChange={(e)=> setTransactions(prev=> prev.map(x=> x.id===t.id?{...x, autoBook:e.target.checked}:x))} />} label="Auto" />
+                      <TextField select size="small" label="Book" value={t.autoBook ? inferBookFromCategory(t.aiCategory) : (t.book || inferBookFromCategory(t.aiCategory))} onChange={(e)=> setTransactions(prev=> prev.map(x=> x.id===t.id?{...x, book:e.target.value, autoBook:false}:x))} sx={{ minWidth:220 }} disabled={!!t.autoBook}>
+                        {BOOK_OPTIONS.map(opt => <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>)}
                       </TextField>
-                      <Button size="small" startIcon={<Iconify icon="eva:edit-fill" />} onClick={() => handleEditTransaction(t)}>Edit</Button>
+                      <Button size="small" startIcon={<Iconify icon="eva:edit-fill" />} onClick={()=> handleEditTransaction(t)}>Edit</Button>
                     </Stack>
                   ))}
                 </Stack>
               </Card>
             )}
-
-            <Box sx={{ mb: 3 }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                <Typography variant="body2">Transfer Progress</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                  {transferState.transferred}/{transferState.total} completed
-                </Typography>
-              </Stack>
-              <LinearProgress
-                variant="determinate"
-                value={transferState.total ? Math.min(100, Math.round((transferState.transferred / transferState.total) * 100)) : 0}
-                sx={{ height: 10, borderRadius: 5 }}
-              />
-            </Box>
-
-            <Stack direction="row" justifyContent="flex-end">
-              <Button variant="contained" disabled={processing || !transactions?.length} onClick={handleTransfer} startIcon={<Iconify icon="eva:arrow-forward-fill" />}>
-                {processing ? 'Transferring...' : 'Start Transfer'}
-              </Button>
-            </Stack>
-
-            {transferState.transferred === transferState.total && transferState.total > 0 && (
-              <Alert severity="success" sx={{ mt: 2 }}>
-                <Box>
-                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
-                    All transactions have been successfully transferred.
-                  </Typography>
-                  {/* Quick links to affected books */}
-                  {lastTransferBooks && lastTransferBooks.total > 0 && (
-                    <Stack direction="row" spacing={1} flexWrap="wrap">
-                      {Object.entries(lastTransferBooks.counts).map(([book, count]) => {
-                        const routeMap = {
-                          'cash-receipts': '/dashboard/bookkeeping/cash-receipt',
-                          'cash-disbursements': '/dashboard/bookkeeping/cash-disbursement',
-                          'journal': '/dashboard/bookkeeping/general-journal',
-                          'ledger': '/dashboard/bookkeeping/general-ledger',
-                        };
-                        const labelMap = {
-                          'cash-receipts': 'View Cash Receipt Journal',
-                          'cash-disbursements': 'View Cash Disbursement Book',
-                          'journal': 'View General Journal',
-                          'ledger': 'View General Ledger',
-                        };
-                        const dest = routeMap[book] || '/dashboard/bookkeeping/general-journal';
-                        const label = labelMap[book] || 'View Journal';
-                        return (
-                          <Button key={book} size="small" variant="outlined" onClick={() => router.push(dest)}>
-                            {label} ({count})
-                          </Button>
-                        );
-                      })}
-                    </Stack>
-                  )}
-                </Box>
-              </Alert>
-            )}
           </Box>
         );
+      case 3:
+        return (
+          <Box>
+            <Typography variant="h6" sx={{ mb:2 }}>{salesMode ? 'Data Transfer (Sales Posting)' : 'Data Transfer'}</Typography>
+            <Typography variant="body2" sx={{ color:'text.secondary', mb:3 }}>
+              {salesMode ? 'Post the reviewed sales rows to the books.' : 'Transfer confirmed transactions to the appropriate books.'}
+            </Typography>
+            {salesMode && (
+              <Card sx={{ p:2, mb:3 }}>
+                <Typography variant="subtitle2" sx={{ mb: 2 }}>Sales Summary</Typography>
+                {salesRows.length === 0 && (
+                  <Alert severity="info">No sales rows detected.</Alert>
+                )}
+                {salesRows.length > 0 && (
+                  <TableContainer component={Paper} sx={{ maxHeight: 460 }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Platform</TableCell>
+                          <TableCell>Order ID</TableCell>
+                          <TableCell align="right">Total Revenue</TableCell>
+                          <TableCell align="right">Fees & Charges</TableCell>
+                          <TableCell align="right">Withholding Tax</TableCell>
+                          <TableCell align="right">Cash Received</TableCell>
+                          <TableCell>Remarks</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {salesRows.map((r, idx) => (
+                          <TableRow key={idx} hover>
+                            <TableCell>{r.date}</TableCell>
+                            <TableCell>{r.platform}</TableCell>
+                            <TableCell>{r.order_id || r.orderId || ''}</TableCell>
+                            <TableCell align="right">{Number(r.total_revenue||0).toLocaleString()}</TableCell>
+                            <TableCell align="right">{Number(r.fees||0).toLocaleString()}</TableCell>
+                            <TableCell align="right">{Number(r.withholding_tax||0).toLocaleString()}</TableCell>
+                            <TableCell align="right">{Number(r.cash_received||0).toLocaleString()}</TableCell>
+                            <TableCell>{`To record sales for the day – ${r.platform}`}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+                <Alert severity="info" sx={{ mt:2 }}>
+                  Field Mapping Applied Automatically (TikTok: Total Revenue → Total Revenue, Total Fees → Fees & Charges, Adjustment Amount (Withholding) → Withholding Tax, Total Settlement Amount → Cash Received. Shopee: Original Price (Purple) → Total Revenue, Platform Fees (Blue) → Fees & Charges, Withholding Tax (Orange) → Withholding Tax, Total Released Amount (Green) → Cash Received.)
+                </Alert>
+                {salesRows.length > 0 && (
+                  <Box sx={{ mt:2 }}>
+                    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+                      <Button
+                        variant="contained"
+                        disabled={salesPosting || salesPosted}
+                        onClick={async () => {
+                          if (!salesRows.length) return;
+                          setSalesPosting(true);
+                          setSalesPostLog([]);
+                          try {
+                            setSalesPostLog(l => [...l, 'Preparing journal payloads...']);
+                            const res = await axios.post('/api/ai/sales-post', { sales: salesRows });
+                            const jp = res?.data?.data?.journalPayloads || [];
+                            const cp = res?.data?.data?.cashReceiptPayloads || [];
+                            let postedJ = 0; let postedC = 0; let errors = 0;
+                            for (const j of jp) {
+                              try { await axios.post('/api/bookkeeping/journal', j); postedJ += 1; setSalesPostLog(l => [...l, `Journal posted: ${j.ref || j.particulars}`]); } catch (e) { errors += 1; setSalesPostLog(l => [...l, `Journal error: ${(e?.response?.data?.message)||e.message}`]); }
+                            }
+                            for (const c of cp) {
+                              try { await axios.post('/api/bookkeeping/cash-receipts', c); postedC += 1; setSalesPostLog(l => [...l, `Cash receipt posted: ${c.referenceNo}`]); } catch (e) { errors += 1; setSalesPostLog(l => [...l, `Cash receipt error: ${(e?.response?.data?.message)||e.message}`]); }
+                            }
+                            setSalesPostLog(l => [...l, `Done. Journal: ${postedJ}, Cash Receipts: ${postedC}, Errors: ${errors}`]);
+                            if (!errors) { setSalesPosted(true); try { window.localStorage.setItem('ledgerNeedsRefresh','1'); window.localStorage.setItem('cashReceiptsNeedsRefresh','1'); } catch(_) {} }
+                          } catch (e) { setSalesPostLog(l => [...l, `Post failed: ${e.message}`]); } finally { setSalesPosting(false); }
+                        }}
+                        startIcon={<Iconify icon="eva:cloud-upload-fill" />}
+                      >
+                        {salesPosting ? 'Posting...' : salesPosted ? 'Posted' : 'Post Sales to Books'}
+                      </Button>
+                      {salesPosted && (
+                        <Button variant="outlined" onClick={() => router.push('/dashboard/bookkeeping/general-journal')} startIcon={<Iconify icon="eva:book-open-fill" />}>Go to Journal</Button>
+                      )}
+                    </Stack>
+                    {salesPostLog.length > 0 && (
+                      <Box sx={{ mt:2, maxHeight: 180, overflow:'auto', p:1, bgcolor:'grey.100', borderRadius:1, fontFamily:'monospace', fontSize: '0.72rem' }}>
+                        {salesPostLog.map((l,i) => <div key={i}>{l}</div>)}
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Card>
+            )}
+            {/* For invoice mode, only transfer actions now (preview moved to Step 3) */}
+            {/* Existing transaction confirmation UI retained for expense mode */}
+            {!salesMode && (
+              <>
+                {(!transactions || transactions.length === 0) ? (
+                  <Alert severity="info">No transactions detected. Upload files in Step 0 and proceed.</Alert>
+                ) : (
+                  <Card sx={{ p: 2, mb: 3 }}>
+                    <Stack spacing={1}>
+                      {transactions.map((t) => (
+                        <Stack key={t.id} direction="row" alignItems="center" spacing={2}>
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography variant="body2" noWrap title={t.description} sx={{ fontWeight: 600 }}>{t.description}</Typography>
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>₱{Number(t.amount || 0).toLocaleString()} • {t.aiCategory}</Typography>
+                          </Box>
+                          {t.fileUrl ? (
+                            <Button size="small" color="info" component="a" href={t.fileUrl} target="_blank" rel="noopener noreferrer" startIcon={<Iconify icon="eva:external-link-fill" />}>View invoice</Button>
+                          ) : (
+                            <Button size="small" disabled startIcon={<Iconify icon="eva:external-link-fill" />}>View invoice</Button>
+                          )}
+                          <FormControlLabel control={<Switch size="small" checked={!!t.autoBook} onChange={(e) => setTransactions(prev => prev.map(x => x.id === t.id ? { ...x, autoBook: e.target.checked } : x))} />} label="Auto" />
+                          <TextField select size="small" label="Book" value={t.autoBook ? inferBookFromCategory(t.aiCategory) : (t.book || inferBookFromCategory(t.aiCategory))} onChange={(e) => setTransactions(prev => prev.map(x => x.id === t.id ? { ...x, book: e.target.value, autoBook: false } : x))} sx={{ minWidth: 240 }} disabled={!!t.autoBook}>
+                            {BOOK_OPTIONS.map((opt) => (<MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>))}
+                          </TextField>
+                          <Button size="small" startIcon={<Iconify icon="eva:edit-fill" />} onClick={() => handleEditTransaction(t)}>Edit</Button>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Card>
+                )}
+                <Box sx={{ mb: 3 }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                    <Typography variant="body2">Transfer Progress</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{transferState.transferred}/{transferState.total} completed</Typography>
+                  </Stack>
+                  <LinearProgress variant="determinate" value={transferState.total ? Math.min(100, Math.round((transferState.transferred / transferState.total) * 100)) : 0} sx={{ height: 10, borderRadius: 5 }} />
+                </Box>
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button variant="contained" disabled={processing || !transactions?.length} onClick={handleTransfer} startIcon={<Iconify icon="eva:arrow-forward-fill" />}>{processing ? 'Transferring...' : 'Start Transfer'}</Button>
+                </Stack>
+                {transferState.transferred === transferState.total && transferState.total > 0 && (
+                  <Alert severity="success" sx={{ mt: 2 }}>
+                    <Box>
+                      <Typography variant="subtitle2" sx={{ mb: 1 }}>All transactions have been successfully transferred.</Typography>
+                      {lastTransferBooks && lastTransferBooks.total > 0 && (
+                        <Stack direction="row" spacing={1} flexWrap="wrap">
+                          {Object.entries(lastTransferBooks.counts).map(([book, count]) => {
+                            const routeMap = { 'cash-receipts': '/dashboard/bookkeeping/cash-receipt', 'cash-disbursements': '/dashboard/bookkeeping/cash-disbursement', 'journal': '/dashboard/bookkeeping/general-journal', 'ledger': '/dashboard/bookkeeping/general-ledger', };
+                            const labelMap = { 'cash-receipts': 'View Cash Receipt Journal', 'cash-disbursements': 'View Cash Disbursement Book', 'journal': 'View General Journal', 'ledger': 'View General Ledger', };
+                            const dest = routeMap[book] || '/dashboard/bookkeeping/general-journal';
+                            const label = labelMap[book] || 'View Journal';
+                            return (<Button key={book} size="small" variant="outlined" onClick={() => router.push(dest)}>{label} ({count})</Button>);
+                          })}
+                        </Stack>
+                      )}
+                    </Box>
+                  </Alert>
+                )}
+              </>
+            )}
+          </Box>
+  );
+
+      case 3:
+  return null; // unreachable duplicate case removed
 
       default:
         return null;

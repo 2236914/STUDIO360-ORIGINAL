@@ -1869,6 +1869,7 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
         }
     }
 
+    strict_tess = os.environ.get('STRICT_TESSERACT_ONLY', '0') in ('1','true','True')
     if ext in [".jpg", ".jpeg", ".png", ".bmp", ".tiff"]:
         try:
             img = Image.open(file_path)
@@ -1964,19 +1965,21 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
                 pass
 
         # Try pdfplumber table extraction first (best for digital PDFs)
-        try:
-            plumber_items = _extract_items_from_pdfplumber(file_path)
-            if not plumber_items and pdfplumber is None:
-                warnings.append('pdfplumber_unavailable')
-        except Exception as e:
-            warnings.append(f'pdfplumber_failed: {e}')
-            plumber_items = []
+        if not strict_tess:
+            try:
+                plumber_items = _extract_items_from_pdfplumber(file_path)
+                if not plumber_items and pdfplumber is None:
+                    warnings.append('pdfplumber_unavailable')
+            except Exception as e:
+                warnings.append(f'pdfplumber_failed: {e}')
+                plumber_items = []
         # Try layout-based table extraction for items
-        try:
-            layout_items = _extract_items_from_pdf_layout(file_path)
-        except Exception as e:
-            warnings.append(f'layout_extract_failed: {e}')
-            layout_items = []
+        if not strict_tess:
+            try:
+                layout_items = _extract_items_from_pdf_layout(file_path)
+            except Exception as e:
+                warnings.append(f'layout_extract_failed: {e}')
+                layout_items = []
         # Also run Tesseract TSV on rendered images (for scanned PDFs)
         try:
             if page_images:
@@ -1985,17 +1988,18 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
             warnings.append(f'tesseract_tsv_failed: {e}')
             tesseract_items = []
         # PaddleOCR for improved table/currency (optional)
-        try:
-            enable_paddle_tables = os.environ.get('ENABLE_PADDLE_TABLES', '0') in ('1','true','True')
-            if enable_paddle_tables and (paddle_page_images or page_images):
-                if PaddleOCR is not None:
-                    paddle_lines_text, paddle_items = _paddle_ocr_extract_lines_and_items(paddle_page_images or page_images)
-                else:
-                    warnings.append('paddleocr_unavailable')
-        except Exception as e:
-            warnings.append(f'paddleocr_failed: {e}')
-            paddle_items = []
-            paddle_lines_text = ''
+        if not strict_tess:
+            try:
+                enable_paddle_tables = os.environ.get('ENABLE_PADDLE_TABLES', '0') in ('1','true','True')
+                if enable_paddle_tables and (paddle_page_images or page_images):
+                    if PaddleOCR is not None:
+                        paddle_lines_text, paddle_items = _paddle_ocr_extract_lines_and_items(paddle_page_images or page_images)
+                    else:
+                        warnings.append('paddleocr_unavailable')
+            except Exception as e:
+                warnings.append(f'paddleocr_failed: {e}')
+                paddle_items = []
+                paddle_lines_text = ''
         # Google Vision OCR fallback if configured
         try:
             api_key = os.environ.get('GOOGLE_CLOUD_API_KEY') or os.environ.get('GOOGLE_API_KEY')

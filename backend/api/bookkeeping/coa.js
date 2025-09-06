@@ -14,6 +14,8 @@ const COA = {
   '106': { code: '106', title: 'Tools & Equipment', type: 'asset', normal: 'debit' },
   '107': { code: '107', title: 'Store Fixtures & Furniture', type: 'asset', normal: 'debit' },
   '108': { code: '108', title: 'Accumulated Depreciation', type: 'contra-asset', normal: 'credit' },
+  // Added for sales platform withholding (creditable tax)
+  '109': { code: '109', title: 'Withholding Tax Receivable', type: 'asset', normal: 'debit' },
 
   // Liabilities
   '201': { code: '201', title: 'Accounts Payable', type: 'liability', normal: 'credit' },

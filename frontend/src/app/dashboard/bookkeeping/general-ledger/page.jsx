@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -23,7 +23,7 @@ import { fNumber } from 'src/utils/format-number';
 import { DashboardContent } from 'src/layouts/dashboard';
 import { Iconify } from 'src/components/iconify';
 import { Label } from 'src/components/label';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Collapse } from '@mui/material';
 
 // ----------------------------------------------------------------------
 
@@ -137,8 +137,10 @@ export default function GeneralLedgerPage() {
     const [searchQuery, setSearchQuery] = useState('');
   const [selectedAccount, setSelectedAccount] = useState('All');
   const [accounts, setAccounts] = useState([]);
-    const [openAddDialog, setOpenAddDialog] = useState(false);
-  const [ledgerSummary, setLedgerSummary] = useState([]);
+    const [openAddDialog, setOpenAddDialog] = useState(false); // (unused add dialog retained for future)
+  const [ledgerSummary, setLedgerSummary] = useState([]); // per-account totals
+  const [ledgerDetail, setLedgerDetail] = useState([]); // full ledger with entries
+  const [expanded, setExpanded] = useState(()=> new Set()); // expanded account codes
     const [newEntry, setNewEntry] = useState({
       date: '',
       description: '',
@@ -152,51 +154,44 @@ export default function GeneralLedgerPage() {
   const TOTAL_DEBIT = filteredRows.reduce((sum, acc) => sum + Number(acc.debit || 0), 0);
   const TOTAL_CREDIT = filteredRows.reduce((sum, acc) => sum + Number(acc.credit || 0), 0);
 
-    // Fetch ledger entries on mount
-    useEffect(() => {
-    const fetchLedger = async () => {
-        try {
-  const res = await axios.get('/api/bookkeeping/ledger?summary=1');
-  const data = res?.data?.data?.summary || [];
-  const acct = res?.data?.data?.accounts || [];
-  setLedgerSummary(data);
-  setAccounts(acct);
-        } catch (err) {
-          console.error('Failed to load ledger:', err);
-        }
-      };
-      fetchLedger();
+    // Fetch ledger summary (memoized)
+    const fetchLedger = useCallback(async () => {
+      try {
+        const res = await axios.get('/api/bookkeeping/ledger'); // get full (summary + entries)
+        const dataSummary = res?.data?.data?.summary || [];
+        const dataLedger = res?.data?.data?.ledger || [];
+        const acct = res?.data?.data?.accounts || [];
+        setLedgerSummary(dataSummary);
+        setLedgerDetail(dataLedger);
+        setAccounts(acct);
+      } catch (err) {
+        console.error('Failed to load ledger:', err);
+      }
     }, []);
 
-    // Add entry via backend
-    const handleAddEntry = async () => {
-      try {
-        const payload = {
-          date: newEntry.date,
-          account: selectedAccount === 'All' ? 'Cash' : selectedAccount,
-          description: newEntry.description,
-          type: newEntry.type,
-          amount: parseFloat(newEntry.amount),
-        };
-        const res = await axios.post('/api/bookkeeping/ledger', payload);
-        const created = res?.data?.data?.entry;
-        if (created) {
-          // Generate a local ref for display based on returned id and type
-          const localRef = created.type === 'credit' ? `CR${String(created.id).padStart(2, '0')}` : `CD${String(created.id).padStart(2, '0')}`;
-          setLedgerEntries(prev => [...prev, { ...created, ref: localRef }]);
-        }
-        setOpenAddDialog(false);
-        setNewEntry({
-          date: '',
-          description: '',
-          ref: '',
-          type: 'debit',
-          amount: '',
-        });
-      } catch (error) {
-        console.error('Error adding entry:', error instanceof Error ? error.message : String(error));
-      }
-    };
+    // Initial load
+    useEffect(() => { fetchLedger(); }, [fetchLedger]);
+
+    // Listen for cross-page posting flag (sales or other books) -> auto-refresh
+    useEffect(() => {
+      let timer; // polling fallback if storage event not triggered in same tab
+      const KEY = 'ledgerNeedsRefresh';
+      const check = () => {
+        try {
+          const v = window.localStorage.getItem(KEY);
+          if (v === '1') {
+            window.localStorage.setItem(KEY, '0');
+            fetchLedger();
+          }
+        } catch (_) { /* ignore */ }
+      };
+      const onStorage = (e) => { if (e.key === KEY && e.newValue === '1') check(); };
+      window.addEventListener('storage', onStorage);
+      timer = setInterval(check, 4000); // light polling safety
+      return () => { window.removeEventListener('storage', onStorage); clearInterval(timer); };
+    }, [fetchLedger]);
+
+  // (Manual add function removed – general ledger derived from journals; kept placeholder if needed later)
 
   return (
     <DashboardContent maxWidth="xl">
@@ -277,7 +272,16 @@ export default function GeneralLedgerPage() {
           </Box>
           
           <Stack direction="row" spacing={1}>
-            <IconButton sx={{ color: 'text.secondary' }}>
+            <IconButton
+              sx={{ color: 'text.secondary' }}
+              onClick={() => {
+                fetchLedger();
+              }}
+              title="Refresh"
+            >
+              <Iconify icon="eva:refresh-fill" />
+            </IconButton>
+            <IconButton sx={{ color: 'text.secondary' }} title="Print">
               <Iconify icon="eva:printer-fill" />
             </IconButton>
           </Stack>
@@ -295,21 +299,79 @@ export default function GeneralLedgerPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredRows.map((acc, index) => (
-                <TableRow key={acc.code}
-                  sx={{ '&:hover': { bgcolor: 'grey.50' }, bgcolor: index % 2 === 0 ? 'white' : 'grey.25', borderBottom: `1px solid ${theme.palette.divider}` }}
-                >
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>{acc.code}</TableCell>
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>{acc.accountTitle}</TableCell>
-                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>₱{fNumber(acc.debit)}</TableCell>
-                  <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>₱{fNumber(acc.credit)}</TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: acc.balanceSide === 'debit' ? 'error.main' : 'success.main' }}>
-                      ₱{fNumber(acc.balance)} {acc.balanceSide === 'debit' ? 'Dr' : 'Cr'}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {filteredRows.map((acc, index) => {
+                const isExpanded = expanded.has(acc.code);
+                const detail = ledgerDetail.find(l => l.code === acc.code);
+                const entries = detail?.entries || [];
+                return (
+                  <>
+                    <TableRow key={acc.code}
+                      sx={{ '&:hover': { bgcolor: 'grey.50' }, bgcolor: index % 2 === 0 ? 'white' : 'grey.25', borderBottom: `1px solid ${theme.palette.divider}`, cursor: 'pointer' }}
+                      onClick={() => {
+                        setExpanded(prev => {
+                          const next = new Set(prev);
+                          if (next.has(acc.code)) next.delete(acc.code); else next.add(acc.code);
+                          return next;
+                        });
+                      }}
+                    >
+                      <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}`, display:'flex', alignItems:'center', gap:0.5 }}>
+                        {entries.length > 0 ? (
+                          isExpanded ? (
+                            <Iconify icon="eva:arrow-ios-downward-fill" width={16} />
+                          ) : (
+                            <Iconify icon="eva:arrow-ios-forward-fill" width={16} />
+                          )
+                        ) : null}
+                        {acc.code}
+                      </TableCell>
+                      <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>{acc.accountTitle}</TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>₱{fNumber(acc.debit)}</TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>₱{fNumber(acc.credit)}</TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: acc.balanceSide === 'debit' ? 'error.main' : 'success.main' }}>
+                          ₱{fNumber(acc.balance)} {acc.balanceSide === 'debit' ? 'Dr' : 'Cr'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                    {isExpanded && entries.length > 0 && (
+                      <TableRow key={`${acc.code}-details`} sx={{ bgcolor: 'background.default' }}>
+                        <TableCell colSpan={5} sx={{ py:0, borderBottom: `1px solid ${theme.palette.divider}` }}>
+                          <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                            <Box sx={{ p:1.5, pt:0.5 }}>
+                              <Typography variant="caption" sx={{ fontWeight:600, display:'block', mb:0.5 }}>Entries</Typography>
+                              <Table size="small" sx={{ '& .MuiTableCell-root': { py:0.5, px:1 } }}>
+                                <TableHead>
+                                  <TableRow sx={{ bgcolor:'grey.100' }}>
+                                    <TableCell sx={{ fontSize:11, fontWeight:600 }}>Date</TableCell>
+                                    <TableCell sx={{ fontSize:11, fontWeight:600 }}>Description</TableCell>
+                                    <TableCell sx={{ fontSize:11, fontWeight:600 }}>Ref</TableCell>
+                                    <TableCell align="right" sx={{ fontSize:11, fontWeight:600 }}>Debit</TableCell>
+                                    <TableCell align="right" sx={{ fontSize:11, fontWeight:600 }}>Credit</TableCell>
+                                    <TableCell align="right" sx={{ fontSize:11, fontWeight:600 }}>Running Bal.</TableCell>
+                                  </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                  {entries.map((e,i) => (
+                                    <TableRow key={i} sx={{ '&:hover': { bgcolor:'grey.50' } }}>
+                                      <TableCell sx={{ fontSize:11 }}>{e.date || ''}</TableCell>
+                                      <TableCell sx={{ fontSize:11, maxWidth:240, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{e.description || ''}</TableCell>
+                                      <TableCell sx={{ fontSize:11 }}>{e.reference || ''}</TableCell>
+                                      <TableCell align="right" sx={{ fontSize:11 }}>{e.debit ? `₱${fNumber(e.debit)}` : ''}</TableCell>
+                                      <TableCell align="right" sx={{ fontSize:11 }}>{e.credit ? `₱${fNumber(e.credit)}` : ''}</TableCell>
+                                      <TableCell align="right" sx={{ fontSize:11, fontWeight:600 }}>{typeof e.balance==='number' ? `₱${fNumber(e.balance)}` : ''}</TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </Box>
+                          </Collapse>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </>
+                );
+              })}
               <TableRow sx={{ bgcolor: '#E3F2FD', borderTop: `2px solid ${theme.palette.primary.main}` }}>
                 <TableCell colSpan={2} sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>TOTAL</Typography>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -215,20 +215,35 @@ export default function CashReceiptPage() {
   // Calculate totals from current entries
   const TOTALS = calculateTotals(receiptEntries);
 
-  // Load entries from backend
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await axios.get('/api/bookkeeping/cash-receipts');
-        const data = res?.data?.data?.receipts;
-        if (Array.isArray(data)) setReceiptEntries(data);
-      } catch (e) {
-        console.warn('Failed to load cash receipts from API. Error:', e?.message);
-        // Do not fallback to mock so the UI reflects actual backend state
-      }
-    };
-    load();
+  // Fetch entries memoized
+  const fetchReceipts = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/bookkeeping/cash-receipts');
+      const data = res?.data?.data?.receipts;
+      if (Array.isArray(data)) setReceiptEntries(data);
+    } catch (e) {
+      console.warn('Failed to load cash receipts from API. Error:', e?.message);
+    }
   }, []);
+
+  useEffect(() => { fetchReceipts(); }, [fetchReceipts]);
+
+  // Auto-refresh via localStorage flag
+  useEffect(() => {
+    const KEY = 'cashReceiptsNeedsRefresh';
+    const check = () => {
+      try {
+        if (window.localStorage.getItem(KEY) === '1') {
+          window.localStorage.setItem(KEY, '0');
+          fetchReceipts();
+        }
+      } catch (_) {}
+    };
+    const onStorage = (e) => { if (e.key === KEY && e.newValue === '1') check(); };
+    window.addEventListener('storage', onStorage);
+    const timer = setInterval(check, 4000);
+    return () => { window.removeEventListener('storage', onStorage); clearInterval(timer); };
+  }, [fetchReceipts]);
 
   // Create entry via backend
   const handleAddEntry = async () => {
@@ -351,10 +366,17 @@ export default function CashReceiptPage() {
           </Box>
           
           <Stack direction="row" spacing={1}>
-            <IconButton sx={{ color: 'success.main' }}>
+            <IconButton
+              sx={{ color: 'text.secondary' }}
+              title="Refresh"
+              onClick={() => fetchReceipts()}
+            >
+              <Iconify icon="eva:refresh-fill" />
+            </IconButton>
+            <IconButton sx={{ color: 'success.main' }} title="Export">
               <Iconify icon="logos:excel" />
             </IconButton>
-            <IconButton sx={{ color: 'text.secondary' }}>
+            <IconButton sx={{ color: 'text.secondary' }} title="Print">
               <Iconify icon="eva:printer-fill" />
             </IconButton>
           </Stack>
