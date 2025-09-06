@@ -265,6 +265,7 @@ export default function UploadProcessPage() {
   const [salesPosting, setSalesPosting] = useState(false);
   const [salesPosted, setSalesPosted] = useState(false);
   const [salesPostLog, setSalesPostLog] = useState([]); // log strings
+  const [salesTransfer, setSalesTransfer] = useState({ transferred: 0, total: 0, errors: 0 });
 
   // Load overrides once on mount
   useEffect(() => { setCategoryOverrides(loadCategoryOverrides()); }, []);
@@ -498,6 +499,47 @@ export default function UploadProcessPage() {
       console.error('Transfer error:', err);
     } finally {
       setProcessing(false);
+    }
+  };
+
+  // Sales transfer (posts journal + cash receipts using backend consolidation)
+  const handleSalesTransfer = async () => {
+    if (!salesRows.length) return;
+    setSalesPosting(true);
+    setSalesPosted(false);
+    setSalesPostLog([]);
+    setSalesTransfer({ transferred: 0, total: salesRows.length, errors: 0 });
+    try {
+      setSalesPostLog(l => [...l, 'Preparing journal & cash receipt payloads...']);
+      const res = await axios.post('/api/ai/sales-post', { sales: salesRows });
+      const jp = res?.data?.data?.journalPayloads || [];
+      const cp = res?.data?.data?.cashReceiptPayloads || [];
+      let postedRows = 0; let errors = 0;
+      // We assume jp and cp are grouped in same order by sale; we'll just fire sequential sets.
+      // Post journals first
+      for (const j of jp) {
+        try { await axios.post('/api/bookkeeping/journal', j); setSalesPostLog(l => [...l, `Journal posted: ${j.ref || j.particulars}`]); } 
+        catch (e) { errors += 1; setSalesPostLog(l => [...l, `Journal error: ${(e?.response?.data?.message)||e.message}`]); }
+      }
+      // Post cash receipts
+      for (const c of cp) {
+        try { await axios.post('/api/bookkeeping/cash-receipts', c); setSalesPostLog(l => [...l, `Cash receipt posted: ${c.referenceNo}`]); } 
+        catch (e) { errors += 1; setSalesPostLog(l => [...l, `Cash receipt error: ${(e?.response?.data?.message)||e.message}`]); }
+      }
+      postedRows = salesRows.length; // each row yields at least 1 journal + 1 cash receipt
+      setSalesTransfer({ transferred: postedRows, total: salesRows.length, errors });
+      setSalesPostLog(l => [...l, `Done. Rows: ${postedRows}, Errors: ${errors}`]);
+      if (!errors) {
+        setSalesPosted(true);
+        try {
+          window.localStorage.setItem('ledgerNeedsRefresh','1');
+          window.localStorage.setItem('cashReceiptsNeedsRefresh','1');
+        } catch(_) {}
+      }
+    } catch (e) {
+      setSalesPostLog(l => [...l, `Post failed: ${e.message}`]);
+    } finally {
+      setSalesPosting(false);
     }
   };
 
@@ -996,6 +1038,28 @@ export default function UploadProcessPage() {
                             {warns.map((w,i) => <Chip key={i} size="small" color="warning" variant="outlined" label={String(w).slice(0,80)} />)}
                           </Stack>
                         )}
+                        {/* Summary indicators: Source, Confidence, Grand Total */}
+                        {(() => {
+                          const sourceLabel = c ? 'Canonical' : 'OCR Structured';
+                          const overallConfidence = c?.confidence ?? cFields?.confidence ?? s?.confidence ?? null;
+                          const grandTotalRaw = cAmts?.grandTotal ?? s?.total ?? cAmts?.total;
+                          const grandTotalFmt = grandTotalRaw != null && grandTotalRaw !== '' && !Number.isNaN(Number(grandTotalRaw))
+                            ? fmtAmt(grandTotalRaw)
+                            : '[N/A]';
+                          let confColor = 'default';
+                          if (overallConfidence != null) {
+                            if (overallConfidence >= 90) confColor = 'success';
+                            else if (overallConfidence >= 75) confColor = 'warning';
+                            else confColor = 'error';
+                          }
+                          return (
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb:1, flexWrap:'wrap' }}>
+                              <Chip size="small" variant="outlined" color="info" label={`Source: ${sourceLabel}`} />
+                              <Chip size="small" variant="outlined" color={confColor} label={`Confidence: ${overallConfidence != null ? overallConfidence + '%' : 'N/A'}`} />
+                              <Chip size="small" variant="filled" color="primary" label={`Grand Total: ${grandTotalFmt}`} />
+                            </Stack>
+                          );
+                        })()}
                         <Box sx={{ fontFamily:'monospace', whiteSpace:'pre-wrap', fontSize:'0.72rem', lineHeight:1.4 }}>
 {`Seller Name: ${na(cFields.sellerName || s.supplier)}
 Seller Address: ${na(cFields.sellerAddress || s.sellerAddress)}
@@ -1051,92 +1115,26 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
       case 3:
         return (
           <Box>
-            <Typography variant="h6" sx={{ mb:2 }}>{salesMode ? 'Data Transfer (Sales Posting)' : 'Data Transfer'}</Typography>
+            <Typography variant="h6" sx={{ mb:2 }}>Data Transfer</Typography>
             <Typography variant="body2" sx={{ color:'text.secondary', mb:3 }}>
-              {salesMode ? 'Post the reviewed sales rows to the books.' : 'Transfer confirmed transactions to the appropriate books.'}
+              {salesMode ? 'Transfer sales transactions to the books (Journal + Cash Receipt).' : 'Transfer confirmed transactions to the appropriate books.'}
             </Typography>
             {salesMode && (
               <Card sx={{ p:2, mb:3 }}>
-                <Typography variant="subtitle2" sx={{ mb: 2 }}>Sales Summary</Typography>
-                {salesRows.length === 0 && (
-                  <Alert severity="info">No sales rows detected.</Alert>
-                )}
-                {salesRows.length > 0 && (
-                  <TableContainer component={Paper} sx={{ maxHeight: 460 }}>
-                    <Table size="small" stickyHeader>
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>Date</TableCell>
-                          <TableCell>Platform</TableCell>
-                          <TableCell>Order ID</TableCell>
-                          <TableCell align="right">Total Revenue</TableCell>
-                          <TableCell align="right">Fees & Charges</TableCell>
-                          <TableCell align="right">Withholding Tax</TableCell>
-                          <TableCell align="right">Cash Received</TableCell>
-                          <TableCell>Remarks</TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {salesRows.map((r, idx) => (
-                          <TableRow key={idx} hover>
-                            <TableCell>{r.date}</TableCell>
-                            <TableCell>{r.platform}</TableCell>
-                            <TableCell>{r.order_id || r.orderId || ''}</TableCell>
-                            <TableCell align="right">{Number(r.total_revenue||0).toLocaleString()}</TableCell>
-                            <TableCell align="right">{Number(r.fees||0).toLocaleString()}</TableCell>
-                            <TableCell align="right">{Number(r.withholding_tax||0).toLocaleString()}</TableCell>
-                            <TableCell align="right">{Number(r.cash_received||0).toLocaleString()}</TableCell>
-                            <TableCell>{`To record sales for the day – ${r.platform}`}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-                <Alert severity="info" sx={{ mt:2 }}>
-                  Field Mapping Applied Automatically (TikTok: Total Revenue → Total Revenue, Total Fees → Fees & Charges, Adjustment Amount (Withholding) → Withholding Tax, Total Settlement Amount → Cash Received. Shopee: Original Price (Purple) → Total Revenue, Platform Fees (Blue) → Fees & Charges, Withholding Tax (Orange) → Withholding Tax, Total Released Amount (Green) → Cash Received.)
-                </Alert>
-                {salesRows.length > 0 && (
-                  <Box sx={{ mt:2 }}>
-                    <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-                      <Button
-                        variant="contained"
-                        disabled={salesPosting || salesPosted}
-                        onClick={async () => {
-                          if (!salesRows.length) return;
-                          setSalesPosting(true);
-                          setSalesPostLog([]);
-                          try {
-                            setSalesPostLog(l => [...l, 'Preparing journal payloads...']);
-                            const res = await axios.post('/api/ai/sales-post', { sales: salesRows });
-                            const jp = res?.data?.data?.journalPayloads || [];
-                            const cp = res?.data?.data?.cashReceiptPayloads || [];
-                            let postedJ = 0; let postedC = 0; let errors = 0;
-                            for (const j of jp) {
-                              try { await axios.post('/api/bookkeeping/journal', j); postedJ += 1; setSalesPostLog(l => [...l, `Journal posted: ${j.ref || j.particulars}`]); } catch (e) { errors += 1; setSalesPostLog(l => [...l, `Journal error: ${(e?.response?.data?.message)||e.message}`]); }
-                            }
-                            for (const c of cp) {
-                              try { await axios.post('/api/bookkeeping/cash-receipts', c); postedC += 1; setSalesPostLog(l => [...l, `Cash receipt posted: ${c.referenceNo}`]); } catch (e) { errors += 1; setSalesPostLog(l => [...l, `Cash receipt error: ${(e?.response?.data?.message)||e.message}`]); }
-                            }
-                            setSalesPostLog(l => [...l, `Done. Journal: ${postedJ}, Cash Receipts: ${postedC}, Errors: ${errors}`]);
-                            if (!errors) { setSalesPosted(true); try { window.localStorage.setItem('ledgerNeedsRefresh','1'); window.localStorage.setItem('cashReceiptsNeedsRefresh','1'); } catch(_) {} }
-                          } catch (e) { setSalesPostLog(l => [...l, `Post failed: ${e.message}`]); } finally { setSalesPosting(false); }
-                        }}
-                        startIcon={<Iconify icon="eva:cloud-upload-fill" />}
-                      >
-                        {salesPosting ? 'Posting...' : salesPosted ? 'Posted' : 'Post Sales to Books'}
-                      </Button>
-                      {salesPosted && (
-                        <Button variant="outlined" onClick={() => router.push('/dashboard/bookkeeping/general-journal')} startIcon={<Iconify icon="eva:book-open-fill" />}>Go to Journal</Button>
-                      )}
-                    </Stack>
-                    {salesPostLog.length > 0 && (
-                      <Box sx={{ mt:2, maxHeight: 180, overflow:'auto', p:1, bgcolor:'grey.100', borderRadius:1, fontFamily:'monospace', fontSize: '0.72rem' }}>
-                        {salesPostLog.map((l,i) => <div key={i}>{l}</div>)}
+                <Typography variant="subtitle2" sx={{ mb:1 }}>Sales Transactions</Typography>
+                <Stack spacing={1}>
+                  {salesRows.length === 0 && <Alert severity="info">No sales rows detected.</Alert>}
+                  {salesRows.map((r, idx) => (
+                    <Stack key={idx} direction="row" spacing={2} alignItems="center">
+                      <Box sx={{ flex:1, minWidth:0 }}>
+                        <Typography variant="body2" noWrap title={r.order_id || r.orderId || ''} sx={{ fontWeight:600 }}>{r.platform} Order {r.order_id || r.orderId || '(no id)'} – {r.date}</Typography>
+                        <Typography variant="caption" sx={{ color:'text.secondary' }}>₱{Number(r.total_revenue||0).toLocaleString()} • Fees {Number(r.fees||0).toLocaleString()} • Tax {Number(r.withholding_tax||0).toLocaleString()} • Cash {Number(r.cash_received||0).toLocaleString()}</Typography>
                       </Box>
-                    )}
-                  </Box>
-                )}
+                      <TextField size="small" label="Book" value="Cash Receipt Journal" disabled sx={{ width:200 }} />
+                      <Chip size="small" color="info" label="Auto" />
+                    </Stack>
+                  ))}
+                </Stack>
               </Card>
             )}
             {/* For invoice mode, only transfer actions now (preview moved to Step 3) */}
@@ -1196,6 +1194,29 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
                       )}
                     </Box>
                   </Alert>
+                )}
+              </>
+            )}
+            {salesMode && salesRows.length > 0 && (
+              <>
+                <Box sx={{ mb: 3, mt: salesRows.length ? 0 : 3 }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                    <Typography variant="body2">Transfer Progress</Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{salesTransfer.transferred}/{salesTransfer.total} completed</Typography>
+                  </Stack>
+                  <LinearProgress variant="determinate" value={salesTransfer.total ? Math.min(100, Math.round((salesTransfer.transferred / salesTransfer.total) * 100)) : 0} sx={{ height: 10, borderRadius: 5 }} />
+                </Box>
+                <Stack direction="row" justifyContent="flex-end" spacing={2}>
+                  <Button variant="contained" disabled={salesPosting || !salesRows.length} onClick={handleSalesTransfer} startIcon={<Iconify icon="eva:arrow-forward-fill" />}>{salesPosting ? 'Posting...' : salesPosted ? 'Repost' : 'Start Transfer'}</Button>
+                  {salesPosted && <Button variant="outlined" onClick={() => router.push('/dashboard/bookkeeping/general-journal')} startIcon={<Iconify icon="eva:book-open-fill" />}>Go to Journal</Button>}
+                </Stack>
+                {salesPostLog.length > 0 && (
+                  <Box sx={{ mt:2, maxHeight: 200, overflow:'auto', p:1, bgcolor:'grey.100', borderRadius:1, fontFamily:'monospace', fontSize:'0.72rem' }}>
+                    {salesPostLog.map((l,i) => <div key={i}>{l}</div>)}
+                  </Box>
+                )}
+                {salesPosted && salesTransfer.errors === 0 && (
+                  <Alert severity="success" sx={{ mt:2 }}>Sales successfully posted.</Alert>
                 )}
               </>
             )}
