@@ -284,8 +284,8 @@ router.post('/cash-disbursements', (req, res) => {
   if (entry.purchasesDebit) lines.push({ code: '501', debit: entry.purchasesDebit, credit: 0, description: 'Purchases – Materials' });
   if (entry.suppliesDebit) lines.push({ code: '502', debit: entry.suppliesDebit, credit: 0, description: 'Supplies Expense' });
   if (entry.rentDebit) lines.push({ code: '503', debit: entry.rentDebit, credit: 0, description: 'Rent Expense' });
-  if (entry.advertisingDebit) lines.push({ code: '505', debit: entry.advertisingDebit, credit: 0, description: 'Advertising / Marketing' });
-  if (entry.deliveryDebit) lines.push({ code: '506', debit: entry.deliveryDebit, credit: 0, description: 'Delivery / Transportation' });
+  if (entry.advertisingDebit) lines.push({ code: '505', debit: entry.advertisingDebit, credit: 0, description: 'Advertising' });
+  if (entry.deliveryDebit) lines.push({ code: '506', debit: entry.deliveryDebit, credit: 0, description: 'Transportation' });
   if (entry.taxesDebit) lines.push({ code: '507', debit: entry.taxesDebit, credit: 0, description: 'Taxes & Licenses' });
   if (entry.miscDebit) lines.push({ code: '508', debit: entry.miscDebit, credit: 0, description: 'Miscellaneous Expense' });
   if (entry.cashCredit) lines.push({ code: '101', debit: 0, credit: entry.cashCredit, description: 'Cash/Bank/eWallet' });

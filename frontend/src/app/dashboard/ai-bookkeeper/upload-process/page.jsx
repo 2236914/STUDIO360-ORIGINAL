@@ -133,22 +133,18 @@ const steps = [
 ];
 
 const CATEGORY_OPTIONS = [
-  'Online Sales Revenue',
+  'Purchases - Materials',
   'Walk-in Sales',
-  'Cost of Goods Sold',
-  'Marketing Expenses',
-  'Operating Expenses',
-  'Platform Fees',
   'Rent Expense',
-  'Utilities',
+  'Marketing Expenses',
+  'Platform Fees',
   'Insurance',
   'Office Supplies',
-  'Equipment',
-  'Advertising',
-  'Travel Expenses',
+  'Taxes & Licenses',
+  'Transportation',
   'Professional Fees',
   'Other Income',
-  'Other Expenses'
+  'Miscellaneous Expense',
 ];
 
 // Book of Accounts options
