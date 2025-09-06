@@ -917,7 +917,7 @@ export default function UploadProcessPage() {
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
               {salesMode
                 ? 'Review normalized sales data extracted from your spreadsheet. Mapping applied. Click Next to proceed to Data Transfer.'
-                : 'Review the structured invoice extraction. You can adjust categorization before transfer in the next step.'}
+                : 'Review the structured invoice extraction. You will edit and categorize in the Data Transfer step.'}
             </Typography>
             {salesMode && (
               <Card sx={{ p:2, mb:3 }}>
@@ -1089,27 +1089,7 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
                 </Stack>
               </Box>
             )}
-            {/* For invoice mode allow transaction editing in confirmation */}
-            {!salesMode && transactions.length > 0 && (
-              <Card sx={{ p:2, mb:3 }}>
-                <Typography variant="subtitle2" sx={{ mb:1 }}>Detected Transactions (Editable)</Typography>
-                <Stack spacing={1}>
-                  {transactions.map(t => (
-                    <Stack key={t.id} direction="row" spacing={2} alignItems="center">
-                      <Box sx={{ flex:1, minWidth:0 }}>
-                        <Typography variant="body2" noWrap title={t.description} sx={{ fontWeight:600 }}>{t.description}</Typography>
-                        <Typography variant="caption" sx={{ color:'text.secondary' }}>₱{Number(t.amount||0).toLocaleString()} • {t.aiCategory}</Typography>
-                      </Box>
-                      <FormControlLabel control={<Switch size="small" checked={!!t.autoBook} onChange={(e)=> setTransactions(prev=> prev.map(x=> x.id===t.id?{...x, autoBook:e.target.checked}:x))} />} label="Auto" />
-                      <TextField select size="small" label="Book" value={t.autoBook ? inferBookFromCategory(t.aiCategory) : (t.book || inferBookFromCategory(t.aiCategory))} onChange={(e)=> setTransactions(prev=> prev.map(x=> x.id===t.id?{...x, book:e.target.value, autoBook:false}:x))} sx={{ minWidth:220 }} disabled={!!t.autoBook}>
-                        {BOOK_OPTIONS.map(opt => <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>)}
-                      </TextField>
-                      <Button size="small" startIcon={<Iconify icon="eva:edit-fill" />} onClick={()=> handleEditTransaction(t)}>Edit</Button>
-                    </Stack>
-                  ))}
-                </Stack>
-              </Card>
-            )}
+            {/* Invoice edit area removed from Step 3 per requirement (editing now only in Step 4) */}
           </Box>
         );
       case 3:
@@ -1141,6 +1121,27 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
             {/* Existing transaction confirmation UI retained for expense mode */}
             {!salesMode && (
               <>
+                {/* Editing moved here from Step 3 for invoices */}
+                {transactions.length > 0 && (
+                  <Card sx={{ p:2, mb:3 }}>
+                    <Typography variant="subtitle2" sx={{ mb:1 }}>Detected Transactions (Editable)</Typography>
+                    <Stack spacing={1}>
+                      {transactions.map(t => (
+                        <Stack key={t.id} direction="row" spacing={2} alignItems="center">
+                          <Box sx={{ flex:1, minWidth:0 }}>
+                            <Typography variant="body2" noWrap title={t.description} sx={{ fontWeight:600 }}>{t.description}</Typography>
+                            <Typography variant="caption" sx={{ color:'text.secondary' }}>₱{Number(t.amount||0).toLocaleString()} • {t.aiCategory}</Typography>
+                          </Box>
+                          <FormControlLabel control={<Switch size="small" checked={!!t.autoBook} onChange={(e)=> setTransactions(prev=> prev.map(x=> x.id===t.id?{...x, autoBook:e.target.checked}:x))} />} label="Auto" />
+                          <TextField select size="small" label="Book" value={t.autoBook ? inferBookFromCategory(t.aiCategory) : (t.book || inferBookFromCategory(t.aiCategory))} onChange={(e)=> setTransactions(prev=> prev.map(x=> x.id===t.id?{...x, book:e.target.value, autoBook:false}:x))} sx={{ minWidth:220 }} disabled={!!t.autoBook}>
+                            {BOOK_OPTIONS.map(opt => <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>)}
+                          </TextField>
+                          <Button size="small" startIcon={<Iconify icon="eva:edit-fill" />} onClick={()=> handleEditTransaction(t)}>Edit</Button>
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </Card>
+                )}
                 {(!transactions || transactions.length === 0) ? (
                   <Alert severity="info">No transactions detected. Upload files in Step 0 and proceed.</Alert>
                 ) : (
