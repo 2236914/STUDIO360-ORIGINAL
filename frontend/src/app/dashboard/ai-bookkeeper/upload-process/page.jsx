@@ -190,16 +190,35 @@ const COA_CODES = {
   CAPITAL: '301',
 };
 
+// --- Learned category overrides (persisted locally) -----------------------
+function loadCategoryOverrides() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem('aiCategoryOverrides');
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed === 'object') ? parsed : {};
+  } catch (_) { return {}; }
+}
+function saveCategoryOverrides(map) {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage.setItem('aiCategoryOverrides', JSON.stringify(map)); } catch (_) { /* ignore */ }
+}
+function normalizeKey(desc = '') {
+  return String(desc).toLowerCase().replace(/\s+/g, ' ').trim().slice(0, 140);
+}
+
 function mapExpenseCategoryToCoa(category = '') {
   const c = String(category).toLowerCase();
-  if (c.includes('purchase') || c.includes('cogs') || c.includes('inventory')) return { code: COA_CODES.PURCHASES, label: 'Purchases (COGS)' };
+  if (c.includes('purchase') || c.includes('cogs') || c.includes('inventory')) return { code: COA_CODES.PURCHASES, label: 'Purchases – Materials' };
   if (c.includes('suppl')) return { code: COA_CODES.SUPPLIES, label: 'Supplies Expense' };
   if (c.includes('rent')) return { code: COA_CODES.RENT, label: 'Rent Expense' };
-  if (c.includes('advert') || c.includes('market')) return { code: COA_CODES.ADVERTISING, label: 'Advertising / Marketing' };
-  if (c.includes('deliver') || c.includes('freight') || c.includes('shipping')) return { code: COA_CODES.DELIVERY, label: 'Delivery / Transportation' };
+  if (c.includes('advert') || c.includes('market')) return { code: COA_CODES.ADVERTISING, label: 'Advertising' };
+  if (c.includes('deliver') || c.includes('freight') || c.includes('shipping') || c.includes('transport')) return { code: COA_CODES.DELIVERY, label: 'Transportation' };
   if (c.includes('tax') || c.includes('license')) return { code: COA_CODES.TAXES, label: 'Taxes & Licenses' };
   if (c.includes('utilit') || c.includes('electric') || c.includes('water') || c.includes('internet')) return { code: COA_CODES.UTILITIES, label: 'Utilities Expense' };
-  if (c.includes('fee')) return { code: COA_CODES.FEES, label: 'Platform Fees & Charges' };
+  if (c.includes('fee') || c.includes('platform')) return { code: COA_CODES.FEES, label: 'Platform Fees & Charges' };
+  if (c.includes('misc') || c.includes('other') || c.includes('general')) return { code: COA_CODES.MISC, label: 'Miscellaneous Expense' };
   return { code: COA_CODES.MISC, label: 'Miscellaneous Expense' };
 }
 
@@ -232,6 +251,10 @@ export default function UploadProcessPage() {
   const [transferState, setTransferState] = useState({ transferred: 0, total: 0, categories: [] });
   const [step3Initialized, setStep3Initialized] = useState(false);
   const [lastTransferBooks, setLastTransferBooks] = useState({ counts: {}, total: 0 });
+  const [categoryOverrides, setCategoryOverrides] = useState({});
+
+  // Load overrides once on mount
+  useEffect(() => { setCategoryOverrides(loadCategoryOverrides()); }, []);
 
   const totalSteps = steps.length;
   const completedSteps = Object.keys(completed).length;
@@ -311,6 +334,13 @@ export default function UploadProcessPage() {
           t.id === editDialog.transaction.id ? editDialog.transaction : t
         )
       );
+      // Persist override for future parses based on description root
+      const key = normalizeKey(editDialog.transaction.description || editDialog.transaction.sourceFile || '');
+      if (key) {
+        const next = { ...categoryOverrides, [key]: editDialog.transaction.aiCategory };
+        setCategoryOverrides(next);
+        saveCategoryOverrides(next);
+      }
     }
     setEditDialog({ open: false, transaction: null });
   };
@@ -413,7 +443,9 @@ export default function UploadProcessPage() {
           else if (e.code === COA_CODES.ADVERTISING) payload.advertisingDebit = amt;
           else if (e.code === COA_CODES.DELIVERY) payload.deliveryDebit = amt;
           else if (e.code === COA_CODES.TAXES) payload.taxesDebit = amt;
-          else payload.purchasesDebit = amt;
+          else if (e.code === COA_CODES.UTILITIES) payload.utilitiesDebit = amt;
+          else if (e.code === COA_CODES.MISC) payload.miscDebit = amt;
+          else payload.purchasesDebit = amt; // fallback
           await axios.post('/api/bookkeeping/cash-disbursements', payload);
           counts['cash-disbursements'] += 1;
   } else if (cls === 'income') {
@@ -495,7 +527,8 @@ export default function UploadProcessPage() {
       { k: 'shopee', c: 'Online Sales Revenue' },
       { k: 'tiktok', c: 'Online Sales Revenue' },
     ];
-    Object.entries(textsByFile).forEach(([filename, text]) => {
+  const overrides = categoryOverrides; // snapshot
+  Object.entries(textsByFile).forEach(([filename, text]) => {
   const structured = structuredByFile?.[filename] || {};
   const canonical = canonicalByFile?.[filename] || null;
       const fileUrl = canonical?.source?.fileUrl || null;
@@ -513,11 +546,14 @@ export default function UploadProcessPage() {
         if (seller) descParts.push(seller);
         if (inv) descParts.push(`Invoice ${inv}`);
         const description = (descParts.join(' - ') || 'Document Total') + ` (${filename})`;
+        const baseDesc = description;
+        const overrideKey = normalizeKey(baseDesc);
+        const learnedCat = overrides[overrideKey];
         txns.push({
           id: id++,
-          description,
+          description: baseDesc,
           amount: grandTotal,
-          aiCategory: 'Operating Expenses',
+          aiCategory: learnedCat || 'Operating Expenses',
           confidence: 90,
           suggested: true,
           structuredSource: !!structured,
@@ -551,8 +587,10 @@ export default function UploadProcessPage() {
         const candidateDesc = (!amountRe.test(prevLine) && prevLine && !metadataSkip.test(prevLine)) ? prevLine : lines[i];
         const desc = candidateDesc.slice(0, 140);
         const lower = (desc || '').toLowerCase();
-        const hint = categoryHints.find((h) => lower.includes(h.k));
-        const aiCategory = hint ? hint.c : 'Operating Expenses';
+  const hint = categoryHints.find((h) => lower.includes(h.k));
+  let aiCategory = hint ? hint.c : 'Operating Expenses';
+  const overrideKey = normalizeKey(desc);
+  if (overrides[overrideKey]) aiCategory = overrides[overrideKey];
         txns.push({
           id: id++,
           description: `${desc} (${filename})`,
@@ -1193,6 +1231,15 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}
                     </MenuItem>
                   ))}
                 </TextField>
+                {(() => {
+                  const m = mapExpenseCategoryToCoa(editDialog.transaction.aiCategory);
+                  if (!m) return null;
+                  return (
+                    <Typography variant="caption" sx={{ mt: 0.5, display: 'block', color: 'text.secondary' }}>
+                      COA: {m.code} • {m.label}
+                    </Typography>
+                  );
+                })()}
               </Box>
               
               <Box>
