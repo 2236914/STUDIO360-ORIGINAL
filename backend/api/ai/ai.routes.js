@@ -361,6 +361,14 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
     const scriptPath = path.join(__dirname, '..', '..', 'python', 'sales_ingest.py');
     const filePath = req.file.path;
     // Reusable Node fallback using xlsx (kept lightweight). Called on spawn error OR script failure (e.g., missing openpyxl).
+    const toAbsoluteUrl = (storedPath) => {
+      try {
+        const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'http');
+        const host = req.get('host');
+        return `${proto}://${host}/${storedPath}`;
+      } catch (_) { return `/${storedPath}`; }
+    };
+
     const performNodeFallback = () => {
       try {
         const XLSX = require('xlsx');
@@ -468,10 +476,12 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
         }
 
         // If all sheets failed, return empty structure
+        const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        const fileMeta = { originalName: req.file.originalname, storedPath, fileUrl: toAbsoluteUrl(storedPath) };
         if (best.count === 0) {
-          return { success: true, fallback: true, data: { platform: 'Unknown', count: 0, normalized: [], journalEntries: [], diagnostics: { selectedSheet: null, headerIdxUsed: null } } };
+          return { success: true, fallback: true, data: { platform: 'Unknown', count: 0, normalized: [], journalEntries: [], diagnostics: { selectedSheet: null, headerIdxUsed: null }, fileMeta } };
         }
-        return { success: true, fallback: true, data: { platform: best.platform, count: best.count, normalized: best.rows, journalEntries: best.journalEntries, diagnostics: { selectedSheet: best.sheet, headerIdxUsed: best.headerIdxUsed } } };
+        return { success: true, fallback: true, data: { platform: best.platform, count: best.count, normalized: best.rows, journalEntries: best.journalEntries, diagnostics: { selectedSheet: best.sheet, headerIdxUsed: best.headerIdxUsed }, fileMeta } };
       } catch (e) {
         return { success: false, message: 'node_fallback_failed', error: e.message };
       }
@@ -488,7 +498,7 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
     });
     py.on('close', (code) => {
       if (responded) return; responded = true;
-      try {
+  try {
         const parsed = JSON.parse(stdout || '{}');
         if (!parsed.success) {
           // If openpyxl or pandas dependency missing -> fallback
@@ -500,6 +510,10 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
         }
         // If Python succeeded but returned zero rows, try Node fallback for resilience
         const data = parsed.data || {};
+        // Enrich with file meta for frontend preview
+        const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
+        const fileMeta = { originalName: req.file.originalname, storedPath, fileUrl: toAbsoluteUrl(storedPath) };
+        if (data && typeof data === 'object') data.fileMeta = fileMeta;
         if ((data.count === 0 || !Array.isArray(data.normalized) || data.normalized.length === 0)) {
           const fb = performNodeFallback();
           if (fb && fb.success && fb.data && fb.data.count > 0) {
@@ -517,7 +531,7 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
             // ignore if not resolvable
           }
         }
-        return res.json({ success: true, data, stderr });
+  return res.json({ success: true, data, stderr });
       } catch (e) {
         return res.status(500).json({ success: false, message: 'Sales ingest parse failed', error: String(e), stderr, stdout });
       }

@@ -685,7 +685,8 @@ export default function UploadProcessPage() {
   const canonicalAccumulator = {};
   const warningsAccumulator = {};
       const salesAccumulator = [];
-      for (const file of uploadedFiles) {
+  let lastSalesFileUrl = null;
+  for (const file of uploadedFiles) {
         const formData = new FormData();
         formData.append('file', file, file.name);
         // Detect spreadsheet for sales ingestion (xlsx/xls)
@@ -700,9 +701,13 @@ export default function UploadProcessPage() {
               },
             });
             const normalized = res?.data?.data?.normalized || [];
+            const fileMeta = res?.data?.data?.fileMeta || null;
             if (Array.isArray(normalized)) {
               normalized.forEach(r => salesAccumulator.push(r));
               setSalesMode(true);
+            }
+            if (fileMeta && fileMeta.fileUrl) {
+              lastSalesFileUrl = fileMeta.fileUrl;
             }
             setUploadLogs((prev) => [...prev, `Processed sales file ${file.name} (${file.size} bytes)`]);
           } catch (e) {
@@ -727,7 +732,7 @@ export default function UploadProcessPage() {
         setUploadLogs((prev) => [...prev, `Processed ${file.name} (${file.size} bytes)`]);
       }
       if (salesAccumulator.length) {
-        setSalesRows(salesAccumulator);
+        setSalesRows(salesAccumulator.map(r => ({ ...r, __fileUrl: lastSalesFileUrl })));
       }
       setOcrTexts(results);
       setOcrStructured(structuredAccumulator);
@@ -1104,6 +1109,12 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
                 <Typography variant="subtitle2" sx={{ mb:1 }}>Sales Transactions</Typography>
                 <Stack spacing={1}>
                   {salesRows.length === 0 && <Alert severity="info">No sales rows detected.</Alert>}
+                  {/* Show a single file-level preview button if available */}
+                  {salesRows.length > 0 && salesRows[0]?.__fileUrl && (
+                    <Box sx={{ mb: 1 }}>
+                      <Button size="small" color="info" component="a" href={salesRows[0].__fileUrl} target="_blank" rel="noopener noreferrer" startIcon={<Iconify icon="eva:external-link-fill" />}>Open uploaded file</Button>
+                    </Box>
+                  )}
                   {salesRows.map((r, idx) => (
                     <Stack key={idx} direction="row" spacing={2} alignItems="center">
                       <Box sx={{ flex:1, minWidth:0 }}>
