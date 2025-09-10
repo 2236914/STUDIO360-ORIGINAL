@@ -17,11 +17,11 @@ TIKTOK_ALIASES = {
 }
 
 SHOPEE_ALIASES = {
-    'total_revenue': ['original price', 'gross sales', 'item original amount'],
-    'fees': ['platform fees', 'fees & charges', 'seller fees', 'total fees', 'blue column'],
+    'total_revenue': ['original price', 'original product price', 'gross sales', 'item original amount'],
+    'fees': ['platform fees', 'platform fee', 'fees & charges', 'seller fees', 'total fees', 'blue column'],
     'withholding_tax': ['withholding tax', 'tax withheld', 'orange column'],
-    'cash_received': ['total released amount', 'released amount', 'net payout', 'green column'],
-    'date': ['date', 'order date', 'transaction date']
+    'cash_received': ['total released amount', 'total released amount (', 'released amount', 'net payout', 'green column'],
+    'date': ['date', 'order date', 'transaction date', 'payout completed date']
 }
 
 COMMON_SCHEMA_KEYS = ['date','platform','order_id','total_revenue','fees','withholding_tax','cash_received']
@@ -94,6 +94,8 @@ def normalize_rows(df: pd.DataFrame, platform: str) -> List[NormalizedSale]:
     sales: List[NormalizedSale] = []
     # Order ID aliases common across exports
     order_aliases = ['order id','order_id','orderid','order no','order number','transaction id','txn id','ref','reference']
+    # Precompute possible Shopee fee columns for summation
+    shopee_fee_keywords = ['commission fee', 'service fee', 'transaction fee', 'ams commission', 'support program fee', 'platform fee', 'platform fees']
     for _, row in df.iterrows():
         def parse_float(val) -> float:
             if val is None: return 0.0
@@ -126,12 +128,25 @@ def normalize_rows(df: pd.DataFrame, platform: str) -> List[NormalizedSale]:
                 if rawv not in (None, ''):
                     order_id_val = str(rawv).strip()[:80]
                     break
+        # Compute fees: prefer mapped column; if missing on Shopee, sum known fee columns
+        fees_value: float
+        if col_map.get('fees'):
+            fees_value = parse_float(row[col_map['fees']])
+        elif platform.lower() == 'shopee':
+            fees_value = 0.0
+            for col in df.columns:
+                cname = str(col).strip().lower()
+                if any(k in cname for k in shopee_fee_keywords):
+                    fees_value += parse_float(row[col])
+        else:
+            fees_value = 0.0
+
         sale = NormalizedSale(
             date=date_norm or '',
             platform=platform,
             order_id=order_id_val,
             total_revenue=parse_float(row[col_map['total_revenue']]) if col_map.get('total_revenue') else 0.0,
-            fees=parse_float(row[col_map['fees']]) if col_map.get('fees') else 0.0,
+            fees=fees_value,
             withholding_tax=parse_float(row[col_map['withholding_tax']]) if col_map.get('withholding_tax') else 0.0,
             cash_received=parse_float(row[col_map['cash_received']]) if col_map.get('cash_received') else 0.0,
         )
@@ -143,29 +158,162 @@ def normalize_rows(df: pd.DataFrame, platform: str) -> List[NormalizedSale]:
 
 
 def load_excel(path: str) -> pd.DataFrame:
+    """Load Excel with default header. Shopee files may need header offset; handled in ingest_sales."""
     return pd.read_excel(path, engine='openpyxl')
 
 
+def _needs_shopee_header_shift(df: pd.DataFrame) -> bool:
+    """Heuristic: when DataFrame is empty or lacks any expected Shopee columns."""
+    if df is None or df.empty:
+        return True
+    lower_cols = ' '.join([str(c).lower() for c in df.columns])
+    expected_aliases = sum(SHOPEE_ALIASES.values(), [])  # flatten
+    has_any = any(alias.lower() in lower_cols for alias in expected_aliases)
+    # also treat many Unnamed columns as misaligned header
+    unnamed_ratio = sum(1 for c in df.columns if str(c).startswith('Unnamed')) / max(1, len(df.columns))
+    if not has_any or unnamed_ratio > 0.5:
+        return True
+    return False
+
+
+def _peek_shopee_signature(path: str) -> bool:
+    """Lightweight peek of first rows to see if row 5 likely contains Shopee headers.
+    Looks for strings like 'Original Price', 'Total Released Amount', etc. in row index 4.
+    """
+    try:
+        tmp = pd.read_excel(path, engine='openpyxl', header=None, nrows=10)
+    except Exception:
+        return False
+    try:
+        # Check likely header rows (5th and 6th display rows => indexes 4 and 5)
+        candidate_rows = [4, 5]
+        signatures = ['original price', 'total released amount', 'withholding tax', 'platform fees']
+        for row_idx in candidate_rows:
+            if row_idx >= len(tmp.index):
+                continue
+            vals = [str(v).lower() for v in list(tmp.iloc[row_idx].values)]
+            if any(any(sig in v for v in vals) for sig in signatures):
+                return True
+        return False
+    except Exception:
+        return False
+
+
+def _try_read_sheet(path: str, sheet_name: Optional[str], header: Optional[int]) -> pd.DataFrame:
+    try:
+        return pd.read_excel(path, engine='openpyxl', sheet_name=sheet_name, header=header)
+    except Exception:
+        return pd.DataFrame()
+
+
 def ingest_sales(path: str) -> Dict[str, Any]:
-    df = load_excel(path)
-    platform = detect_platform(df)
-    sales = normalize_rows(df, platform)
-    normalized = [asdict(s) for s in sales]
-    journal_batches: List[Dict[str, Any]] = []
-    for s in sales:
-        journal_batches.append({
-            'date': s.date,
-            'remarks': s.remarks(),
-            'order_id': s.order_id,
-            'lines': s.to_journal_entries(),
-            'platform': s.platform,
-        })
-    return {
-        'platform': platform,
-        'count': len(sales),
-        'normalized': normalized,
-        'journalEntries': journal_batches,
+    """Parse an Excel file by scanning all sheets and multiple potential header rows,
+    then select the best parse by number of normalized rows. Returns diagnostics.
+    """
+    # Try a quick default read for a fast-path
+    try:
+        df_default = load_excel(path)
+    except Exception:
+        df_default = pd.DataFrame()
+
+    best = {
+        'platform': 'Unknown',
+        'count': 0,
+        'normalized': [],
+        'journalEntries': [],
+        'diagnostics': {
+            'selectedSheet': None,
+            'headerIndexUsed': None,
+            'platformDetected': None,
+            'tried': []
+        }
     }
+
+    try:
+        xls = pd.ExcelFile(path, engine='openpyxl')
+        sheet_names = list(xls.sheet_names)
+    except Exception:
+        # Fallback to single-sheet path
+        sheet_names = [None]
+
+    # Header candidates: include common Shopee rows (4/5 => display 5/6) and nearby for robustness
+    header_candidates = list(range(0, 16))
+
+    for sheet in sheet_names:
+        for hdr in header_candidates:
+            try:
+                df = pd.read_excel(path, engine='openpyxl', sheet_name=sheet, header=hdr)
+            except Exception:
+                continue
+            if df is None or df.empty:
+                best['diagnostics']['tried'].append({'sheet': sheet, 'header': hdr, 'rows': 0, 'why': 'empty'})
+                continue
+            # Detect platform on this candidate frame
+            platform = detect_platform(df)
+            # Normalize rows
+            try:
+                sales = normalize_rows(df, platform)
+            except Exception:
+                best['diagnostics']['tried'].append({'sheet': sheet, 'header': hdr, 'rows': 0, 'why': 'normalize_error'})
+                continue
+            rows_count = len(sales)
+            best['diagnostics']['tried'].append({'sheet': sheet, 'header': hdr, 'rows': rows_count, 'platform': platform})
+            if rows_count > best['count']:
+                normalized = [asdict(s) for s in sales]
+                journal_batches: List[Dict[str, Any]] = []
+                for s in sales:
+                    journal_batches.append({
+                        'date': s.date,
+                        'remarks': s.remarks(),
+                        'order_id': s.order_id,
+                        'lines': s.to_journal_entries(),
+                        'platform': s.platform,
+                    })
+                best.update({
+                    'platform': platform,
+                    'count': rows_count,
+                    'normalized': normalized,
+                    'journalEntries': journal_batches,
+                })
+                best['diagnostics'].update({
+                    'selectedSheet': sheet,
+                    'headerIndexUsed': hdr,
+                    'platformDetected': platform,
+                })
+
+    # If scanning failed to find any rows, attempt the earlier Shopee-specific heuristic as a last resort
+    if best['count'] == 0 and df_default is not None:
+        platform_guess = detect_platform(df_default) if not df_default.empty else 'Unknown'
+        if platform_guess.lower() == 'shopee' or _peek_shopee_signature(path):
+            for sheet in [None, 'sales', 'Sales', 'Sheet1']:
+                for hdr in (4, 5):
+                    df_alt = _try_read_sheet(path, sheet, hdr)
+                    if df_alt is None or df_alt.empty:
+                        continue
+                    platform = 'Shopee'
+                    sales = normalize_rows(df_alt, platform)
+                    if len(sales) > best['count']:
+                        normalized = [asdict(s) for s in sales]
+                        journal_batches = [{
+                            'date': s.date,
+                            'remarks': s.remarks(),
+                            'order_id': s.order_id,
+                            'lines': s.to_journal_entries(),
+                            'platform': s.platform,
+                        } for s in sales]
+                        best.update({
+                            'platform': platform,
+                            'count': len(sales),
+                            'normalized': normalized,
+                            'journalEntries': journal_batches,
+                        })
+                        best['diagnostics'].update({
+                            'selectedSheet': sheet,
+                            'headerIndexUsed': hdr,
+                            'platformDetected': platform,
+                        })
+
+    return best
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

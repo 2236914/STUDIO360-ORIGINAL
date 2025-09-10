@@ -357,7 +357,7 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
     if (!['xlsx','xls'].includes(ext)) {
       return res.status(400).json({ success: false, message: 'Only Excel files (.xlsx/.xls) supported for sales ingest' });
     }
-    const pythonPath = resolvePythonExecutable();
+  const pythonPath = resolvePythonExecutable();
     const scriptPath = path.join(__dirname, '..', '..', 'python', 'sales_ingest.py');
     const filePath = req.file.path;
     // Reusable Node fallback using xlsx (kept lightweight). Called on spawn error OR script failure (e.g., missing openpyxl).
@@ -365,41 +365,113 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
       try {
         const XLSX = require('xlsx');
         const wb = XLSX.readFile(filePath, { cellDates: true });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(ws, { defval: '' });
-        if (!json.length) return { success: true, fallback: true, data: { platform: 'Unknown', count: 0, normalized: [], journalEntries: [] } };
-        const lowerCols = Object.fromEntries(Object.keys(json[0] || {}).map(c => [c.toLowerCase(), c]));
-        const pick = (...alts) => { for (const a of alts) { if (lowerCols[a]) return lowerCols[a]; } return null; };
-        const isTikTok = Object.keys(lowerCols).some(c => c.includes('settlement amount'));
-        const platform = isTikTok ? 'TikTok' : 'Shopee';
-        const rows = [];
-        for (const r of json) {
-          // Date precedence: payout / settlement / settled / order settled time then normal date/order/transaction
-          const dateField = pick(
-            'payout completed date','payout completion date','payout date','order settled time','order settled date','settlement date','settled date',
-            'release date','order date','transaction date','date'
-          );
-          const row = {
-            date: (r[dateField] || '').toString(),
-            platform,
-            order_id: (r[pick('order id','orderid','order no','order number')] || '').toString(),
-            total_revenue: Number(String(r[pick('total revenue','original price','gross sales')] || '').replace(/[^0-9.-]/g,'')) || 0,
-            fees: Number(String(r[pick('total fees','platform fees','fees & charges')] || '').replace(/[^0-9.-]/g,'')) || 0,
-            withholding_tax: Number(String(r[pick('withholding tax','adjustment amount','adjustment amount (withholding)')] || '').replace(/[^0-9.-]/g,'')) || 0,
-            cash_received: Number(String(r[pick('total settlement amount','total released amount','released amount')] || '').replace(/[^0-9.-]/g,'')) || 0,
+
+        const sigShopee = ['original price', 'total released amount', 'platform fees', 'withholding'];
+        const sigTikTok = ['settlement amount', 'adjustment amount', 'total fees', 'released amount'];
+
+        const parseWorksheet = (ws) => {
+          // First attempt: default sheet_to_json
+          let json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+          let headerIdxUsed = null;
+          const looksEmpty = !json.length || Object.keys(json[0] || {}).every(k => /^__EMPTY/.test(String(k)) || String(k).startsWith('Unnamed'));
+          if (looksEmpty) {
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, blankrows: false });
+            let headerIdx = -1;
+            const maxScan = Math.min(rows.length, 20);
+            for (let i = 0; i < maxScan; i++) {
+              const row = (rows[i] || []).map(v => String(v || '').toLowerCase());
+              if (!row.length) continue;
+              const joined = row.join(' ');
+              let hits = 0;
+              for (const s of [...sigShopee, ...sigTikTok]) { if (joined.includes(s)) hits++; }
+              if (hits >= 2) { headerIdx = i; break; }
+            }
+            if (headerIdx >= 0) {
+              json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, range: headerIdx });
+              headerIdxUsed = headerIdx;
+            } else {
+              // Try common Shopee header rows explicitly (zero-based indexes 4/5 => display rows 5/6)
+              for (const idx of [4, 5]) {
+                const attempt = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false, range: idx });
+                if (attempt && attempt.length && !Object.keys(attempt[0] || {}).every(k => /^__EMPTY/.test(String(k)))) {
+                  json = attempt;
+                  headerIdxUsed = idx;
+                  break;
+                }
+              }
+            }
+          }
+          return { json, headerIdxUsed };
+        };
+
+        let best = { rows: [], journalEntries: [], platform: 'Unknown', count: 0, sheet: null, headerIdxUsed: null };
+        for (const sheetName of wb.SheetNames) {
+          const ws = wb.Sheets[sheetName];
+          if (!ws) continue;
+          const { json, headerIdxUsed } = parseWorksheet(ws);
+          if (!json || !json.length) continue;
+          const lowerCols = Object.fromEntries(Object.keys(json[0] || {}).map(c => [c.toLowerCase(), c]));
+          const pick = (...alts) => {
+            const keys = Object.keys(lowerCols);
+            for (const a of alts) {
+              const needle = String(a).toLowerCase();
+              const hit = keys.find(k => k.includes(needle));
+              if (hit) return lowerCols[hit];
+            }
+            return null;
           };
-          if (row.total_revenue || row.cash_received) rows.push(row);
-        }
-        const journalEntries = rows.map(o => {
-          const cash = o.cash_received; const fees = o.fees; const tax = o.withholding_tax; const revenue = o.total_revenue;
+          const isTikTok = Object.keys(lowerCols).some(c => c.includes('settlement amount'));
+          const platform = isTikTok ? 'TikTok' : 'Shopee';
+          const rows = [];
+          for (const r of json) {
+            const dateField = pick(
+              'payout completed date','payout completion date','payout date','order settled time','order settled date','settlement date','settled date',
+              'release date','order date','transaction date','date'
+            );
+            // Revenue: include "original product price" for Shopee
+            const revenueField = pick('total revenue','original product price','original price','gross sales');
+            // Fees: prefer holistic columns; if absent and platform is Shopee, sum individual fee columns
+            let feesVal = Number(String(r[pick('total fees','platform fees','fees & charges')] || '').replace(/[^0-9.-]/g,'')) || 0;
+            if (!feesVal && platform === 'Shopee') {
+              const feeKeys = Object.keys(r).map(k => String(k || ''));
+              const feeNeedles = ['commission fee','service fee','transaction fee','support program fee','ams commission','platform fee'];
+              for (const k of feeKeys) {
+                const lk = k.toLowerCase();
+                if (feeNeedles.some(n => lk.includes(n))) {
+                  feesVal += Number(String(r[k]).replace(/[^0-9.-]/g,'')) || 0;
+                }
+              }
+            }
+            const row = {
+              date: (r[dateField] || '').toString(),
+              platform,
+              order_id: (r[pick('order id','orderid','order no','order number')] || '').toString(),
+              total_revenue: Number(String(r[revenueField] || '').replace(/[^0-9.-]/g,'')) || 0,
+              fees: feesVal,
+              withholding_tax: Number(String(r[pick('withholding tax','adjustment amount','adjustment amount (withholding)')] || '').replace(/[^0-9.-]/g,'')) || 0,
+              cash_received: Number(String(r[pick('total settlement amount','total released amount','released amount')] || '').replace(/[^0-9.-]/g,'')) || 0,
+            };
+            if (row.total_revenue || row.cash_received) rows.push(row);
+          }
+          const journalEntries = rows.map(o => {
+            const cash = o.cash_received; const fees = o.fees; const tax = o.withholding_tax; const revenue = o.total_revenue;
             const creditSales = platform === 'TikTok' ? (cash + fees + tax) : revenue;
             const lines = [ { account: 'Cash', side: 'Dr', amount: cash } ];
             if (tax > 0) lines.push({ account: 'Withholding Tax', side: 'Dr', amount: tax });
             if (fees > 0) lines.push({ account: 'Fees & Charges', side: 'Dr', amount: fees });
             lines.push({ account: 'Sales', side: 'Cr', amount: creditSales });
             return { date: o.date, remarks: `To record sales for the day - ${platform}`, platform, orderId: o.order_id, lines };
-        });
-        return { success: true, fallback: true, data: { platform, count: rows.length, normalized: rows, journalEntries } };
+          });
+          if (rows.length > best.count) {
+            best = { rows, journalEntries, platform, count: rows.length, sheet: sheetName, headerIdxUsed };
+          }
+        }
+
+        // If all sheets failed, return empty structure
+        if (best.count === 0) {
+          return { success: true, fallback: true, data: { platform: 'Unknown', count: 0, normalized: [], journalEntries: [], diagnostics: { selectedSheet: null, headerIdxUsed: null } } };
+        }
+        return { success: true, fallback: true, data: { platform: best.platform, count: best.count, normalized: best.rows, journalEntries: best.journalEntries, diagnostics: { selectedSheet: best.sheet, headerIdxUsed: best.headerIdxUsed } } };
       } catch (e) {
         return { success: false, message: 'node_fallback_failed', error: e.message };
       }
@@ -426,16 +498,26 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
           }
           return res.status(500).json({ success: false, message: 'Sales ingest script error', stderr, stdout });
         }
+        // If Python succeeded but returned zero rows, try Node fallback for resilience
+        const data = parsed.data || {};
+        if ((data.count === 0 || !Array.isArray(data.normalized) || data.normalized.length === 0)) {
+          const fb = performNodeFallback();
+          if (fb && fb.success && fb.data && fb.data.count > 0) {
+            return res.json({ ...fb, warnings: ['python_zero_rows_fallback_used'], pythonDiagnostics: { stderr, stdout, pythonData: data } });
+          }
+          // Return Python result with diagnostics if fallback also empty
+          return res.json({ success: true, data: data, warnings: ['python_zero_rows_no_fallback_rows'], stderr, stdout });
+        }
         // Optionally auto-post journal entries if client sends ?post=1
         const autoPost = req.query.post === '1';
-        if (autoPost && parsed.data && Array.isArray(parsed.data.journalEntries)) {
+        if (autoPost && data && Array.isArray(data.journalEntries)) {
           try {
             const bk = require('../bookkeeping/bookkeeping.routes'); // avoid circular heavy use; we only need post logic via fetch style
           } catch (e) {
             // ignore if not resolvable
           }
         }
-        return res.json({ success: true, data: parsed.data, stderr });
+        return res.json({ success: true, data, stderr });
       } catch (e) {
         return res.status(500).json({ success: false, message: 'Sales ingest parse failed', error: String(e), stderr, stdout });
       }
