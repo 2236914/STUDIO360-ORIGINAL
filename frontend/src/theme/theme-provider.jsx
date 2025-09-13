@@ -137,7 +137,7 @@ function createCompletelySafeTheme(settings) {
           root: {
             position: 'relative',
             borderRadius: 16,
-            boxShadow: '0 0 2px 0 rgba(145, 158, 171, 0.2), 0 12px 24px -4px rgba(145, 158, 171, 0.12)',
+            boxShadow: 'none',
             zIndex: 0,
           },
         },
@@ -158,6 +158,53 @@ function createCompletelySafeTheme(settings) {
             MozOsxFontSmoothing: 'grayscale',
             // Ensure text is properly defined for CssBaseline
             fontFamily: '"Barlow",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif',
+          },
+        },
+      },
+      // Fix z-index layering for modals and dialogs
+      MuiModal: {
+        styleOverrides: {
+          root: {
+            zIndex: 1400, // Higher than header (1100) and nav (1101)
+          },
+        },
+      },
+      MuiDialog: {
+        styleOverrides: {
+          root: {
+            zIndex: 1400, // Ensure dialogs appear above navigation
+          },
+        },
+      },
+      MuiDrawer: {
+        styleOverrides: {
+          root: {
+            zIndex: 1350, // Higher than header but lower than modals
+          },
+        },
+      },
+      MuiPopover: {
+        styleOverrides: {
+          root: {
+            zIndex: 1350, // Higher than header but lower than modals
+          },
+        },
+      },
+      MuiSelect: {
+        styleOverrides: {
+          root: {
+            '& .MuiSelect-select': {
+              zIndex: 1,
+            },
+          },
+        },
+        defaultProps: {
+          MenuProps: {
+            PaperProps: {
+              style: {
+                zIndex: 1500, // Higher than dialogs (1400)
+              },
+            },
           },
         },
       },

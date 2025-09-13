@@ -161,6 +161,25 @@ input[type='number']::-webkit-inner-spin-button {
   border-radius: inherit !important;
 }
 
+/* Fix for Select dropdowns appearing behind Dialog modals */
+.MuiDialog-root ~ .MuiPopover-root,
+.MuiDialog-root ~ .MuiMenu-root,
+.MuiPopover-root[role="listbox"],
+.MuiMenu-root[role="listbox"] {
+  z-index: 1600 !important;
+}
+
+.MuiDialog-root ~ .MuiPopover-root .MuiPaper-root,
+.MuiDialog-root ~ .MuiMenu-root .MuiPaper-root {
+  z-index: 1600 !important;
+}
+
+/* Ensure all dropdown menus from selects have proper z-index */
+.MuiSelect-select + .MuiPopover-root,
+.MuiTextField-root[data-select="true"] + .MuiPopover-root {
+  z-index: 1600 !important;
+}
+
 /* Print styles - now using PDF generation for consistent layout */
 @media print {
   /* Hide navigation and other non-essential elements */

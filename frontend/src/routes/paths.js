@@ -14,6 +14,16 @@ const MOCK_ID = 'e99f09a7-dd88-49d5-b1c8-1daf80c2d7b1';
 export const paths = {
   faqs: '/faqs',
   minimalStore: 'https://mui.com/store/items/minimal-dashboard/',
+  // PRODUCT
+  product: {
+    root: '/product',
+    checkout: `/product/checkout`,
+  },
+  // STORE
+  store: {
+    root: '/stores',
+    checkout: (storeId) => `/stores/${storeId}/checkout`,
+  },
   // AUTH
   auth: {
     amplify: {
@@ -88,7 +98,6 @@ export const paths = {
       edit: (id) => `${ROOTS.DASHBOARD}/invoice/${id}/edit`,
     },
     mail: `${ROOTS.DASHBOARD}/mail`,
-    chat: `${ROOTS.DASHBOARD}/chat`,
     // User
     user: {
       root: `${ROOTS.DASHBOARD}/user`,
@@ -98,9 +107,6 @@ export const paths = {
     account: `${ROOTS.DASHBOARD}/account`,
     // Misc
     announcement: `${ROOTS.DASHBOARD}/announcement`,
-    kanban: `${ROOTS.DASHBOARD}/kanban`,
-    calendar: `${ROOTS.DASHBOARD}/calendar`,
-    toastDemo: `${ROOTS.DASHBOARD}/toast-demo`,
   },
   // ADMIN (Admin IT Dashboard)
   admin: {

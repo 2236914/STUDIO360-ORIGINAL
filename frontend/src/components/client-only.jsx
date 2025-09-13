@@ -1,17 +1,13 @@
-'use client';
-
-import { useEffect, useState } from 'react';
-
-// ----------------------------------------------------------------------
+import { useState, useEffect } from 'react';
 
 export function ClientOnly({ children, fallback = null }) {
-  const [hasMounted, setHasMounted] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    setHasMounted(true);
+    setIsClient(true);
   }, []);
 
-  if (!hasMounted) {
+  if (!isClient) {
     return fallback;
   }
 

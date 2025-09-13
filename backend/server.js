@@ -86,10 +86,16 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes (to be implemented)
-app.use('/api/auth', require('./api/auth/auth.routes'));
-app.use('/api/ai', require('./api/ai/ai.routes'));
-app.use('/api/invoices', require('./api/invoices/invoice.routes'));
-app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes'));
+// Note: Route files removed during merge - uncomment when available
+// app.use('/api/auth', require('./api/auth/auth.routes'));
+// app.use('/api/ai', require('./api/ai/ai.routes'));
+// app.use('/api/invoices', require('./api/invoices/invoice.routes'));
+// app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes'));
+
+// Basic routes for now
+app.get('/api/status', (req, res) => {
+  res.json({ message: 'STUDIO360 Backend API is running!', version: '1.0.0' });
+});
 
 // 404 handler
 app.use('*', (req, res) => {

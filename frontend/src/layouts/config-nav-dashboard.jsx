@@ -11,7 +11,6 @@ const icon = (name) => <SvgColor src={`${CONFIG.site.basePath}/assets/icons/navb
 const ICONS = {
   job: icon('ic-job'),
   blog: icon('ic-blog'),
-  chat: icon('ic-chat'),
   mail: icon('ic-mail'),
   user: icon('ic-user'),
   file: icon('ic-file'),
@@ -20,13 +19,11 @@ const ICONS = {
   order: icon('ic-order'),
   label: icon('ic-label'),
   blank: icon('ic-blank'),
-  kanban: icon('ic-kanban'),
   folder: icon('ic-folder'),
   course: icon('ic-course'),
   banking: icon('ic-banking'),
   booking: icon('ic-booking'),
   product: icon('ic-product'),
-  calendar: icon('ic-calendar'),
   disabled: icon('ic-disabled'),
   external: icon('ic-external'),
   menuItem: icon('ic-menu-item'),
@@ -98,8 +95,6 @@ export const navData = [
       { title: 'Orders', path: paths.dashboard.orders.root, icon: ICONS.order },
       { title: 'Invoice', path: paths.dashboard.invoice.root, icon: ICONS.invoice },
       { title: 'Mail', path: paths.dashboard.mail, icon: ICONS.mail },
-      { title: 'Toast Demo', path: paths.dashboard.toastDemo, icon: ICONS.blog },
-      { title: 'Chat', path: paths.dashboard.chat, icon: ICONS.chat },
     ],
   },
   /**
@@ -118,8 +113,6 @@ export const navData = [
     subheader: 'MISC',
     items: [
       { title: 'Announcement', path: paths.dashboard.announcement, icon: ICONS.announcement },
-      { title: 'Kanban', path: paths.dashboard.kanban, icon: ICONS.kanban },
-      { title: 'Calendar', path: paths.dashboard.calendar, icon: ICONS.calendar },
     ],
   },
 ];

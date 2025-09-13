@@ -186,6 +186,8 @@ export default function StoresPage() {
                       <Button
                         variant="outlined"
                         size="small"
+                        component="a"
+                        href={`/stores/${store.name.toLowerCase().replace(/\s+/g, '')}`}
                         sx={{
                           minWidth: 96,
                           px: 2,

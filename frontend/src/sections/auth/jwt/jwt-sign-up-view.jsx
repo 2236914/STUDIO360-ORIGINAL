@@ -106,6 +106,11 @@ export function JwtSignUpView() {
 
   const renderHead = (
     <Stack spacing={1.5} sx={{ mb: 5 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center">
+        <Link component={RouterLink} href="/landing" variant="subtitle2">
+          ← Back to landing
+        </Link>
+      </Stack>
       <Typography variant="h5">Get started absolutely free</Typography>
 
       <Stack direction="row" spacing={0.5}>

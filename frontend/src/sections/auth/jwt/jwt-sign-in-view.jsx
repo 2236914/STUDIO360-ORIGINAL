@@ -134,6 +134,7 @@ export function JwtSignInView() {
 
   const renderHead = (
     <Stack spacing={1.5} sx={{ mb: 5 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" />
       <Typography variant="h5">Sign in to your account</Typography>
 
       <Stack direction="row" spacing={0.5}>
@@ -150,7 +151,12 @@ export function JwtSignInView() {
 
   const renderForm = (
     <Stack spacing={3}>
-      <Field.Text name="email" label="Email address" InputLabelProps={{ shrink: true }} />
+      <Field.Text
+        name="email"
+        label="Email address"
+        placeholder="Enter your email"
+        InputLabelProps={{ shrink: true }}
+      />
 
       <Stack spacing={1.5}>
         <Field.Text

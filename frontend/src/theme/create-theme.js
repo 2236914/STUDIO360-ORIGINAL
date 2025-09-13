@@ -142,6 +142,53 @@ export function createTheme(localeComponents, settings) {
             },
           },
         },
+        // Fix z-index layering for modals and dialogs
+        MuiModal: {
+          styleOverrides: {
+            root: {
+              zIndex: 1400, // Higher than header (1100) and nav (1101)
+            },
+          },
+        },
+        MuiDialog: {
+          styleOverrides: {
+            root: {
+              zIndex: 1400, // Ensure dialogs appear above navigation
+            },
+          },
+        },
+        MuiDrawer: {
+          styleOverrides: {
+            root: {
+              zIndex: 1350, // Higher than header but lower than modals
+            },
+          },
+        },
+        MuiPopover: {
+          styleOverrides: {
+            root: {
+              zIndex: 1350, // Higher than header but lower than modals
+            },
+          },
+        },
+        MuiSelect: {
+          styleOverrides: {
+            root: {
+              '& .MuiSelect-select': {
+                zIndex: 1,
+              },
+            },
+          },
+          defaultProps: {
+            MenuProps: {
+              PaperProps: {
+                style: {
+                  zIndex: 1500, // Higher than dialogs (1400)
+                },
+              },
+            },
+          },
+        },
       }
     },
     // Locale components (optional, minimal)

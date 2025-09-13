@@ -12,6 +12,7 @@ import { defaultSettings, SettingsProvider } from 'src/components/settings';
 import { React19Compatibility } from 'src/components/react19-compat';
 
 import { AuthProvider } from 'src/auth/context/jwt';
+import { CheckoutProvider } from 'src/sections/checkout/context';
 
 // ----------------------------------------------------------------------
 
@@ -19,6 +20,14 @@ export const viewport = {
   width: 'device-width',
   initialScale: 1,
   themeColor: primary.main,
+};
+
+export const metadata = {
+  title: 'STUDIO360 - AI-Powered Bookkeeping',
+  description: 'Professional bookkeeping system with AI automation',
+  icons: [
+    { rel: 'icon', url: '/favicon.ico' },
+  ],
 };
 
 export default async function RootLayout({ children }) {
@@ -40,7 +49,9 @@ export default async function RootLayout({ children }) {
             <ThemeProvider>
               <MotionLazy>
                 <ProgressBar />
-                {children}
+                <CheckoutProvider>
+                  {children}
+                </CheckoutProvider>
               </MotionLazy>
             </ThemeProvider>
           </SettingsProvider>

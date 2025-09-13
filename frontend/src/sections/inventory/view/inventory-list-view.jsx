@@ -5,12 +5,6 @@ import { useState, useEffect, useCallback } from 'react';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Box from '@mui/material/Box';
-import Tooltip from '@mui/material/Tooltip';
-import IconButton from '@mui/material/IconButton';
-import Typography from '@mui/material/Typography';
-import useMediaQuery from '@mui/material/useMediaQuery';
-import { useTheme } from '@mui/material/styles';
 import {
   DataGrid,
   gridClasses,
@@ -131,15 +125,76 @@ const INVENTORY_DATA = [
     createdAt: new Date('2024-01-12'),
     coverUrl: '/assets/images/product/product_5.jpg',
   },
+  {
+    id: '6',
+    name: 'Bluetooth Gaming Mouse',
+    category: 'Electronics',
+    sku: 'BGM-606-BLK',
+    stock: 33,
+    minStock: 10,
+    price: 79.99,
+    status: 'active',
+    inventoryType: 'in stock',
+    createdAt: new Date('2024-01-08'),
+    coverUrl: '/assets/images/product/product_6.jpg',
+  },
+  {
+    id: '7',
+    name: 'USB-C Hub',
+    category: 'Electronics',
+    sku: 'UCH-707-GRY',
+    stock: 18,
+    minStock: 12,
+    price: 49.99,
+    status: 'active',
+    inventoryType: 'in stock',
+    createdAt: new Date('2024-01-03'),
+    coverUrl: '/assets/images/product/product_7.jpg',
+  },
+  {
+    id: '8',
+    name: 'Mechanical Keyboard',
+    category: 'Electronics',
+    sku: 'MKB-808-RGB',
+    stock: 2,
+    minStock: 8,
+    price: 149.99,
+    status: 'active',
+    inventoryType: 'low stock',
+    createdAt: new Date('2024-01-01'),
+    coverUrl: '/assets/images/product/product_8.jpg',
+  },
+  {
+    id: '9',
+    name: 'Laptop Stand',
+    category: 'Accessories',
+    sku: 'LS-909-ALU',
+    stock: 0,
+    minStock: 6,
+    price: 34.99,
+    status: 'inactive',
+    inventoryType: 'out of stock',
+    createdAt: new Date('2023-12-28'),
+    coverUrl: '/assets/images/product/product_9.jpg',
+  },
+  {
+    id: '10',
+    name: 'Wireless Earbuds',
+    category: 'Electronics',
+    sku: 'WEB-101-WHT',
+    stock: 67,
+    minStock: 25,
+    price: 119.99,
+    status: 'active',
+    inventoryType: 'in stock',
+    createdAt: new Date('2023-12-25'),
+    coverUrl: '/assets/images/product/product_10.jpg',
+  },
 ];
 
 // ----------------------------------------------------------------------
 
 export function InventoryListView() {
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
-  
   const confirmRows = useBoolean();
 
   const router = useRouter();
@@ -152,15 +207,7 @@ export function InventoryListView() {
 
   const [filterButtonEl, setFilterButtonEl] = useState(null);
 
-  const [columnVisibilityModel, setColumnVisibilityModel] = useState({
-    ...HIDE_COLUMNS,
-    // Hide less important columns on mobile
-    category: isMobile,
-    sku: isMobile,
-    createdAt: isMobile,
-  });
-
-  const [density, setDensity] = useState('standard');
+  const [columnVisibilityModel, setColumnVisibilityModel] = useState(HIDE_COLUMNS);
 
   const canReset = filters.state.status.length > 0 || filters.state.stock.length > 0;
 
@@ -199,9 +246,6 @@ export function InventoryListView() {
     [router]
   );
 
-  const handleDensityChange = useCallback(() => {
-    setDensity(prev => prev === 'standard' ? 'compact' : 'standard');
-  }, []);
 
   const CustomToolbarCallback = useCallback(
     () => (
@@ -212,53 +256,34 @@ export function InventoryListView() {
         setFilterButtonEl={setFilterButtonEl}
         filteredResults={dataFiltered.length}
         onOpenConfirmDeleteRows={confirmRows.onTrue}
-        isMobile={isMobile}
       />
     ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filters.state, selectedRowIds, isMobile]
+    [filters.state, selectedRowIds]
   );
 
   const columns = [
-    { 
-      field: 'category', 
-      headerName: 'Category', 
-      filterable: false,
-      width: isMobile ? 120 : 140,
-      hideable: true,
-    },
+    { field: 'category', headerName: 'Category', filterable: false },
     {
       field: 'name',
       headerName: 'Product',
       flex: 1,
-      minWidth: isMobile ? 200 : 360,
+      minWidth: 360,
       hideable: false,
       renderCell: (params) => (
         <RenderCellProduct params={params} onViewRow={() => handleViewRow(params.row.id)} />
       ),
     },
     {
-      field: 'sku',
-      headerName: 'Product SKU',
-      width: isMobile ? 120 : 140,
-      hideable: true,
-      renderCell: (params) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.875rem' }}>
-          {params.row.sku}
-        </span>
-      ),
-    },
-    {
       field: 'createdAt',
       headerName: 'Create at',
-      width: isMobile ? 120 : 160,
-      hideable: true,
+      width: 160,
       renderCell: (params) => <RenderCellCreatedAt params={params} />,
     },
     {
       field: 'inventoryType',
       headerName: 'Stock',
-      width: isMobile ? 100 : 160,
+      width: 160,
       type: 'singleSelect',
       valueOptions: STOCK_OPTIONS,
       renderCell: (params) => <RenderCellStock params={params} />,
@@ -266,14 +291,14 @@ export function InventoryListView() {
     {
       field: 'price',
       headerName: 'Price',
-      width: isMobile ? 100 : 140,
+      width: 140,
       editable: true,
       renderCell: (params) => <RenderCellPrice params={params} />,
     },
     {
       field: 'status',
       headerName: 'Status',
-      width: isMobile ? 80 : 110,
+      width: 110,
       type: 'singleSelect',
       editable: true,
       valueOptions: STATUS_OPTIONS,
@@ -285,7 +310,7 @@ export function InventoryListView() {
       headerName: ' ',
       align: 'right',
       headerAlign: 'right',
-      width: isMobile ? 60 : 80,
+      width: 80,
       sortable: false,
       filterable: false,
       disableColumnMenu: true,
@@ -324,10 +349,11 @@ export function InventoryListView() {
     <>
       <DashboardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
         <CustomBreadcrumbs
-          heading="Inventory"
+          heading="List"
           links={[
             { name: 'Dashboard', href: paths.dashboard.root },
-            { name: 'Inventory' },
+            { name: 'Inventory', href: paths.dashboard.inventory.root },
+            { name: 'List' },
           ]}
           action={
             <Button
@@ -335,38 +361,20 @@ export function InventoryListView() {
               href={paths.dashboard.inventory.new}
               variant="contained"
               startIcon={<Iconify icon="mingcute:add-line" />}
-              size={isMobile ? "small" : "medium"}
-              sx={{
-                minWidth: isMobile ? 'auto' : 140,
-                px: isMobile ? 2 : 3,
-              }}
             >
-              {isMobile ? 'New' : 'New product'}
+              New product
             </Button>
           }
-          sx={{ 
-            mb: { xs: 2, md: 5 },
-            px: { xs: 2, md: 3 },
-          }}
+          sx={{ mb: { xs: 3, md: 5 } }}
         />
 
-        <Box sx={{ px: { xs: 2, md: 3 }, pb: { xs: 2, md: 3 } }}>
           <Card
             sx={{
               flexGrow: { md: 1 },
               display: { md: 'flex' },
-              minHeight: { xs: 500, md: 700 },
+            height: { xs: 800, md: 'auto' },
+            minHeight: 600,
               flexDirection: { md: 'column' },
-              '& .MuiDataGrid-root': {
-                border: 'none',
-              },
-              '& .MuiDataGrid-cell': {
-                borderBottom: 'none',
-              },
-              '& .MuiDataGrid-columnHeaders': {
-                borderBottom: 'none',
-                bgcolor: 'background.neutral',
-              },
             }}
           >
             <DataGrid
@@ -375,13 +383,12 @@ export function InventoryListView() {
               rows={dataFiltered}
               columns={columns}
               loading={false}
-              density={density}
               getRowHeight={() => 'auto'}
-              pageSizeOptions={isMobile ? [5, 10] : [5, 10, 25]}
+            pageSizeOptions={[5, 10, 25]}
               initialState={{ 
                 pagination: { 
                   paginationModel: { 
-                    pageSize: isMobile ? 5 : 10 
+                  pageSize: 10 
                   } 
                 } 
               }}
@@ -390,7 +397,6 @@ export function InventoryListView() {
               onColumnVisibilityModelChange={(newModel) => setColumnVisibilityModel(newModel)}
               slots={{
                 toolbar: CustomToolbarCallback,
-                footer: () => <CustomFooter density={density} onDensityChange={handleDensityChange} />,
                 noRowsOverlay: () => <EmptyContent />,
                 noResultsOverlay: () => <EmptyContent title="No results found" />,
               }}
@@ -402,19 +408,15 @@ export function InventoryListView() {
               sx={{ 
                 [`& .${gridClasses.cell}`]: { 
                   alignItems: 'center', 
-                  display: 'inline-flex',
-                  px: { xs: 1, md: 2 },
-                },
-                [`& .${gridClasses.columnHeaders}`]: {
-                  px: { xs: 1, md: 2 },
-                },
-                '& .MuiDataGrid-virtualScroller': {
-                  px: { xs: 1, md: 2 },
-                },
+                display: 'inline-flex' 
+              },
+              height: '100%',
+              '& .MuiDataGrid-main': {
+                minHeight: 400,
+              }
               }}
             />
           </Card>
-        </Box>
       </DashboardContent>
 
       <ConfirmDialog
@@ -450,27 +452,16 @@ function CustomToolbar({
   filteredResults,
   setFilterButtonEl,
   onOpenConfirmDeleteRows,
-  isMobile,
 }) {
   return (
     <>
-      <GridToolbarContainer sx={{ 
-        flexDirection: { xs: 'column', md: 'row' },
-        gap: { xs: 2, md: 1 },
-        p: { xs: 2, md: 1 },
-        alignItems: { xs: 'stretch', md: 'center' },
-      }}>
+      <GridToolbarContainer>
         <InventoryTableToolbar
           filters={filters}
           options={{ stocks: STOCK_OPTIONS, status: STATUS_OPTIONS }}
         />
 
-        <GridToolbarQuickFilter 
-          sx={{ 
-            width: { xs: '100%', md: 'auto' },
-            minWidth: { xs: 'auto', md: 240 },
-          }}
-        />
+        <GridToolbarQuickFilter />
 
         <Stack
           spacing={1}
@@ -478,11 +469,6 @@ function CustomToolbar({
           direction="row"
           alignItems="center"
           justifyContent="flex-end"
-          sx={{
-            flexDirection: { xs: 'column', sm: 'row' },
-            width: { xs: '100%', md: 'auto' },
-            gap: { xs: 1, sm: 1 },
-          }}
         >
           {!!selectedRowIds.length && (
             <Button
@@ -490,22 +476,14 @@ function CustomToolbar({
               color="error"
               startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
               onClick={onOpenConfirmDeleteRows}
-              sx={{ 
-                width: { xs: '100%', sm: 'auto' },
-                minWidth: { xs: 'auto', sm: 120 },
-              }}
             >
-              {isMobile ? `Delete (${selectedRowIds.length})` : `Delete (${selectedRowIds.length})`}
+              Delete ({selectedRowIds.length})
             </Button>
           )}
 
-          <Stack direction="row" spacing={1} sx={{ width: { xs: '100%', sm: 'auto' } }}>
             <GridToolbarColumnsButton />
-            <Box ref={setFilterButtonEl}>
-              <GridToolbarFilterButton />
-            </Box>
+          <GridToolbarFilterButton ref={setFilterButtonEl} />
             <GridToolbarExport />
-          </Stack>
         </Stack>
       </GridToolbarContainer>
 
@@ -513,50 +491,13 @@ function CustomToolbar({
         <InventoryTableFiltersResult
           filters={filters}
           totalResults={filteredResults}
-          sx={{ p: { xs: 2, md: 2.5 }, pt: 0 }}
+          sx={{ p: 2.5, pt: 0 }}
         />
       )}
     </>
   );
 }
 
-function CustomFooter({ density, onDensityChange }) {
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        px: 2,
-        py: 1,
-        borderTop: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      {/* Left side - Density toggle */}
-      <Stack direction="row" alignItems="center" spacing={1}>
-        <Tooltip title={density === 'compact' ? 'Switch to comfortable view' : 'Switch to compact view'}>
-          <IconButton 
-            onClick={onDensityChange}
-            size="small"
-            sx={{ 
-              color: 'text.secondary',
-              '&:hover': { color: 'primary.main' }
-            }}
-          >
-            <Iconify icon={density === 'compact' ? 'eva:expand-outline' : 'eva:compress-outline'} />
-          </IconButton>
-        </Tooltip>
-        <Typography variant="body2" color="text.secondary">
-          {density === 'compact' ? 'Compact' : 'Comfortable'}
-        </Typography>
-      </Stack>
-
-      {/* Right side - will show default pagination */}
-      <Box />
-    </Box>
-  );
-}
 
 function applyFilter({ inputData, filters }) {
   const { stock, status } = filters;

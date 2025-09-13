@@ -38,8 +38,20 @@ export function RHFSelect({
           fullWidth
           SelectProps={{
             native,
-            MenuProps: { PaperProps: { sx: { maxHeight: 220, ...slotProps?.paper } } },
-            sx: { textTransform: 'capitalize' },
+            ...other.SelectProps,
+            MenuProps: { 
+              ...other.SelectProps?.MenuProps,
+              PaperProps: { 
+                ...other.SelectProps?.MenuProps?.PaperProps,
+                sx: { 
+                  maxHeight: 220, 
+                  zIndex: 1500, // Ensure dropdown appears above dialogs
+                  ...slotProps?.paper,
+                  ...other.SelectProps?.MenuProps?.PaperProps?.sx,
+                } 
+              } 
+            },
+            sx: { textTransform: 'capitalize', ...other.SelectProps?.sx },
           }}
           InputLabelProps={{ htmlFor: labelId, ...InputLabelProps }}
           inputProps={{ id: labelId, ...inputProps }}

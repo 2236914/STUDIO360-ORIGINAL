@@ -25,14 +25,30 @@ export function CheckoutPaymentMethods({ options, ...other }) {
 
   return (
     <>
-      <Card {...other}>
-        <CardHeader title="Payment" />
+      <Card 
+        {...other}
+        sx={{
+          borderRadius: 2,
+          boxShadow: 1,
+          ...other.sx
+        }}
+      >
+        <CardHeader 
+          title="Payment Methods" 
+          sx={{ 
+            pb: 0,
+            '& .MuiCardHeader-title': {
+              typography: 'h6',
+              fontWeight: 600
+            }
+          }}
+        />
 
         <Controller
           name="payment"
           control={control}
           render={({ field, fieldState: { error } }) => (
-            <Stack sx={{ px: 3, pb: 3 }}>
+            <Stack sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 3 }, pt: 2 }}>
               {options.payments.map((option) => (
                 <OptionItem
                   option={option}

@@ -23,10 +23,34 @@ import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
 import { fDate, fTime } from 'src/utils/format-time';
+import MenuItem from '@mui/material/MenuItem';
+import ListSubheader from '@mui/material/ListSubheader';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
 
 // ----------------------------------------------------------------------
 
 export function AccountShop() {
+  // Available shipping regions
+  const SHIPPING_REGIONS = [
+    { key: 'metro-manila', label: 'Metro Manila', description: 'National Capital Region' },
+    { key: 'luzon', label: 'Luzon', description: 'Outside Metro Manila' },
+    { key: 'visayas', label: 'Visayas', description: 'Central Philippines' },
+    { key: 'mindanao', label: 'Mindanao', description: 'Southern Philippines' },
+    { key: 'islands', label: 'Island Provinces', description: 'Remote islands (Palawan, Batanes, etc.)' }
+  ];
+
+  // Popular courier options
+  const POPULAR_COURIERS = [
+    'JNT Express',
+    'SPX',
+    'LBC',
+    'Ninja Van',
+    '2GO',
+    'Grab Express',
+    'Lalamove'
+  ];
+
   const [couriers, setCouriers] = useState([
     { 
       id: '1', 
@@ -34,8 +58,13 @@ export function AccountShop() {
       active: true, 
       status: 'active',
       lastUpdated: '2024-01-15T10:30:00Z',
-      shippingTypes: 2,
-      totalFees: 270.00
+      regions: {
+        'metro-manila': { fee: 120.00, active: true },
+        'luzon': { fee: 150.00, active: true },
+        'visayas': { fee: 180.00, active: false },
+        'mindanao': { fee: 200.00, active: false },
+        'islands': { fee: 250.00, active: false }
+      }
     },
     { 
       id: '2', 
@@ -43,8 +72,13 @@ export function AccountShop() {
       active: true, 
       status: 'active',
       lastUpdated: '2024-01-14T15:45:00Z',
-      shippingTypes: 2,
-      totalFees: 380.00
+      regions: {
+        'metro-manila': { fee: 130.00, active: true },
+        'luzon': { fee: 160.00, active: true },
+        'visayas': { fee: 190.00, active: true },
+        'mindanao': { fee: 210.00, active: true },
+        'islands': { fee: 280.00, active: false }
+      }
     },
     { 
       id: '3', 
@@ -52,28 +86,28 @@ export function AccountShop() {
       active: false, 
       status: 'inactive',
       lastUpdated: '2024-01-10T09:15:00Z',
-      shippingTypes: 0,
-      totalFees: 0.00
+      regions: {
+        'metro-manila': { fee: 140.00, active: false },
+        'luzon': { fee: 170.00, active: false },
+        'visayas': { fee: 200.00, active: false },
+        'mindanao': { fee: 230.00, active: false },
+        'islands': { fee: 300.00, active: false }
+      }
     },
-  ]);
-
-  const [shippingTypes, setShippingTypes] = useState([
-    { id: '1', name: 'Metro Manila', courier: 'JNT Express', fee: 120.00, active: true },
-    { id: '2', name: 'Luzon (Outside Metro Manila)', courier: 'JNT Express', fee: 150.00, active: true },
-    { id: '3', name: 'Visayas', courier: 'SPX', fee: 180.00, active: true },
-    { id: '4', name: 'Mindanao', courier: 'SPX', fee: 200.00, active: false },
   ]);
 
   const [selectedCourier, setSelectedCourier] = useState('JNT Express');
 
   const courierDialog = useBoolean();
-  const shippingDialog = useBoolean();
   const deleteCourierDialog = useBoolean();
-  const deleteShippingDialog = useBoolean();
   const editCourierDialog = useBoolean();
+  const deleteShippingDialog = useBoolean();
   const editShippingDialog = useBoolean();
   const [itemToDelete, setItemToDelete] = useState(null);
   const [itemToEdit, setItemToEdit] = useState(null);
+  
+  // Shipping types state (currently unused - legacy from old implementation)
+  const [shippingTypes, setShippingTypes] = useState([]);
 
   // Set initial selected courier when component mounts
   useEffect(() => {
@@ -96,6 +130,24 @@ export function AccountShop() {
       zipCode: '1100',
       about: 'Premium fashion and lifestyle products with exceptional quality and customer service.',
       profileImage: null,
+      backgroundImage: null,
+      shopCategory: '',
+      customCategory: '',
+      // Business Hours
+      mondayToFriday: '9:00 AM - 6:00 PM',
+      saturday: '10:00 AM - 4:00 PM',
+      sunday: 'Closed',
+      // Social Media Links
+      facebookUrl: '',
+      instagramUrl: '',
+      twitterUrl: '',
+      youtubeUrl: '',
+      tiktokUrl: '',
+      // Announcement Banner
+      announcementText: 'Spend ₱1,500 and get FREE tracked nationwide shipping!',
+      announcementEnabled: true,
+      freeShippingEnabled: true,
+      freeShippingMinAmount: 2000,
     },
   });
 
@@ -103,15 +155,7 @@ export function AccountShop() {
   const courierMethods = useForm({
     defaultValues: {
       name: '',
-    },
-  });
-
-  // Shipping Type Form
-  const shippingMethods = useForm({
-    defaultValues: {
-      name: '',
-      courier: '',
-      fee: 0,
+      isCustom: false,
     },
   });
 
@@ -122,7 +166,7 @@ export function AccountShop() {
     },
   });
 
-  // Edit Shipping Type Form
+  // Edit Shipping Type Form (legacy - currently unused)
   const editShippingMethods = useForm({
     defaultValues: {
       name: '',
@@ -133,65 +177,151 @@ export function AccountShop() {
 
   const handleSaveShopInfo = useCallback(async (data) => {
     try {
+      // Validate free shipping settings
+      if (data.freeShippingEnabled) {
+        const minAmount = parseFloat(data.freeShippingMinAmount);
+        
+        if (isNaN(minAmount) || minAmount < 0) {
+          toast.error('Please enter a valid minimum amount for free shipping');
+          return;
+        }
+        
+        if (minAmount > 100000) {
+          toast.error('Free shipping minimum amount cannot exceed ₱100,000');
+          return;
+        }
+        
+        if (minAmount < 100) {
+          toast.error('Free shipping minimum amount should be at least ₱100');
+          return;
+        }
+      }
+      
       await new Promise((resolve) => setTimeout(resolve, 500));
       toast.success('Shop information updated successfully!');
       console.info('Shop Data:', data);
     } catch (error) {
       toast.error('Failed to update shop information');
+      console.error('Save error:', error);
     }
   }, []);
 
   const handleAddCourier = useCallback(async (data) => {
     try {
+      // Initialize all regions as inactive with default fees
+      const defaultRegions = {};
+      SHIPPING_REGIONS.forEach(region => {
+        defaultRegions[region.key] = { fee: 0, active: false };
+      });
+
+      // Use custom name if 'custom' was selected
+      const courierName = data.name === 'custom' ? data.customName : data.name;
+
+      if (!courierName || courierName.trim().length === 0) {
+        toast.error('Please enter a courier name');
+        return;
+      }
+
+      // Validate courier name length
+      if (courierName.trim().length < 2) {
+        toast.error('Courier name must be at least 2 characters long');
+        return;
+      }
+
+      if (courierName.trim().length > 50) {
+        toast.error('Courier name cannot exceed 50 characters');
+        return;
+      }
+
+      // Check if courier already exists (case-insensitive)
+      const existingCourier = couriers.find(c => c.name.toLowerCase().trim() === courierName.toLowerCase().trim());
+      if (existingCourier) {
+        toast.error(`Courier "${courierName}" already exists`);
+        return;
+      }
+
       const newCourier = {
         id: Date.now().toString(),
-        name: data.name,
+        name: courierName.trim(),
         active: true,
         status: 'active',
         lastUpdated: new Date().toISOString(),
-        shippingTypes: 0,
-        totalFees: 0.00,
+        regions: defaultRegions,
       };
+      
       setCouriers((prev) => [...prev, newCourier]);
       courierMethods.reset();
       courierDialog.onFalse();
-      toast.success('Courier added successfully!');
+      toast.success('Courier added successfully! Please set shipping fees for each region.');
     } catch (error) {
       toast.error('Failed to add courier');
     }
-  }, [courierMethods, courierDialog]);
+  }, [courierMethods, courierDialog, SHIPPING_REGIONS, couriers]);
 
-  const handleAddShippingType = useCallback(async (data) => {
-    try {
-      const newShipping = {
-        id: Date.now().toString(),
-        name: data.name,
-        courier: data.courier,
-        fee: parseFloat(data.fee),
-        active: true,
-      };
-      setShippingTypes((prev) => [...prev, newShipping]);
-      
-      // Update courier stats
-      setCouriers((prev) => prev.map((courier) => {
-        if (courier.name === data.courier) {
-          return {
-            ...courier,
-            shippingTypes: courier.shippingTypes + 1,
-            totalFees: courier.totalFees + parseFloat(data.fee),
-            lastUpdated: new Date().toISOString(),
-          };
-        }
-        return courier;
-      }));
-      
-      shippingMethods.reset();
-      shippingDialog.onFalse();
-      toast.success('Shipping type added successfully!');
-    } catch (error) {
-      toast.error('Failed to add shipping type');
+  const handleUpdateRegionFees = useCallback((courierId, regionKey, fee, active) => {
+    // Handle empty string as 0, allow during typing
+    const numericFee = fee === '' ? 0 : parseFloat(fee) || 0;
+    
+    // Only validate on blur or when user stops typing, not during input
+    // For now, just prevent extremely high values during typing
+    if (numericFee > 10000) {
+      toast.error('Shipping fee cannot exceed ₱10,000');
+      return;
     }
-  }, [shippingMethods, shippingDialog]);
+    
+    setCouriers((prev) => prev.map((courier) => {
+      if (courier.id === courierId) {
+        return {
+          ...courier,
+          regions: {
+            ...courier.regions,
+            [regionKey]: {
+              fee: numericFee,
+              active: active
+            }
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+      }
+      return courier;
+    }));
+    
+    // Only show success message for significant updates (not every keystroke)
+    if (numericFee > 0) {
+      toast.success('Shipping fee updated successfully!');
+    }
+  }, []);
+
+  const handleToggleRegion = useCallback((courierId, regionKey) => {
+    setCouriers((prev) => prev.map((courier) => {
+      if (courier.id === courierId) {
+        const currentRegion = courier.regions[regionKey];
+        
+        // Validate that fee is set before activating
+        if (!currentRegion.active && (!currentRegion.fee || currentRegion.fee <= 0)) {
+          toast.error('Please set a shipping fee before activating this region');
+          return courier;
+        }
+        
+        const newActiveStatus = !currentRegion.active;
+        
+        return {
+          ...courier,
+          regions: {
+            ...courier.regions,
+            [regionKey]: {
+              ...currentRegion,
+              active: newActiveStatus
+            }
+          },
+          lastUpdated: new Date().toISOString(),
+        };
+      }
+      return courier;
+    }));
+    
+    toast.success('Region availability updated!');
+  }, []);
 
   const handleToggleCourier = useCallback((courierId) => {
     setCouriers((prev) => {
@@ -226,8 +356,22 @@ export function AccountShop() {
 
   const handleDeleteCourier = useCallback((courierId) => {
     const courier = couriers.find(c => c.id === courierId);
-    if (courier && courier.shippingTypes > 0) {
-      toast.error(`Cannot delete ${courier.name}. Remove all shipping types first.`);
+    if (!courier) {
+      toast.error('Courier not found');
+      return;
+    }
+    
+    // Check if any regions are active for this courier
+    const hasActiveRegions = Object.values(courier.regions).some(region => region.active);
+    if (hasActiveRegions) {
+      const activeRegionCount = Object.values(courier.regions).filter(region => region.active).length;
+      toast.error(`Cannot delete ${courier.name}. Please disable all ${activeRegionCount} active region${activeRegionCount > 1 ? 's' : ''} first.`);
+      return;
+    }
+    
+    // Prevent deletion if this is the only courier
+    if (couriers.length <= 1) {
+      toast.error('Cannot delete the last courier. At least one courier is required.');
       return;
     }
     
@@ -414,10 +558,64 @@ export function AccountShop() {
     }
   }, [itemToEdit, editShippingDialog, shippingTypes]);
 
+  // Helper function to get shipping configuration summary
+  const getShippingConfigSummary = useCallback(() => {
+    const activeCouriers = couriers.filter(c => c.active);
+    const totalActiveRegions = activeCouriers.reduce((total, courier) => {
+      return total + Object.values(courier.regions).filter(r => r.active).length;
+    }, 0);
+    
+    return {
+      activeCouriers: activeCouriers.length,
+      totalActiveRegions,
+      hasShippingOptions: totalActiveRegions > 0,
+      freeShippingEnabled: shopMethods.watch('freeShippingEnabled'),
+    };
+  }, [couriers, shopMethods]);
+
   return (
     <Stack spacing={3}>
+      {/* Announcement Banner Card */}
+      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
+        <Box sx={{ p: 3 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+            <Iconify icon="eva:megaphone-outline" width={20} sx={{ color: 'text.primary' }} />
+            <Typography variant="h6">
+              Announcement Banner
+            </Typography>
+          </Stack>
+
+          <Form methods={shopMethods} onSubmit={shopMethods.handleSubmit(handleSaveShopInfo)}>
+            <Stack spacing={3}>
+              <Field.Switch
+                name="announcementEnabled"
+                label="Enable Announcement Banner"
+                helperText="Show promotional banner at the top of your store page"
+              />
+              
+              <Field.Text
+                name="announcementText"
+                label="Announcement Text"
+                placeholder="e.g., Spend ₱1,500 and get FREE tracked nationwide shipping!"
+                disabled={!shopMethods.watch('announcementEnabled')}
+                multiline
+                rows={2}
+                inputProps={{ maxLength: 200 }}
+                helperText="Maximum 200 characters"
+              />
+
+              <Stack direction="row" justifyContent="flex-end">
+                <Button type="submit" variant="outlined" size="small">
+                  Save Announcement
+                </Button>
+              </Stack>
+            </Stack>
+          </Form>
+        </Box>
+      </Card>
+
       {/* Shop Info Card */}
-      <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
         <Box sx={{ p: 3 }}>
           <Typography variant="h6" sx={{ mb: 3 }}>
             Shop Information
@@ -427,25 +625,55 @@ export function AccountShop() {
             <Grid container spacing={3}>
               <Grid item xs={12} md={4}>
                 <Stack spacing={3} alignItems="center">
-                  <Field.UploadAvatar
-                    name="profileImage"
-                    maxSize={3145728}
-                    helperText={
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          mt: 3,
-                          mx: 'auto',
-                          display: 'block',
-                          textAlign: 'center',
-                          color: 'text.disabled',
-                        }}
-                      >
-                        Allowed *.jpeg, *.jpg, *.png, *.gif
-                        <br /> Max size of 3MB
-                      </Typography>
-                    }
-                  />
+                  <Stack spacing={2} alignItems="center">
+                    <Typography variant="subtitle2" sx={{ color: 'text.primary' }}>
+                      Shop Profile Photo
+                    </Typography>
+                    <Field.UploadAvatar
+                      name="profileImage"
+                      maxSize={3145728}
+                      helperText={
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            mt: 3,
+                            mx: 'auto',
+                            display: 'block',
+                            textAlign: 'center',
+                            color: 'text.disabled',
+                          }}
+                        >
+                          Allowed *.jpeg, *.jpg, *.png, *.gif
+                          <br /> Max size of 3MB
+                        </Typography>
+                      }
+                    />
+                  </Stack>
+
+                  <Stack spacing={2} alignItems="center">
+                    <Typography variant="subtitle2" sx={{ color: 'text.primary' }}>
+                      Shop Background Image
+                    </Typography>
+                    <Field.Upload
+                      name="backgroundImage"
+                      maxSize={5242880}
+                      helperText={
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            mt: 2,
+                            mx: 'auto',
+                            display: 'block',
+                            textAlign: 'center',
+                            color: 'text.disabled',
+                          }}
+                        >
+                          Recommended: 1920x400px
+                          <br /> Max size of 5MB
+                        </Typography>
+                      }
+                    />
+                  </Stack>
                 </Stack>
               </Grid>
 
@@ -461,6 +689,43 @@ export function AccountShop() {
                     <Grid item xs={12}>
                       <Field.Text name="phoneNumber" label="Phone Number" placeholder="+63" />
                     </Grid>
+                  </Grid>
+
+                  <Divider />
+
+                  <Typography variant="subtitle2">Shop Category</Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} sm={6}>
+                      <Field.Select
+                        name="shopCategory"
+                        label="Select Category"
+                        placeholder="Choose a category"
+                      >
+                        <MenuItem value="">Choose a category</MenuItem>
+                        <MenuItem value="fashion">Fashion & Apparel</MenuItem>
+                        <MenuItem value="electronics">Electronics & Gadgets</MenuItem>
+                        <MenuItem value="home">Home & Living</MenuItem>
+                        <MenuItem value="beauty">Beauty & Personal Care</MenuItem>
+                        <MenuItem value="sports">Sports & Outdoors</MenuItem>
+                        <MenuItem value="books">Books & Media</MenuItem>
+                        <MenuItem value="toys">Toys & Games</MenuItem>
+                        <MenuItem value="food">Food & Beverages</MenuItem>
+                        <MenuItem value="health">Health & Wellness</MenuItem>
+                        <MenuItem value="automotive">Automotive</MenuItem>
+                        <MenuItem value="jewelry">Jewelry & Accessories</MenuItem>
+                        <MenuItem value="custom">Other (Custom Category)</MenuItem>
+                      </Field.Select>
+                    </Grid>
+                    {shopMethods.watch('shopCategory') === 'custom' && (
+                      <Grid item xs={12} sm={6}>
+                        <Field.Text
+                          name="customCategory"
+                          label="Custom Category"
+                          placeholder="Enter your shop category"
+                          helperText="Describe what type of products you sell"
+                        />
+                      </Grid>
+                    )}
                   </Grid>
 
                   <Divider />
@@ -498,12 +763,246 @@ export function AccountShop() {
         </Box>
       </Card>
 
+      {/* Business Hours Card */}
+      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
+        <Box sx={{ p: 3 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+            <Iconify icon="eva:clock-outline" width={20} sx={{ color: 'text.primary' }} />
+            <Typography variant="h6">
+              Business Hours
+            </Typography>
+          </Stack>
+
+          <Form methods={shopMethods} onSubmit={shopMethods.handleSubmit(handleSaveShopInfo)}>
+            <Stack spacing={3}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={4}>
+                  <Field.Text
+                    name="mondayToFriday"
+                    label="Monday - Friday"
+                    placeholder="e.g., 9:00 AM - 6:00 PM"
+                    helperText="Operating hours for weekdays"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Field.Text
+                    name="saturday"
+                    label="Saturday"
+                    placeholder="e.g., 10:00 AM - 4:00 PM"
+                    helperText="Saturday operating hours"
+                  />
+                </Grid>
+                <Grid item xs={12} sm={4}>
+                  <Field.Text
+                    name="sunday"
+                    label="Sunday"
+                    placeholder="e.g., Closed or 12:00 PM - 4:00 PM"
+                    helperText="Sunday operating hours"
+                  />
+                </Grid>
+              </Grid>
+
+              <Stack direction="row" justifyContent="flex-end">
+                <Button type="submit" variant="outlined" size="small">
+                  Save Business Hours
+                </Button>
+              </Stack>
+            </Stack>
+          </Form>
+        </Box>
+      </Card>
+
+      {/* Social Media Card */}
+      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
+        <Box sx={{ p: 3 }}>
+          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
+            <Iconify icon="eva:share-outline" width={20} sx={{ color: 'text.primary' }} />
+            <Typography variant="h6">
+              Social Media Links
+            </Typography>
+          </Stack>
+
+          <Form methods={shopMethods} onSubmit={shopMethods.handleSubmit(handleSaveShopInfo)}>
+            <Stack spacing={3}>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Field.Text
+                    name="facebookUrl"
+                    label="Facebook URL"
+                    placeholder="https://facebook.com/yourpage"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Iconify icon="eva:facebook-fill" width={20} sx={{ color: '#1877F2' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Field.Text
+                    name="instagramUrl"
+                    label="Instagram URL"
+                    placeholder="https://instagram.com/yourpage"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Iconify icon="eva:instagram-fill" width={20} sx={{ color: '#E4405F' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Field.Text
+                    name="twitterUrl"
+                    label="Twitter URL"
+                    placeholder="https://twitter.com/yourpage"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Iconify icon="eva:twitter-fill" width={20} sx={{ color: '#1DA1F2' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Field.Text
+                    name="youtubeUrl"
+                    label="YouTube URL"
+                    placeholder="https://youtube.com/yourchannel"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Iconify icon="eva:youtube-fill" width={20} sx={{ color: '#FF0000' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Field.Text
+                    name="tiktokUrl"
+                    label="TikTok URL"
+                    placeholder="https://tiktok.com/@yourpage"
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Iconify icon="eva:video-outline" width={20} sx={{ color: '#000000' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+              </Grid>
+
+              <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                  <Iconify icon="eva:info-outline" width={16} sx={{ color: 'text.secondary', mt: 0.25 }} />
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    Add your social media links to help customers connect with your brand. Leave fields empty if you don't have those social media accounts.
+                  </Typography>
+                </Stack>
+              </Box>
+
+              <Stack direction="row" justifyContent="flex-end">
+                <Button type="submit" variant="outlined" size="small">
+                  Save Social Media Links
+                </Button>
+              </Stack>
+            </Stack>
+          </Form>
+        </Box>
+      </Card>
+
       {/* Shipping Info Card */}
-      <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
         <Box sx={{ p: 3 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
             <Typography variant="h6">Shipping Information</Typography>
+            {(() => {
+              const summary = getShippingConfigSummary();
+              if (!summary.hasShippingOptions && !summary.freeShippingEnabled) {
+                return (
+                  <Chip 
+                    icon={<Iconify icon="eva:alert-triangle-fill" width={16} />}
+                    label="No shipping configured" 
+                    color="warning" 
+                    size="small"
+                    variant="soft"
+                  />
+                );
+              }
+              if (summary.hasShippingOptions || summary.freeShippingEnabled) {
+                return (
+                  <Chip 
+                    icon={<Iconify icon="eva:checkmark-circle-2-fill" width={16} />}
+                    label={`${summary.totalActiveRegions} regions configured`}
+                    color="success" 
+                    size="small"
+                    variant="soft"
+                  />
+                );
+              }
+              return null;
+            })()}
           </Stack>
+
+          {/* Free Shipping Configuration */}
+          <Form methods={shopMethods}>
+            <Card variant="outlined" sx={{ p: 3, mb: 3, boxShadow: 'none' }}>
+              <Stack spacing={3}>
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <Iconify icon="eva:gift-outline" width={20} sx={{ color: 'text.primary' }} />
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Free Shipping Option
+                  </Typography>
+                </Stack>
+                
+                <Grid container spacing={2} alignItems="center">
+                  <Grid item xs={12} sm={6}>
+                    <Field.Switch
+                      name="freeShippingEnabled"
+                      label="Enable Free Shipping"
+                      helperText="Offer free shipping when minimum amount is reached"
+                    />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <Field.Text
+                      name="freeShippingMinAmount"
+                      label="Minimum Order Amount (₱)"
+                      type="number"
+                      placeholder="2000"
+                      inputProps={{ step: '0.01', min: '0' }}
+                      helperText="Orders above this amount get free shipping"
+                      disabled={!shopMethods.watch('freeShippingEnabled')}
+                      size="small"
+                    />
+                  </Grid>
+                </Grid>
+
+                <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                    <Iconify icon="eva:info-outline" width={16} sx={{ color: 'text.secondary', mt: 0.25 }} />
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      Free shipping works regardless of customer location. When enabled, customers who reach the minimum order amount will see a "Free Shipping" option alongside your regular courier options.
+                    </Typography>
+                  </Stack>
+                </Box>
+                
+                <Stack direction="row" justifyContent="flex-end">
+                  <Button
+                    onClick={shopMethods.handleSubmit(handleSaveShopInfo)}
+                    variant="outlined"
+                    size="small"
+                  >
+                    Save Free Shipping Settings
+                  </Button>
+                </Stack>
+              </Stack>
+            </Card>
+          </Form>
 
           {/* Couriers Section */}
           <Stack spacing={2} sx={{ mb: 4 }}>
@@ -522,12 +1021,10 @@ export function AccountShop() {
                          {couriers.map((courier) => (
                <Card
                  key={courier.id}
+                 variant="outlined"
                  sx={{
                    p: 2,
-                   border: '1px solid',
-                   borderColor: 'divider',
                    borderRadius: 1,
-                   bgcolor: 'background.paper',
                    boxShadow: 'none',
                  }}
                >
@@ -569,7 +1066,7 @@ export function AccountShop() {
                        size="small"
                        color="error"
                        onClick={() => handleDeleteCourier(courier.id)}
-                       disabled={courier.shippingTypes > 0}
+                       disabled={Object.values(courier.regions).some(r => r.active)}
                      >
                        <Iconify icon="solar:trash-bin-trash-bold" />
                      </IconButton>
@@ -581,27 +1078,14 @@ export function AccountShop() {
 
           <Divider sx={{ my: 3 }} />
 
-          {/* Shipping Types Section */}
+          {/* Regional Shipping Configuration */}
           <Stack spacing={2}>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
-              <Typography variant="subtitle1">Shipping Types & Fees</Typography>
-              <Button
-                variant="outlined"
-                startIcon={<Iconify icon="mingcute:add-line" />}
-                onClick={() => {
-                  shippingMethods.reset();
-                  if (selectedCourier) {
-                    shippingMethods.setValue('courier', selectedCourier);
-                  }
-                  shippingDialog.onTrue();
-                }}
-                size="small"
-              >
-                Add Shipping Type
-              </Button>
+              <Typography variant="subtitle1">Regional Shipping Rates</Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Configure flat rates for each region
+              </Typography>
             </Stack>
-
-
 
             {/* Courier Tabs */}
             {couriers.filter(courier => courier.active).length > 0 && (
@@ -614,7 +1098,7 @@ export function AccountShop() {
                   sx={{ minHeight: 40 }}
                 >
                   {couriers.filter(courier => courier.active).map((courier) => {
-                    const shippingCount = shippingTypes.filter(st => st.courier === courier.name).length;
+                    const activeRegions = Object.values(courier.regions).filter(r => r.active).length;
                     return (
                       <Tab
                         key={courier.id}
@@ -622,20 +1106,20 @@ export function AccountShop() {
                         label={
                           <Stack direction="row" alignItems="center" spacing={1}>
                             <span>{courier.name}</span>
-                            {shippingCount > 0 && (
+                            {activeRegions > 0 && (
                               <Box
                                 sx={{
                                   px: 1,
                                   py: 0.25,
                                   borderRadius: 1,
-                                  bgcolor: 'primary.main',
+                                  bgcolor: 'success.main',
                                   color: 'white',
                                   fontSize: '0.75rem',
                                   minWidth: 20,
                                   textAlign: 'center',
                                 }}
                               >
-                                {shippingCount}
+                                {activeRegions} regions
                               </Box>
                             )}
                           </Stack>
@@ -648,104 +1132,96 @@ export function AccountShop() {
               </Box>
             )}
 
-            {/* Shipping Types by Selected Courier */}
+            {/* Region-based Shipping Fees by Selected Courier */}
             {selectedCourier && (
               <Box sx={{ mt: 2 }}>
-                {shippingTypes.filter(shipping => shipping.courier === selectedCourier).length === 0 ? (
-                  <Box
-                    sx={{
-                      p: 3,
-                      textAlign: 'center',
-                      border: '1px dashed',
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                      bgcolor: 'background.neutral',
-                    }}
-                  >
-                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
-                      No shipping types configured for {selectedCourier}
+                {(() => {
+                  const courier = couriers.find(c => c.name === selectedCourier);
+                  if (!courier) return null;
+                  
+                  return (
+                    <Stack spacing={2}>
+                <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <Stack direction="row" spacing={1.5} alignItems="center">
+                    <Iconify icon="eva:globe-2-outline" width={16} sx={{ color: 'text.secondary' }} />
+                    <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                      Set shipping fees for each region that {selectedCourier} delivers to
                     </Typography>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<Iconify icon="mingcute:add-line" />}
-                      onClick={() => {
-                        shippingMethods.setValue('courier', selectedCourier);
-                        shippingDialog.onTrue();
-                      }}
-                    >
-                      Add First Shipping Type
-                    </Button>
-                  </Box>
-                ) : (
-                  <Stack spacing={2}>
-                                           {shippingTypes
-                         .filter(shipping => shipping.courier === selectedCourier)
-                         .map((shipping) => (
+                  </Stack>
+                </Box>
+
+                      {SHIPPING_REGIONS.map((region) => {
+                        const regionData = courier.regions[region.key];
+                        return (
                            <Card
-                             key={shipping.id}
+                            key={region.key}
+                            variant="outlined"
                              sx={{
-                               p: 2,
-                               border: '1px solid',
-                               borderColor: 'divider',
-                               borderRadius: 1,
-                               bgcolor: 'background.paper',
-                               boxShadow: 'none',
+                              p: 2.5,
+                              borderColor: regionData.active ? 'primary.main' : 'divider',
+                              borderWidth: regionData.active ? 2 : 1,
+                              boxShadow: 'none',
                              }}
                            >
                              <Stack direction="row" alignItems="center" justifyContent="space-between">
                                <Stack direction="row" alignItems="center" spacing={2}>
                                  <Box
                                    sx={{
-                                     width: 6,
-                                     height: 6,
+                                    width: 8,
+                                    height: 8,
                                      borderRadius: '50%',
-                                     bgcolor: shipping.active ? 'success.main' : 'grey.400',
+                                    bgcolor: regionData.active ? 'success.main' : 'grey.400',
                                    }}
                                  />
                                  <Stack>
                                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
-                                     {shipping.name}
+                                    {region.label}
                                    </Typography>
                                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                     via {shipping.courier}
+                                    {region.description}
                                    </Typography>
                                  </Stack>
                                </Stack>
                                
                                <Stack direction="row" alignItems="center" spacing={2}>
-                                 <Typography variant="h6">
-                                   ₱{shipping.fee.toFixed(2)}
-                                 </Typography>
+                                <TextField
+                                  type="number"
+                                  placeholder="0.00"
+                                  size="small"
+                                  inputProps={{ 
+                                    step: '0.01',
+                                    min: '0',
+                                    max: '10000'
+                                  }}
+                                  sx={{ width: '120px' }}
+                                  value={regionData.fee?.toString() || ''}
+                                  onChange={(e) => 
+                                    handleUpdateRegionFees(courier.id, region.key, e.target.value, regionData.active)
+                                  }
+                                  InputProps={{
+                                    startAdornment: (
+                                      <InputAdornment position="start">₱</InputAdornment>
+                                    ),
+                                  }}
+                                  helperText={regionData.fee > 0 && regionData.active ? 'Active' : regionData.fee > 0 ? 'Click to activate' : 'Enter fee amount'}
+                                />
                                  
-                                 <Stack direction="row" spacing={1}>
                                    <IconButton
                                      size="small"
-                                     onClick={() => handleEditShippingType(shipping)}
-                                   >
-                                     <Iconify icon="solar:pen-bold" />
+                                  color={regionData.active ? 'warning' : 'success'}
+                                  onClick={() => handleToggleRegion(courier.id, region.key)}
+                                  disabled={!regionData.fee || regionData.fee <= 0}
+                                >
+                                  <Iconify icon={regionData.active ? 'solar:eye-closed-bold' : 'solar:eye-bold'} />
                                    </IconButton>
-                                   <IconButton
-                                     size="small"
-                                     color={shipping.active ? 'warning' : 'success'}
-                                     onClick={() => handleToggleShipping(shipping.id)}
-                                   >
-                                     <Iconify icon={shipping.active ? 'solar:eye-closed-bold' : 'solar:eye-bold'} />
-                                   </IconButton>
-                                   <IconButton
-                                     size="small"
-                                     color="error"
-                                     onClick={() => handleDeleteShippingType(shipping.id)}
-                                   >
-                                     <Iconify icon="solar:trash-bin-trash-bold" />
-                                   </IconButton>
-                                 </Stack>
                                </Stack>
                              </Stack>
                            </Card>
-                         ))}
+                        );
+                      })}
                   </Stack>
-                )}
+                  );
+                })()}
               </Box>
             )}
           </Stack>
@@ -753,65 +1229,77 @@ export function AccountShop() {
       </Card>
 
       {/* Add Courier Dialog */}
-      <Dialog open={courierDialog.value} onClose={courierDialog.onFalse} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={courierDialog.value} 
+        onClose={courierDialog.onFalse} 
+        maxWidth="sm" 
+        fullWidth
+        sx={{
+          '& .MuiSelect-root': {
+            '& .MuiPaper-root': {
+              zIndex: '1600 !important',
+            },
+          },
+          '& .MuiPopover-root': {
+            zIndex: '1600 !important',
+          },
+          '& .MuiMenu-root': {
+            zIndex: '1600 !important',
+          },
+        }}
+      >
         <DialogTitle>Add New Courier</DialogTitle>
         <Form methods={courierMethods} onSubmit={courierMethods.handleSubmit(handleAddCourier)}>
           <DialogContent>
             <Stack spacing={3} sx={{ mt: 1 }}>
-              <Field.Text
+              <Field.Select
                 name="name"
-                label="Courier Name"
-                placeholder="e.g., JNT Express, SPX, LBC"
+                label="Select Courier"
+                placeholder="Choose a courier"
                 autoFocus
-              />
-            </Stack>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={courierDialog.onFalse}>Cancel</Button>
-            <Button type="submit" variant="contained">
-              Add Courier
-            </Button>
-          </DialogActions>
-        </Form>
-      </Dialog>
+              >
+                <MenuItem value="">Choose a courier</MenuItem>
+                {POPULAR_COURIERS.map((courier) => (
+                  <MenuItem key={courier} value={courier}>
+                    {courier}
+                  </MenuItem>
+                ))}
+                <MenuItem value="custom">Other (Custom Name)</MenuItem>
+              </Field.Select>
+              
+              {courierMethods.watch('name') === 'custom' && (
+               <Field.Text
+                  name="customName"
+                  label="Custom Courier Name"
+                  placeholder="Enter courier name"
+                  helperText="Enter the name of your preferred courier service"
+                />
+              )}
 
-             {/* Add Shipping Type Dialog */}
-       <Dialog open={shippingDialog.value} onClose={shippingDialog.onFalse} maxWidth="sm" fullWidth>
-         <DialogTitle>Add Shipping Type</DialogTitle>
-         <Form methods={shippingMethods} onSubmit={shippingMethods.handleSubmit(handleAddShippingType)}>
-           <DialogContent>
-             <Stack spacing={3} sx={{ mt: 1 }}>
-               <Field.Text
-                 name="name"
-                 label="Location/Area Name"
-                 placeholder="e.g., Metro Manila, Luzon, Visayas"
-                 autoFocus
-               />
-               <Field.Select name="courier" label="Courier" native>
-                 <option value="">Select Courier</option>
-                 {couriers.filter(courier => courier.active).map((courier) => (
-                   <option key={courier.id} value={courier.name}>
-                     {courier.name}
-                   </option>
-                 ))}
-               </Field.Select>
-               <Field.Text
-                 name="fee"
-                 label="Shipping Fee (₱)"
-                 type="number"
-                 placeholder="0.00"
-                 inputProps={{ step: '0.01', min: '0' }}
-               />
+              <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <Stack direction="row" spacing={1.5} alignItems="flex-start">
+                  <Iconify icon="eva:info-outline" width={16} sx={{ color: 'text.secondary', mt: 0.25 }} />
+                  <Stack spacing={1}>
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      After adding the courier, you'll be able to set shipping fees for each region (Metro Manila, Luzon, Visayas, Mindanao, Islands).
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: 'text.disabled' }}>
+                      Available options: {POPULAR_COURIERS.length} popular couriers + custom option
+                    </Typography>
+                  </Stack>
+                </Stack>
+              </Box>
              </Stack>
            </DialogContent>
            <DialogActions>
-             <Button onClick={shippingDialog.onFalse}>Cancel</Button>
+            <Button onClick={courierDialog.onFalse}>Cancel</Button>
              <Button type="submit" variant="contained">
-               Add Shipping Type
+              Add Courier
              </Button>
            </DialogActions>
          </Form>
        </Dialog>
+
 
        {/* Delete Courier Confirmation Dialog */}
        <Dialog open={deleteCourierDialog.value} onClose={deleteCourierDialog.onFalse} maxWidth="sm" fullWidth>
@@ -821,9 +1309,12 @@ export function AccountShop() {
              Are you sure you want to delete <strong>{itemToDelete?.name}</strong>?
            </Typography>
            {itemToDelete?.type === 'courier' && (
-             <Typography variant="body2" sx={{ color: 'warning.main', mt: 2 }}>
-               ⚠️ This action cannot be undone. The courier will be permanently removed.
-             </Typography>
+             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mt: 2, p: 1.5, border: '1px solid', borderColor: 'warning.main', borderRadius: 1 }}>
+               <Iconify icon="eva:alert-triangle-outline" width={16} sx={{ color: 'warning.main' }} />
+               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                 This action cannot be undone. The courier will be permanently removed.
+               </Typography>
+             </Stack>
            )}
          </DialogContent>
          <DialogActions>
@@ -834,24 +1325,6 @@ export function AccountShop() {
          </DialogActions>
        </Dialog>
 
-               {/* Delete Shipping Type Confirmation Dialog */}
-        <Dialog open={deleteShippingDialog.value} onClose={deleteShippingDialog.onFalse} maxWidth="sm" fullWidth>
-          <DialogTitle>Delete Shipping Type</DialogTitle>
-          <DialogContent>
-            <Typography sx={{ mt: 1 }}>
-              Are you sure you want to delete <strong>{itemToDelete?.name}</strong> from {itemToDelete?.courier}?
-            </Typography>
-            <Typography variant="body2" sx={{ color: 'warning.main', mt: 2 }}>
-              ⚠️ This action cannot be undone. The shipping type will be permanently removed.
-            </Typography>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={deleteShippingDialog.onFalse}>Cancel</Button>
-            <Button onClick={confirmDeleteShippingType} color="error" variant="contained">
-              Delete
-            </Button>
-          </DialogActions>
-        </Dialog>
 
         {/* Edit Courier Dialog */}
         <Dialog open={editCourierDialog.value} onClose={editCourierDialog.onFalse} maxWidth="sm" fullWidth>
@@ -876,43 +1349,6 @@ export function AccountShop() {
           </Form>
         </Dialog>
 
-        {/* Edit Shipping Type Dialog */}
-        <Dialog open={editShippingDialog.value} onClose={editShippingDialog.onFalse} maxWidth="sm" fullWidth>
-          <DialogTitle>Edit Shipping Type</DialogTitle>
-          <Form methods={editShippingMethods} onSubmit={editShippingMethods.handleSubmit(handleUpdateShippingType)}>
-            <DialogContent>
-              <Stack spacing={3} sx={{ mt: 1 }}>
-                <Field.Text
-                  name="name"
-                  label="Location/Area Name"
-                  placeholder="e.g., Metro Manila, Luzon, Visayas"
-                  autoFocus
-                />
-                <Field.Select name="courier" label="Courier" native>
-                  <option value="">Select Courier</option>
-                  {couriers.filter(courier => courier.active).map((courier) => (
-                    <option key={courier.id} value={courier.name}>
-                      {courier.name}
-                    </option>
-                  ))}
-                </Field.Select>
-                <Field.Text
-                  name="fee"
-                  label="Shipping Fee (₱)"
-                  type="number"
-                  placeholder="0.00"
-                  inputProps={{ step: '0.01', min: '0' }}
-                />
-              </Stack>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={editShippingDialog.onFalse}>Cancel</Button>
-              <Button type="submit" variant="contained">
-                Update Shipping Type
-              </Button>
-            </DialogActions>
-          </Form>
-        </Dialog>
       </Stack>
     );
   }

@@ -16,6 +16,7 @@ import { Chart, useChart } from 'src/components/chart';
 // ----------------------------------------------------------------------
 
 const SALES_DATA = {
+  studio360: [12000, 15000, 13000, 20000, 8000, 14000, 16000, 17000, 19000, 21000, 23000, 22000],
   shopee: [34000, 45000, 30000, 52000, 10000, 32000, 28000, 35000, 42000, 38000, 35000, 25000],
   tiktokShop: [42000, 38000, 22000, 42000, 2000, 15000, 25000, 32000, 42000, 38000, 35000, 32000],
   shopify: [7000, 10500, 8000, 12000, 4000, 6000, 14000, 12000, 16000, 18000, 22000, 25000],
@@ -24,22 +25,27 @@ const SALES_DATA = {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const LEGENDS = [
-  { name: 'Shopee', color: '#00AB55' },
-  { name: 'TikTok Shop', color: '#FF4842' },
-  { name: 'Shopify', color: '#1890FF' },
-  { name: 'Direct', color: '#FFC107' },
-];
+// Legends will be computed from theme inside the component
 
 export function AnalyticsSalesAnalytics() {
   const theme = useTheme();
+
+  // Color mapping per requirement
+  const COLORS = {
+    primary360: theme.palette.primary?.main || '#2065D1',
+    shopee: theme.palette.orange?.main || '#fda92d',
+    tiktok: theme.palette.pink?.main || '#E91E63',
+    shopify: theme.palette.green?.main || '#00A76F',
+    other: theme.palette.purple?.main || '#7635dc',
+  };
 
   const chartOptions = useChart({
     chart: {
       type: 'line',
       toolbar: { show: false },
     },
-    colors: ['#00AB55', '#FF4842', '#1890FF', '#FFC107'], // Green, Red, Blue, Yellow
+    // Series order: 360 (primary), Shopee (orange), TikTok (pink), Shopify (green), Other (purple)
+    colors: [COLORS.primary360, COLORS.shopee, COLORS.tiktok, COLORS.shopify, COLORS.other],
     xaxis: {
       categories: MONTHS,
       labels: {
@@ -89,6 +95,10 @@ export function AnalyticsSalesAnalytics() {
 
   const series = [
     {
+      name: '360',
+      data: SALES_DATA.studio360,
+    },
+    {
       name: 'Shopee',
       data: SALES_DATA.shopee,
     },
@@ -101,7 +111,7 @@ export function AnalyticsSalesAnalytics() {
       data: SALES_DATA.shopify,
     },
     {
-      name: 'Direct',
+      name: 'Other',
       data: SALES_DATA.direct,
     },
   ];
@@ -129,7 +139,7 @@ export function AnalyticsSalesAnalytics() {
 
       {/* Legends positioned inside the card */}
       <Stack direction="row" spacing={2} sx={{ mb: 2, justifyContent: 'flex-end' }}>
-        {LEGENDS.map((legend) => (
+        {[{ name: '360', color: COLORS.primary360 }, { name: 'Shopee', color: COLORS.shopee }, { name: 'TikTok Shop', color: COLORS.tiktok }, { name: 'Shopify', color: COLORS.shopify }, { name: 'Other', color: COLORS.other }].map((legend) => (
           <Stack key={legend.name} direction="row" alignItems="center" spacing={0.5}>
             <Box
               sx={{

@@ -9,7 +9,6 @@ import {
   AnalyticsWidgetSummary,
   AnalyticsSalesAnalytics,
   AnalyticsTaxableIncome,
-  AnalyticsExpenseBreakdown,
   AnalyticsAiForecast,
   AnalyticsMonthlyProfitTrend,
   AnalyticsKpiCards
@@ -40,23 +39,20 @@ export default function Page() {
         ))}
       </Grid>
 
-      {/* Second Row - Sales Analytics and Taxable Income */}
+      {/* Second Row - Sales Analytics (full width) */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid xs={12} lg={8}>
+        <Grid xs={12}>
           <AnalyticsSalesAnalytics />
-        </Grid>
-        <Grid xs={12} lg={4}>
-          <AnalyticsTaxableIncome />
         </Grid>
       </Grid>
 
-      {/* Third Row - Expense Breakdown and AI Forecast */}
+      {/* Third Row - AI Forecast and Taxable Income */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid xs={12} lg={6}>
-          <AnalyticsExpenseBreakdown />
-        </Grid>
-        <Grid xs={12} lg={6}>
+        <Grid xs={12} lg={8}>
           <AnalyticsAiForecast />
+        </Grid>
+        <Grid xs={12} lg={4}>
+          <AnalyticsTaxableIncome />
         </Grid>
       </Grid>
 

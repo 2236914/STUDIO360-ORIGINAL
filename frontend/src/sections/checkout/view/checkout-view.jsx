@@ -1,5 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+
 import { useEffect } from 'react';
 
 import Container from '@mui/material/Container';
@@ -9,11 +11,21 @@ import Typography from '@mui/material/Typography';
 import { PRODUCT_CHECKOUT_STEPS } from 'src/_mock/_product';
 
 import { CheckoutCart } from '../checkout-cart';
+import { CheckoutOrderComplete } from '../checkout-order-complete';
+// Dynamically import the problematic component to avoid SSR hydration issues
+const CheckoutAddressPayment = dynamic(
+  () => import('../checkout-address-payment').then((mod) => ({ default: mod.CheckoutAddressPayment })),
+  { 
+    ssr: false,
+    loading: () => (
+      <div style={{ padding: '20px', textAlign: 'center' }}>
+        Loading checkout form...
+      </div>
+    )
+  }
+);
 import { useCheckoutContext } from '../context';
 import { CheckoutSteps } from '../checkout-steps';
-import { CheckoutPayment } from '../checkout-payment';
-import { CheckoutOrderComplete } from '../checkout-order-complete';
-import { CheckoutBillingAddress } from '../checkout-billing-address';
 
 // ----------------------------------------------------------------------
 
@@ -26,8 +38,15 @@ export function CheckoutView() {
   }, []);
 
   return (
-    <Container sx={{ mb: 10 }}>
-      <Typography variant="h4" sx={{ my: { xs: 3, md: 5 } }}>
+    <Container sx={{ mb: 10, px: { xs: 2, sm: 3 } }}>
+      <Typography 
+        variant="h4" 
+        sx={{ 
+          my: { xs: 2, sm: 3, md: 5 },
+          fontSize: { xs: '1.75rem', sm: '2rem', md: '2.125rem' },
+          textAlign: { xs: 'center', sm: 'left' }
+        }}
+      >
         Checkout
       </Typography>
 
@@ -39,11 +58,9 @@ export function CheckoutView() {
 
       <>
         {checkout.activeStep === 0 && <CheckoutCart />}
-
-        {checkout.activeStep === 1 && <CheckoutBillingAddress />}
-
-        {checkout.activeStep === 2 && <CheckoutPayment />}
-
+        
+        {checkout.activeStep === 1 && <CheckoutAddressPayment />}
+        
         {checkout.completed && (
           <CheckoutOrderComplete open onReset={checkout.onReset} onDownloadPDF={() => {}} />
         )}

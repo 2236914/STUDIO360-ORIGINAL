@@ -8,7 +8,7 @@ import CardHeader from '@mui/material/CardHeader';
 import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
 
-import { fCurrency } from 'src/utils/format-number';
+import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
 import { Iconify } from 'src/components/iconify';
 
@@ -40,7 +40,7 @@ export function CheckoutSummary({ total, onEdit, discount, subtotal, shipping, o
             Sub total
           </Typography>
           <Typography component="span" variant="subtitle2">
-            {fCurrency(subtotal)}
+            {fCurrencyPHPSymbol(subtotal, '₱')}
           </Typography>
         </Box>
 
@@ -53,7 +53,7 @@ export function CheckoutSummary({ total, onEdit, discount, subtotal, shipping, o
             Discount
           </Typography>
           <Typography component="span" variant="subtitle2">
-            {discount ? fCurrency(-discount) : '-'}
+            {discount ? fCurrencyPHPSymbol(-discount, '₱') : '-'}
           </Typography>
         </Box>
 
@@ -66,11 +66,11 @@ export function CheckoutSummary({ total, onEdit, discount, subtotal, shipping, o
             Shipping
           </Typography>
           <Typography component="span" variant="subtitle2">
-            {shipping ? fCurrency(shipping) : displayShipping}
+            {shipping ? fCurrencyPHPSymbol(shipping, '₱') : displayShipping}
           </Typography>
         </Box>
 
-        <Divider sx={{ borderStyle: 'dashed' }} />
+        <Divider />
 
         <Box display="flex">
           <Typography component="span" variant="subtitle1" sx={{ flexGrow: 1 }}>
@@ -83,7 +83,7 @@ export function CheckoutSummary({ total, onEdit, discount, subtotal, shipping, o
               variant="subtitle1"
               sx={{ display: 'block', color: 'error.main' }}
             >
-              {fCurrency(total)}
+              {fCurrencyPHPSymbol(total, '₱')}
             </Typography>
             <Typography variant="caption" sx={{ fontStyle: 'italic' }}>
               (VAT included if applicable)
@@ -96,6 +96,11 @@ export function CheckoutSummary({ total, onEdit, discount, subtotal, shipping, o
             fullWidth
             placeholder="Discount codes / Gifts"
             value="DISCOUNT5"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                borderRadius: 2,
+              },
+            }}
             InputProps={{
               endAdornment: (
                 <InputAdornment position="end">

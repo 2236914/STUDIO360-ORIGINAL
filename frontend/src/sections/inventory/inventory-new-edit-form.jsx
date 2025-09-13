@@ -24,17 +24,13 @@ import { toast } from 'src/components/snackbar';
 import { Form, Field, schemaHelper } from 'src/components/hook-form';
 import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
+import { ContentDiagnosis } from './content-diagnosis';
+import { VariationManager } from './variation-manager';
+import { WholesalePricing } from './wholesale-pricing';
+
 // ----------------------------------------------------------------------
 
-// Mock data for dropdowns
-const PRODUCT_CATEGORY_OPTIONS = [
-  'Electronics',
-  'Clothing',
-  'Home & Garden',
-  'Sports',
-  'Books',
-  'Accessories',
-];
+import { getSellerCategories, addNewCategory, getSellerThemes, addNewTheme } from 'src/utils/seller-categories';
 
 const PRODUCT_SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
@@ -73,11 +69,33 @@ export const NewInventorySchema = zod.object({
   sku: zod.string().min(1, { message: 'Product SKU is required!' }),
   quantity: zod.number().min(1, { message: 'Quantity is required!' }),
   category: zod.string().min(1, { message: 'Category is required!' }),
+  theme: zod.string().min(1, { message: 'Theme is required!' }),
   colors: zod.string().array().min(1, { message: 'Choose at least one color!' }),
   sizes: zod.string().array().min(1, { message: 'Choose at least one size!' }),
   tags: zod.string().array().min(1, { message: 'Choose at least one tag!' }),
   gender: zod.string().array().min(1, { message: 'Choose at least one gender!' }),
   price: zod.number().min(0.01, { message: 'Price should be greater than ₱0.00' }),
+  // Variation fields
+  variations: zod.array(zod.object({
+    name: zod.string(),
+    options: zod.array(zod.string())
+  })).optional(),
+  variationCombinations: zod.array(zod.object({
+    id: zod.string(),
+    combination: zod.array(zod.object({
+      variationName: zod.string(),
+      optionValue: zod.string()
+    })),
+    price: zod.number(),
+    stock: zod.number(),
+    sku: zod.string(),
+    image: zod.any().optional()
+  })).optional(),
+  wholesalePricing: zod.array(zod.object({
+    minQuantity: zod.number(),
+    price: zod.number(),
+    discount: zod.number()
+  })).optional(),
   // Optional fields
   priceSale: zod.number().optional(),
   taxes: zod.number().optional(),
@@ -91,6 +109,8 @@ export function InventoryNewEditForm({ currentProduct }) {
   const router = useRouter();
 
   const [includeTaxes, setIncludeTaxes] = useState(false);
+  const [availableCategories, setAvailableCategories] = useState([]);
+  const [availableThemes, setAvailableThemes] = useState([]);
 
   const defaultValues = useMemo(
     () => ({
@@ -107,8 +127,12 @@ export function InventoryNewEditForm({ currentProduct }) {
       taxes: currentProduct?.taxes || 0,
       gender: currentProduct?.gender || [],
       category: currentProduct?.category || '',
+      theme: currentProduct?.theme || '',
       colors: currentProduct?.colors || [],
       sizes: currentProduct?.sizes || [],
+      variations: currentProduct?.variations || [],
+      variationCombinations: currentProduct?.variationCombinations || [],
+      wholesalePricing: currentProduct?.wholesalePricing || [],
       newLabel: currentProduct?.newLabel || { enabled: false, content: '' },
       saleLabel: currentProduct?.saleLabel || { enabled: false, content: '' },
     }),
@@ -135,6 +159,12 @@ export function InventoryNewEditForm({ currentProduct }) {
       reset(defaultValues);
     }
   }, [currentProduct, defaultValues, reset]);
+
+  // Load seller categories and themes on component mount
+  useEffect(() => {
+    setAvailableCategories(getSellerCategories());
+    setAvailableThemes(getSellerThemes());
+  }, []);
 
   useEffect(() => {
     if (includeTaxes) {
@@ -171,6 +201,38 @@ export function InventoryNewEditForm({ currentProduct }) {
   const handleChangeIncludeTaxes = useCallback((event) => {
     setIncludeTaxes(event.target.checked);
   }, []);
+
+  const handleCategoryChange = useCallback((event, newValue) => {
+    if (typeof newValue === 'string') {
+      // User typed a new category
+      const newCategory = newValue.trim();
+      if (newCategory && !availableCategories.includes(newCategory)) {
+        const updatedCategories = addNewCategory(newCategory);
+        setAvailableCategories(updatedCategories);
+        toast.success(`Category "${newCategory}" added!`);
+      }
+      setValue('category', newCategory);
+    } else {
+      // User selected from dropdown
+      setValue('category', newValue || '');
+    }
+  }, [availableCategories, setValue]);
+
+  const handleThemeChange = useCallback((event, newValue) => {
+    if (typeof newValue === 'string') {
+      // User typed a new theme
+      const newTheme = newValue.trim();
+      if (newTheme && !availableThemes.includes(newTheme)) {
+        const updatedThemes = addNewTheme(newTheme);
+        setAvailableThemes(updatedThemes);
+        toast.success(`Theme "${newTheme}" added!`);
+      }
+      setValue('theme', newTheme);
+    } else {
+      // User selected from dropdown
+      setValue('theme', newValue || '');
+    }
+  }, [availableThemes, setValue]);
 
   const renderDetails = (
     <Card>
@@ -224,7 +286,62 @@ export function InventoryNewEditForm({ currentProduct }) {
           <Field.Text name="code" label="Product code" />
           <Field.Text name="sku" label="Product SKU" />
           <Field.Text name="quantity" label="Quantity" type="number" />
-          <Field.Select name="category" label="Category" options={PRODUCT_CATEGORY_OPTIONS} />
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle2">Category</Typography>
+            <Field.Autocomplete
+              name="category"
+              placeholder="Select or create category"
+              freeSolo
+              options={availableCategories}
+              getOptionLabel={(option) => option}
+              onChange={handleCategoryChange}
+              renderOption={(props, option) => (
+                <li {...props} key={option}>
+                  {option}
+                </li>
+              )}
+              renderInput={(params) => (
+                <Field.Text
+                  {...params}
+                  name="category"
+                  placeholder="Type to create new category..."
+                  helperText="Select existing or type new category name"
+                />
+              )}
+            />
+          </Stack>
+        </Box>
+
+        <Box
+          columnGap={2}
+          rowGap={3}
+          display="grid"
+          gridTemplateColumns={{ xs: 'repeat(1, 1fr)', md: 'repeat(1, 1fr)' }}
+        >
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle2">Theme</Typography>
+            <Field.Autocomplete
+              name="theme"
+              placeholder="Select or create theme"
+              freeSolo
+              options={availableThemes}
+              getOptionLabel={(option) => option}
+              onChange={handleThemeChange}
+              renderOption={(props, option) => (
+                <li {...props} key={option}>
+                  {option}
+                </li>
+              )}
+              renderInput={(params) => (
+                <Field.Text
+                  {...params}
+                  name="theme"
+                  placeholder="Type to create new theme..."
+                  helperText="Select existing or type new theme name"
+                />
+              )}
+            />
+          </Stack>
         </Box>
 
         <Box
@@ -539,6 +656,18 @@ export function InventoryNewEditForm({ currentProduct }) {
     </Stack>
   );
 
+  const renderVariations = (
+    <VariationManager />
+  );
+
+  const renderWholesale = (
+    <WholesalePricing />
+  );
+
+  const renderContentDiagnosis = (
+    <ContentDiagnosis formData={values} />
+  );
+
   return (
     <Form methods={methods} onSubmit={onSubmit}>
       <Stack spacing={{ xs: 3, md: 5 }} sx={{ mx: 'auto', maxWidth: { xs: 720, xl: 880 } }}>
@@ -546,7 +675,13 @@ export function InventoryNewEditForm({ currentProduct }) {
 
         {renderProperties}
 
+        {renderVariations}
+
         {renderPricing}
+
+        {renderWholesale}
+
+        {renderContentDiagnosis}
 
         {renderActions}
       </Stack>
