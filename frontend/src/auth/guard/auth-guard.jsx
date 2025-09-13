@@ -64,8 +64,14 @@ export function AuthGuard({ children }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated, loading]);
 
-  if (isChecking) {
+  // Only show splash screen if we're actually loading and checking
+  if (isChecking && loading) {
     return <SplashScreen />;
+  }
+
+  // If not loading anymore, show children even if still checking
+  if (!loading) {
+    return <>{children}</>;
   }
 
   return <>{children}</>;

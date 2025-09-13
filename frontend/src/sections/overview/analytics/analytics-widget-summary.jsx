@@ -15,13 +15,13 @@ import { useSettingsContext } from 'src/components/settings';
 
 // Function to get chart colors based on color preset
 function getChartColors(primaryColor, theme) {
-  // If using primary color preset, use dark-main-light-lighter colors
+  // If using default preset, use the primary main for all shades
   if (primaryColor === 'default') {
     return {
-      dark: theme.palette.primary.dark,
+      dark: theme.palette.primary.main,
       main: theme.palette.primary.main,
-      light: theme.palette.primary.light,
-      lighter: theme.palette.primary.lighter,
+      light: theme.palette.primary.main,
+      lighter: theme.palette.primary.main,
     };
   }
   
@@ -32,6 +32,8 @@ function getChartColors(primaryColor, theme) {
     blue: theme.palette.blue?.main || '#0C68E9',
     orange: theme.palette.orange?.main || '#fda92d',
     red: theme.palette.red?.main || '#FF3030',
+    pink: theme.palette.pink?.main || '#E91E63',
+    green: theme.palette.green?.main || '#00A76F',
   };
   
   const mainColor = presetColors[primaryColor] || theme.palette.primary.main;
@@ -51,19 +53,8 @@ export function AnalyticsWidgetSummary({ title, percent, total, chart, sx, ...ot
   // Get chart colors based on current color preset
   const chartColors = getChartColors(settings.primaryColor, theme);
 
-  // Determine which shade to use based on the title
-  let chartColor;
-  if (title === 'Total Sales') {
-    chartColor = chartColors.dark;
-  } else if (title === 'Total Expenses') {
-    chartColor = chartColors.main;
-  } else if (title === 'Total Orders') {
-    chartColor = chartColors.light;
-  } else if (title === 'Net Profit') {
-    chartColor = chartColors.lighter;
-  } else {
-    chartColor = chartColors.main; // fallback
-  }
+  // Use a single main color across all widgets
+  const chartColor = chartColors.main;
 
   const chartOptions = useChart({
     chart: { sparkline: { enabled: true } },

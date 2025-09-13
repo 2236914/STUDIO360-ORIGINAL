@@ -1,6 +1,8 @@
 // ----------------------------------------------------------------------
 
 export const signInWithPassword = async ({ email, password }) => {
+  console.log('MockAuth - signInWithPassword called with:', { email, password });
+  
   // Simulate API delay
   await new Promise(resolve => setTimeout(resolve, 1000));
   
@@ -9,6 +11,8 @@ export const signInWithPassword = async ({ email, password }) => {
     // Store login state in sessionStorage
     sessionStorage.setItem('mock-auth-logged-in', 'true');
     sessionStorage.setItem('mock-auth-email', email);
+    
+    console.log('MockAuth - login successful, stored in sessionStorage');
     
     return {
       user: {
@@ -30,6 +34,7 @@ export const signInWithPassword = async ({ email, password }) => {
       accessToken: 'mock-access-token',
     };
   } else {
+    console.log('MockAuth - invalid credentials');
     throw new Error('Invalid email or password');
   }
 };

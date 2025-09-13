@@ -1,0 +1,284 @@
+import { useMemo } from 'react';
+import { Page, View, Text, Image, Document, StyleSheet } from '@react-pdf/renderer';
+
+// ----------------------------------------------------------------------
+
+const useStyles = () =>
+  useMemo(
+    () =>
+      StyleSheet.create({
+        // layout
+        page: {
+          fontSize: 9,
+          lineHeight: 1.6,
+          fontFamily: 'Helvetica',
+          backgroundColor: '#FFFFFF',
+          padding: '40px 24px 120px 24px',
+        },
+        footer: {
+          left: 0,
+          right: 0,
+          bottom: 0,
+          padding: 24,
+          margin: 'auto',
+          borderTopWidth: 1,
+          borderStyle: 'solid',
+          position: 'absolute',
+          borderColor: '#e9ecef',
+        },
+        container: {
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+        },
+        // margin
+        mb4: { marginBottom: 4 },
+        mb8: { marginBottom: 8 },
+        mb40: { marginBottom: 40 },
+        // text
+        h3: { fontSize: 16, fontWeight: 700 },
+        h4: { fontSize: 13, fontWeight: 700 },
+        body1: { fontSize: 10 },
+        subtitle1: { fontSize: 10, fontWeight: 700 },
+        body2: { fontSize: 9 },
+        subtitle2: { fontSize: 9, fontWeight: 700 },
+        // table
+        table: { display: 'flex', width: '100%' },
+        row: {
+          padding: '10px 0 8px 0',
+          flexDirection: 'row',
+          borderBottomWidth: 1,
+          borderStyle: 'solid',
+          borderColor: '#e9ecef',
+        },
+        cell_1: { width: '5%' },
+        cell_2: { width: '50%' },
+        cell_3: { width: '15%', paddingLeft: 32 },
+        cell_4: { width: '15%', paddingLeft: 8 },
+        cell_5: { width: '15%' },
+        noBorder: { paddingTop: '10px', paddingBottom: 0, borderBottomWidth: 0 },
+      }),
+    []
+  );
+
+// Helper function to safely format currency
+const formatCurrency = (value) => {
+  if (value === null || value === undefined) return '$0.00';
+  const numValue = typeof value === 'string' ? parseFloat(value.replace(/[$,]/g, '')) : value;
+  return `$${numValue.toFixed(2)}`;
+};
+
+// Helper function to safely format dates
+const formatDate = (date) => {
+  if (!date) return '';
+  if (typeof date === 'string') return date;
+  if (date instanceof Date) {
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  }
+  try {
+    return new Date(date).toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric' 
+    });
+  } catch {
+    return '';
+  }
+};
+
+// ----------------------------------------------------------------------
+
+export const InvoicePDFTemplate = ({ invoice, currentStatus }) => {
+  const {
+    items = [],
+    taxes = 0,
+    dueDate,
+    discount = 0,
+    shipping = 0,
+    subtotal = 0,
+    invoiceTo = {},
+    createDate,
+    totalAmount = 0,
+    invoiceFrom = {},
+    invoiceNumber = 'INV-1991',
+  } = invoice || {};
+
+  const styles = useStyles();
+
+  const renderHeader = (
+    <View style={[styles.container, styles.mb40]}>
+      {invoiceFrom.profilePicture ? (
+        <Image
+          source={invoiceFrom.profilePicture}
+          style={{
+            width: 48,
+            height: 48,
+            borderRadius: 8,
+          }}
+        />
+      ) : (
+        <View
+          style={{
+            width: 48,
+            height: 48,
+            backgroundColor: '#00AB55',
+            borderRadius: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: 'white', fontSize: 20, fontWeight: 'bold' }}>
+            {invoiceFrom.name ? invoiceFrom.name.charAt(0).toUpperCase() : 'M'}
+          </Text>
+        </View>
+      )}
+
+      <View style={{ alignItems: 'flex-end', flexDirection: 'column' }}>
+        <Text style={[styles.h3, { textTransform: 'capitalize' }]}>
+          {currentStatus || 'Paid'}
+        </Text>
+        <Text>{invoiceNumber}</Text>
+      </View>
+    </View>
+  );
+
+  const renderFooter = (
+    <View style={[styles.container, styles.footer]} fixed>
+      <View style={{ width: '75%' }}>
+        <Text style={styles.subtitle2}>NOTES</Text>
+        <Text>
+          {invoice?.notes || 'We appreciate your business. Should you need us to add VAT or extra notes let us know!'}
+        </Text>
+      </View>
+      <View style={{ width: '25%', textAlign: 'right' }}>
+        <Text style={styles.subtitle2}>Have a question?</Text>
+        <Text>{invoice?.supportEmail || 'support@abcapp.com'}</Text>
+      </View>
+    </View>
+  );
+
+  const renderInfo = (
+    <View style={[styles.container, styles.mb40]}>
+      <View style={{ width: '50%' }}>
+        <Text style={[styles.subtitle2, styles.mb4]}>Invoice from</Text>
+        <Text style={styles.body2}>{invoiceFrom.name || 'Lucian Obrien'}</Text>
+        <Text style={styles.body2}>
+          {invoiceFrom.address || '1147 Rohan Drive Suite 819 - Burlington, VT / 82021'}
+        </Text>
+        <Text style={styles.body2}>
+          Phone: {invoiceFrom.phone || '+1 416-555-0198'}
+        </Text>
+      </View>
+
+      <View style={{ width: '50%' }}>
+        <Text style={[styles.subtitle2, styles.mb4]}>Invoice to</Text>
+        <Text style={styles.body2}>{invoiceTo.name || 'Deja Brady'}</Text>
+        <Text style={styles.body2}>
+          {invoiceTo.address || '18605 Thompson Circle Apt. 086 - Idaho Falls, WV / 50337'}
+        </Text>
+        <Text style={styles.body2}>
+          Phone: {invoiceTo.phone || '+44 20 7946 0958'}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderTime = (
+    <View style={[styles.container, styles.mb40]}>
+      <View style={{ width: '50%' }}>
+        <Text style={[styles.subtitle2, styles.mb4]}>Date create</Text>
+        <Text style={styles.body2}>{formatDate(createDate) || '20 Aug 2025'}</Text>
+      </View>
+      <View style={{ width: '50%' }}>
+        <Text style={[styles.subtitle2, styles.mb4]}>Due date</Text>
+        <Text style={styles.body2}>{formatDate(dueDate) || '06 Sep 2025'}</Text>
+      </View>
+    </View>
+  );
+
+  const renderTable = (
+    <>
+      <Text style={[styles.subtitle1, styles.mb8]}>Invoice details</Text>
+
+      <View style={styles.table}>
+        <View>
+          <View style={styles.row}>
+            <View style={styles.cell_1}>
+              <Text style={styles.subtitle2}>#</Text>
+            </View>
+            <View style={styles.cell_2}>
+              <Text style={styles.subtitle2}>Description</Text>
+            </View>
+            <View style={styles.cell_3}>
+              <Text style={styles.subtitle2}>Qty</Text>
+            </View>
+            <View style={styles.cell_4}>
+              <Text style={styles.subtitle2}>Unit price</Text>
+            </View>
+            <View style={[styles.cell_5, { textAlign: 'right' }]}>
+              <Text style={styles.subtitle2}>Total</Text>
+            </View>
+          </View>
+        </View>
+
+        <View>
+          {items.map((item, index) => (
+            <View key={item.id || index} style={styles.row}>
+              <View style={styles.cell_1}>
+                <Text>{index + 1}</Text>
+              </View>
+              <View style={styles.cell_2}>
+                <Text style={styles.subtitle2}>{item.title}</Text>
+                <Text>{item.description}</Text>
+              </View>
+              <View style={styles.cell_3}>
+                <Text>{item.quantity}</Text>
+              </View>
+              <View style={styles.cell_4}>
+                <Text>{formatCurrency(item.price)}</Text>
+              </View>
+              <View style={[styles.cell_5, { textAlign: 'right' }]}>
+                <Text>{formatCurrency(item.total || item.price * item.quantity)}</Text>
+              </View>
+            </View>
+          ))}
+
+          {[
+            { name: 'Subtotal', value: subtotal },
+            { name: 'Shipping', value: -shipping },
+            { name: 'Discount', value: -discount },
+            { name: 'Taxes', value: taxes },
+            { name: 'Total', value: totalAmount, styles: styles.h4 },
+          ].map((item) => (
+            <View key={item.name} style={[styles.row, styles.noBorder]}>
+              <View style={styles.cell_1} />
+              <View style={styles.cell_2} />
+              <View style={styles.cell_3} />
+              <View style={styles.cell_4}>
+                <Text style={item.styles}>{item.name}</Text>
+              </View>
+              <View style={[styles.cell_5, { textAlign: 'right' }]}>
+                <Text style={item.styles}>{formatCurrency(item.value)}</Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    </>
+  );
+
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        {renderHeader}
+        {renderInfo}
+        {renderTime}
+        {renderTable}
+        {renderFooter}
+      </Page>
+    </Document>
+  );
+};

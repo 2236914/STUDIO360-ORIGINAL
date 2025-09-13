@@ -23,21 +23,39 @@ export function CheckoutCart() {
 
   const empty = !checkout.items.length;
 
+  // Get the continue shopping path based on current URL
+  const getContinueShoppingPath = () => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
+      if (storeIdMatch) {
+        return `/stores/${storeIdMatch[1]}`;
+      }
+    }
+    return paths.product.root;
+  };
+
   return (
-    <Grid container spacing={3}>
+    <Grid container spacing={{ xs: 2, sm: 3 }}>
       <Grid xs={12} md={8}>
-        <Card sx={{ mb: 3 }}>
+        <Card sx={{ mb: { xs: 2, sm: 3 } }}>
           <CardHeader
             title={
-              <Typography variant="h6">
+              <Typography variant="h6" sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
                 Cart
-                <Typography component="span" sx={{ color: 'text.secondary' }}>
+                <Typography 
+                  component="span" 
+                  sx={{ 
+                    color: 'text.secondary',
+                    fontSize: { xs: '0.875rem', sm: '1rem' }
+                  }}
+                >
                   &nbsp;(
-                  {checkout.totalItems} item)
+                  {checkout.totalItems} item{checkout.totalItems !== 1 ? 's' : ''})
                 </Typography>
               </Typography>
             }
-            sx={{ mb: 3 }}
+            sx={{ mb: { xs: 2, sm: 3 }, px: { xs: 2, sm: 3 } }}
           />
 
           {empty ? (
@@ -53,15 +71,20 @@ export function CheckoutCart() {
               onDelete={checkout.onDeleteCart}
               onIncreaseQuantity={checkout.onIncreaseQuantity}
               onDecreaseQuantity={checkout.onDecreaseQuantity}
+              onUpdateVariant={checkout.onUpdateVariant}
             />
           )}
         </Card>
 
         <Button
           component={RouterLink}
-          href={paths.product.root}
+          href={getContinueShoppingPath()}
           color="inherit"
           startIcon={<Iconify icon="eva:arrow-ios-back-fill" />}
+          sx={{ 
+            fontSize: { xs: '0.875rem', sm: '1rem' },
+            px: { xs: 2, sm: 3 }
+          }}
         >
           Continue shopping
         </Button>
@@ -82,6 +105,11 @@ export function CheckoutCart() {
           variant="contained"
           disabled={empty}
           onClick={checkout.onNextStep}
+          sx={{
+            py: { xs: 1.5, sm: 2 },
+            fontSize: { xs: '1rem', sm: '1.125rem' },
+            fontWeight: 600
+          }}
         >
           Check out
         </Button>

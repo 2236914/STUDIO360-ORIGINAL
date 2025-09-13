@@ -48,6 +48,11 @@ function Container({ children }) {
 
   const activeStep = Number(searchParams.get('step'));
 
+  // Extract storeId from URL if we're in a store context
+  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+  const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
+  const storeId = storeIdMatch ? storeIdMatch[1] : null;
+
   const { state, setState, setField, canReset, resetState } = useLocalStorage(
     STORAGE_KEY,
     initialState
@@ -74,27 +79,27 @@ function Container({ children }) {
 
   const initialStep = useCallback(() => {
     if (!activeStep) {
-      const href = createUrl('go', 0);
+      const href = createUrl('go', 0, storeId);
       router.push(href);
     }
-  }, [activeStep, router]);
+  }, [activeStep, router, storeId]);
 
   const onBackStep = useCallback(() => {
-    const href = createUrl('back', activeStep);
+    const href = createUrl('back', activeStep, storeId);
     router.push(href);
-  }, [activeStep, router]);
+  }, [activeStep, router, storeId]);
 
   const onNextStep = useCallback(() => {
-    const href = createUrl('next', activeStep);
+    const href = createUrl('next', activeStep, storeId);
     router.push(href);
-  }, [activeStep, router]);
+  }, [activeStep, router, storeId]);
 
   const onGotoStep = useCallback(
     (step) => {
-      const href = createUrl('go', step);
+      const href = createUrl('go', step, storeId);
       router.push(href);
     },
-    [router]
+    [router, storeId]
   );
 
   const onAddToCart = useCallback(
@@ -159,10 +164,9 @@ function Container({ children }) {
   const onCreateBilling = useCallback(
     (address) => {
       setField('billing', address);
-
-      onNextStep();
+      setField('completed', true);
     },
-    [onNextStep, setField]
+    [setField]
   );
 
   const onApplyDiscount = useCallback(
@@ -179,13 +183,29 @@ function Container({ children }) {
     [setField]
   );
 
+  const onUpdateVariant = useCallback(
+    (itemId, updates) => {
+      const updatedItems = state.items.map((item) => {
+        if (item.id === itemId) {
+          return { ...item, ...updates };
+        }
+        return item;
+      });
+
+      setField('items', updatedItems);
+    },
+    [setField, state.items]
+  );
+
   // Reset
   const onReset = useCallback(() => {
     if (completed) {
       resetState();
-      router.push(paths.product.root);
+      // Redirect back to store if we're in store context, otherwise to product root
+      const redirectPath = storeId ? `/stores/${storeId}` : paths.product.root;
+      router.push(redirectPath);
     }
-  }, [completed, resetState, router]);
+  }, [completed, resetState, router, storeId]);
 
   const memoizedValue = useMemo(
     () => ({
@@ -206,6 +226,7 @@ function Container({ children }) {
       onCreateBilling,
       onApplyDiscount,
       onApplyShipping,
+      onUpdateVariant,
       //
       activeStep,
       initialStep,
@@ -230,6 +251,7 @@ function Container({ children }) {
       onApplyDiscount,
       onApplyShipping,
       onCreateBilling,
+      onUpdateVariant,
       onDecreaseQuantity,
       onIncreaseQuantity,
     ]
@@ -240,10 +262,13 @@ function Container({ children }) {
 
 // ----------------------------------------------------------------------
 
-function createUrl(type, activeStep) {
+function createUrl(type, activeStep, storeId = null) {
   const step = { back: activeStep - 1, next: activeStep + 1, go: activeStep }[type];
 
   const stepParams = new URLSearchParams({ step: `${step}` }).toString();
 
-  return `${paths.product.checkout}?${stepParams}`;
+  // Use store-specific checkout URL if storeId is provided
+  const baseUrl = storeId ? `/stores/${storeId}/checkout` : paths.product.checkout;
+  
+  return `${baseUrl}?${stepParams}`;
 }

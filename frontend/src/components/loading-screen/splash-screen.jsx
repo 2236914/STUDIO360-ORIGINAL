@@ -1,8 +1,8 @@
 'use client';
 
 import Box from '@mui/material/Box';
-import Portal from '@mui/material/Portal';
 
+import { PortalWrapper } from '../portal';
 import { AnimateLogo1 } from 'src/components/animate';
 
 // ----------------------------------------------------------------------
@@ -32,7 +32,7 @@ export function SplashScreen({ portal = true, sx, ...other }) {
   );
 
   if (portal) {
-    return <Portal>{content}</Portal>;
+    return <PortalWrapper>{content}</PortalWrapper>;
   }
 
   return content;

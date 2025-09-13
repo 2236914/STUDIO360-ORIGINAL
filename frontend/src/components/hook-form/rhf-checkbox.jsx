@@ -78,24 +78,29 @@ export function RHFMultiCheckbox({ name, label, options, slotProps, helperText, 
           )}
 
           <FormGroup {...other}>
-            {options.map((option) => (
-              <FormControlLabel
-                key={option.value}
-                control={
-                  <Checkbox
-                    checked={field.value.includes(option.value)}
-                    onChange={() => field.onChange(getSelected(field.value, option.value))}
-                    name={accessibility(option.label)}
-                    {...slotProps?.checkbox}
-                    inputProps={{
-                      ...(!option.label && { 'aria-label': ariaLabel(option.label) }),
-                      ...slotProps?.checkbox?.inputProps,
-                    }}
-                  />
-                }
-                label={option.label}
-              />
-            ))}
+            {options.map((option) => {
+              const optionValue = typeof option === 'string' ? option : option.value;
+              const optionLabel = typeof option === 'string' ? option : option.label;
+              
+              return (
+                <FormControlLabel
+                  key={optionValue}
+                  control={
+                    <Checkbox
+                      checked={field.value.includes(optionValue)}
+                      onChange={() => field.onChange(getSelected(field.value, optionValue))}
+                      name={accessibility(optionLabel)}
+                      {...slotProps?.checkbox}
+                      inputProps={{
+                        ...(!optionLabel && { 'aria-label': ariaLabel(optionLabel) }),
+                        ...slotProps?.checkbox?.inputProps,
+                      }}
+                    />
+                  }
+                  label={optionLabel}
+                />
+              );
+            })}
           </FormGroup>
 
           {(!!error || helperText) && (
@@ -107,4 +112,4 @@ export function RHFMultiCheckbox({ name, label, options, slotProps, helperText, 
       )}
     />
   );
-} 
+}

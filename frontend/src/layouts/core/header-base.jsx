@@ -7,16 +7,17 @@ import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
 
 import { Logo } from 'src/components/logo';
+import { Iconify } from 'src/components/iconify';
 
 import { HeaderSection } from './header-section';
 import { Searchbar } from '../components/searchbar';
 import { MenuButton } from '../components/menu-button';
 import { SignInButton } from '../components/sign-in-button';
 import { AccountPopover } from 'src/layouts/components/account-popover';
-import { SettingsButton } from '../components/settings-button';
+import { SettingsPopover } from 'src/components/settings';
+
 import { LanguagePopover } from '../components/language-popover';
 import { ContactsPopover } from '../components/contacts-popover';
-import { WorkspacesPopover } from '../components/workspaces-popover';
 import { NotificationsPopover } from 'src/layouts/components/notifications-popover';
 
 // ----------------------------------------------------------------------
@@ -64,7 +65,6 @@ export function HeaderBase({
     purchase = true,
     contacts = true,
     searchbar = true,
-    workspaces = true,
     menuButton = true,
     localization = true,
     notifications = true,
@@ -104,9 +104,6 @@ export function HeaderBase({
             {/* -- Divider -- */}
             <StyledDivider data-slot="divider" />
 
-            {/* -- Workspace popover -- */}
-            {workspaces && <WorkspacesPopover data-slot="workspaces" data={data?.workspaces} />}
-
             {slots?.leftAreaEnd}
           </>
         ),
@@ -126,12 +123,14 @@ export function HeaderBase({
               {helpLink && (
                 <Link
                   data-slot="help-link"
-                  href={paths.faqs}
+                  href="/landing"
                   component={RouterLink}
                   color="inherit"
-                  sx={{ typography: 'subtitle2' }}
+                  underline="none"
+                  sx={{ typography: 'subtitle2', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
                 >
-                  Need help?
+                  <Iconify icon="eva:arrow-back-outline" width={18} />
+                  Back
                 </Link>
               )}
 
@@ -149,8 +148,8 @@ export function HeaderBase({
               {/* -- Contacts popover -- */}
               {contacts && <ContactsPopover data-slot="contacts" data={data?.contacts} />}
 
-              {/* -- Settings button -- */}
-              {settings && <SettingsButton data-slot="settings" />}
+              {/* -- Settings popover -- */}
+              {settings && <SettingsPopover data-slot="settings" />}
 
               {/* -- Account drawer -- */}
               {account && <AccountPopover data-slot="account" data={data?.account} />}

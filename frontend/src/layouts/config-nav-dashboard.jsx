@@ -11,7 +11,6 @@ const icon = (name) => <SvgColor src={`${CONFIG.site.basePath}/assets/icons/navb
 const ICONS = {
   job: icon('ic-job'),
   blog: icon('ic-blog'),
-  chat: icon('ic-chat'),
   mail: icon('ic-mail'),
   user: icon('ic-user'),
   file: icon('ic-file'),
@@ -20,13 +19,11 @@ const ICONS = {
   order: icon('ic-order'),
   label: icon('ic-label'),
   blank: icon('ic-blank'),
-  kanban: icon('ic-kanban'),
   folder: icon('ic-folder'),
   course: icon('ic-course'),
   banking: icon('ic-banking'),
   booking: icon('ic-booking'),
   product: icon('ic-product'),
-  calendar: icon('ic-calendar'),
   disabled: icon('ic-disabled'),
   external: icon('ic-external'),
   menuItem: icon('ic-menu-item'),
@@ -34,9 +31,13 @@ const ICONS = {
   analytics: icon('ic-analytics'),
   dashboard: icon('ic-dashboard'),
   parameter: icon('ic-parameter'),
-  bookkeeping: icon('ic-banking'), // Using banking icon for bookkeeping
-  taxCalculator: icon('ic-analytics'), // Using analytics icon for tax calculator
-  aiBookkeeper: icon('ic-robot'), // Using robot icon for AI bookkeeper
+  bookkeeping: icon('ic-banking'), 
+  taxDecisionTool: icon('ic-analytics'), 
+  aiBookkeeper: icon('ic-robot'),
+  inventory: icon('ic-product'),
+  invoice: icon('ic-file'),
+  account: icon('ic-user'),
+  announcement: icon('ic-blog'),
 };
 
 // ----------------------------------------------------------------------
@@ -77,12 +78,41 @@ export const navData = [
           { title: 'AI Categorization Log', path: paths.dashboard.aiBookkeeper.aiCategorization },
         ],
       },
-
       {
-        title: 'Tax Calculator',
-        path: paths.dashboard.taxCalculator,
-        icon: ICONS.taxCalculator,
+        title: 'Tax Decision Tool',
+        path: paths.dashboard.taxDecisionTool,
+        icon: ICONS.taxDecisionTool,
       },
+    ],
+  },
+  /**
+   * Shop
+   */
+  {
+    subheader: 'SHOP',
+    items: [
+      { title: 'Inventory', path: paths.dashboard.inventory.root, icon: ICONS.inventory },
+      { title: 'Orders', path: paths.dashboard.orders.root, icon: ICONS.order },
+      { title: 'Invoice', path: paths.dashboard.invoice.root, icon: ICONS.invoice },
+      { title: 'Mail', path: paths.dashboard.mail, icon: ICONS.mail },
+    ],
+  },
+  /**
+   * Settings
+   */
+  {
+    subheader: 'SETTINGS',
+    items: [
+      { title: 'Account', path: paths.dashboard.account, icon: ICONS.account },
+    ],
+  },
+  /**
+   * Misc
+   */
+  {
+    subheader: 'MISC',
+    items: [
+      { title: 'Announcement', path: paths.dashboard.announcement, icon: ICONS.announcement },
     ],
   },
 ];

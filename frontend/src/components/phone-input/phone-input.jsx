@@ -45,4 +45,4 @@ export const PhoneInput = forwardRef(
 
 // ----------------------------------------------------------------------
 
-const CustomInput = forwardRef(({ ...props }, ref) => <TextField inputRef={ref} {...props} />);
+const CustomInput = forwardRef((props, ref) => <TextField inputRef={ref} {...props} />);

@@ -1,1 +1,1 @@
-export * from './checkout-view';
+export { CheckoutView } from './checkout-view';

@@ -21,14 +21,18 @@ export function GuestGuard({ children }) {
 
   const [isChecking, setIsChecking] = useState(true);
 
-  const returnTo = searchParams.get('returnTo') || CONFIG.auth.redirectPath;
+  const returnToParam = searchParams.get('returnTo');
+  const returnTo = returnToParam ? decodeURIComponent(returnToParam) : CONFIG.auth.redirectPath;
 
   const checkPermissions = async () => {
     if (loading) {
       return;
     }
 
+    console.log('GuestGuard - authenticated:', authenticated, 'returnTo:', returnTo);
+
     if (authenticated) {
+      console.log('GuestGuard - redirecting to:', returnTo);
       router.replace(returnTo);
       return;
     }

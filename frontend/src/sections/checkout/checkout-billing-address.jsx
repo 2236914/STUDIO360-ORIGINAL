@@ -47,7 +47,7 @@ export function CheckoutBillingAddress() {
                 p: 3,
                 mb: 3,
                 borderRadius: 2,
-                boxShadow: (theme) => theme.customShadows.card,
+                boxShadow: 1,
               }}
             />
           ))}

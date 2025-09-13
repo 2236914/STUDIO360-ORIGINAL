@@ -29,7 +29,7 @@
     "main": "#fda92d",
     "dark": "#B66816",
     "darker": "#793908",
-    "contrastText": "#1C252E"
+    "contrastText": "#1C250E"
   },
   "red": {
     "lighter": "#FFE3D5",
@@ -37,6 +37,22 @@
     "main": "#FF3030",
     "dark": "#B71833",
     "darker": "#7A0930",
+    "contrastText": "#FFFFFF"
+  },
+  "pink": {
+    "lighter": "#FAD6E6",
+    "light": "#F48FB1",
+    "main": "#E91E63",
+    "dark": "#AD1457",
+    "darker": "#880E4F",
+    "contrastText": "#FFFFFF"
+  },
+  "green": {
+    "lighter": "#C8FAD6",
+    "light": "#5BE49B",
+    "main": "#00A76F",
+    "dark": "#007867",
+    "darker": "#004B50",
     "contrastText": "#FFFFFF"
   }
 }

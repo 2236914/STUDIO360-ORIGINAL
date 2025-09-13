@@ -1,4 +1,5 @@
 import { m } from 'framer-motion';
+import { useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -13,36 +14,32 @@ import { CONFIG } from 'src/config-global';
 import { varAlpha, bgGradient } from 'src/theme/styles';
 
 import { Label } from 'src/components/label';
+import { Iconify } from 'src/components/iconify';
 
 import { useAuthContext } from 'src/auth/hooks';
+import { LogoutDialog } from 'src/components/logout-dialog';
 
 // ----------------------------------------------------------------------
 
 export function NavUpgrade({ sx, ...other }) {
-  const { user } = useAuthContext();
+  const { user, logout } = useAuthContext();
+  const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+
+  const handleLogoutClick = () => {
+    setLogoutDialogOpen(true);
+  };
+
+  const handleLogoutConfirm = async () => {
+    await logout();
+  };
 
   return (
     <Stack sx={{ px: 2, py: 5, textAlign: 'center', ...sx }} {...other}>
       <Stack alignItems="center">
         <Box sx={{ position: 'relative' }}>
           <Avatar src={user?.photoURL} alt={user?.displayName} sx={{ width: 48, height: 48 }}>
-            {user?.displayName?.charAt(0).toUpperCase()}
+            {user?.displayName?.charAt(0).toUpperCase() || 'K'}
           </Avatar>
-
-          <Label
-            color="success"
-            variant="filled"
-            sx={{
-              top: -6,
-              px: 0.5,
-              left: 40,
-              height: 20,
-              position: 'absolute',
-              borderBottomLeftRadius: 2,
-            }}
-          >
-            Free
-          </Label>
         </Box>
 
         <Stack spacing={0.5} sx={{ mb: 2, mt: 1.5, width: 1 }}>
@@ -51,7 +48,7 @@ export function NavUpgrade({ sx, ...other }) {
             noWrap
             sx={{ color: 'var(--layout-nav-text-primary-color)' }}
           >
-            {user?.displayName}
+            {user?.displayName || 'Kitsch Studio Seller'}
           </Typography>
 
           <Typography
@@ -59,14 +56,25 @@ export function NavUpgrade({ sx, ...other }) {
             noWrap
             sx={{ color: 'var(--layout-nav-text-disabled-color)' }}
           >
-            {user?.email}
+            {user?.email || 'studio.360@myyahoo.com'}
           </Typography>
         </Stack>
 
-        <Button variant="contained" href={paths.minimalStore} target="_blank" rel="noopener">
-          Upgrade to Pro
+        <Button 
+          variant="contained" 
+          color="error"
+          onClick={handleLogoutClick}
+          startIcon={<Iconify icon="eva:log-out-outline" width={18} />}
+        >
+          Logout
         </Button>
       </Stack>
+      
+      <LogoutDialog
+        open={logoutDialogOpen}
+        onClose={() => setLogoutDialogOpen(false)}
+        onConfirm={handleLogoutConfirm}
+      />
     </Stack>
   );
 }

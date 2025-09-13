@@ -36,8 +36,14 @@ export function GuestGuard({ children }) {
     setIsChecking(false);
   }, [authenticated, loading]);
 
-  if (isChecking) {
+  // Don't show splash screen for guest pages - they should load immediately
+  if (isChecking && loading) {
     return <SplashScreen />;
+  }
+
+  // If not loading anymore, show children even if still checking
+  if (!loading) {
+    return <>{children}</>;
   }
 
   return <>{children}</>;

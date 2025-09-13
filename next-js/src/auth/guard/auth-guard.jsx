@@ -43,6 +43,7 @@ export function AuthGuard({ children }) {
       const { method } = CONFIG.auth;
 
       const signInPath = {
+        mock: paths.auth.jwt.signIn,
         jwt: paths.auth.jwt.signIn,
         auth0: paths.auth.auth0.signIn,
         amplify: paths.auth.amplify.signIn,

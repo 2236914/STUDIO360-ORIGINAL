@@ -7,7 +7,7 @@ console.log('Supabase Anon Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://styiinzwhhdmvogyokgk.supabase.co';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN0eWlpbnp3aGhkbXZvZ3lva2drIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQzODEwMzIsImV4cCI6MjA2OTk1NzAzMn0.2AnJRjmOG0dBS0Mo94KqhRjyMdpQCmFoPMlMKjAAaFY';
 
-// Configure Supabase client with additional options
+// Configure Supabase client with SSR-safe storage
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
@@ -15,18 +15,25 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     detectSessionInUrl: true,
     storage: {
       getItem: (key) => {
-        console.log('Getting item from storage:', key);
-        const item = localStorage.getItem(key);
-        console.log('Retrieved item:', item);
-        return item;
+        if (typeof window !== 'undefined') {
+          console.log('Getting item from storage:', key);
+          const item = localStorage.getItem(key);
+          console.log('Retrieved item:', item);
+          return item;
+        }
+        return null;
       },
       setItem: (key, value) => {
-        console.log('Setting item in storage:', { key, value });
-        localStorage.setItem(key, value);
+        if (typeof window !== 'undefined') {
+          console.log('Setting item in storage:', { key, value });
+          localStorage.setItem(key, value);
+        }
       },
       removeItem: (key) => {
-        console.log('Removing item from storage:', key);
-        localStorage.removeItem(key);
+        if (typeof window !== 'undefined') {
+          console.log('Removing item from storage:', key);
+          localStorage.removeItem(key);
+        }
       },
     },
   },

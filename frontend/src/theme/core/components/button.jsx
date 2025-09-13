@@ -78,6 +78,11 @@ const MuiButton = {
    * STYLE
    *************************************** */
   styleOverrides: {
+    root: ({ theme }) => ({
+      borderRadius: theme.shape.borderRadius,
+      textTransform: 'none',
+      fontWeight: theme.typography.fontWeightMedium,
+    }),
     /**
      * @variant contained
      */

@@ -1,19 +1,11 @@
-import { Container, Typography } from '@mui/material';
+import { InvoiceListView } from 'src/sections/invoice/view/invoice-list-view';
 
 // ----------------------------------------------------------------------
 
-export const metadata = { title: 'Invoices | Kitsch Studio' };
+export const metadata = {
+  title: 'Invoice | Dashboard',
+};
 
-export default function InvoicePage() {
-  return (
-    <Container maxWidth="xl">
-      <Typography variant="h4" sx={{ mb: 5 }}>
-        Invoices
-      </Typography>
-
-      <Typography variant="body1" color="text.secondary">
-        Invoice functionality has been removed from this application.
-      </Typography>
-    </Container>
-  );
+export default function Page() {
+  return <InvoiceListView />;
 } 

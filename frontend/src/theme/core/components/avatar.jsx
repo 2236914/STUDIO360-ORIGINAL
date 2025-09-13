@@ -47,6 +47,18 @@ const MuiAvatar = {
    * STYLE
    *************************************** */
   styleOverrides: {
+    root: {
+      // Ensure circular avatars maintain their shape during lazy loading
+      '& .lazy-load-image-background': {
+        borderRadius: 'inherit !important',
+      },
+      '& .lazy-load-image-wrapper': {
+        borderRadius: 'inherit !important',
+      },
+      '& .lazy-load-image-background img': {
+        borderRadius: 'inherit !important',
+      },
+    },
     rounded: ({ theme }) => ({ borderRadius: theme.shape.borderRadius * 1.5 }),
     colorDefault: ({ ownerState, theme }) => {
       const color = colorByName(`${ownerState.alt}`);

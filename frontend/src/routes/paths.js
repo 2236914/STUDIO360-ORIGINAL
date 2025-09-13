@@ -14,6 +14,16 @@ const MOCK_ID = 'e99f09a7-dd88-49d5-b1c8-1daf80c2d7b1';
 export const paths = {
   faqs: '/faqs',
   minimalStore: 'https://mui.com/store/items/minimal-dashboard/',
+  // PRODUCT
+  product: {
+    root: '/product',
+    checkout: `/product/checkout`,
+  },
+  // STORE
+  store: {
+    root: '/stores',
+    checkout: (storeId) => `/stores/${storeId}/checkout`,
+  },
   // AUTH
   auth: {
     amplify: {
@@ -69,7 +79,34 @@ export const paths = {
       aiCategorization: `${ROOTS.DASHBOARD}/ai-bookkeeper/ai-categorization`,
       uploadProcess: `${ROOTS.DASHBOARD}/ai-bookkeeper/upload-process`,
     },
-    taxCalculator: `${ROOTS.DASHBOARD}/tax-calculator`,
+    taxDecisionTool: `${ROOTS.DASHBOARD}/tax-decision-tool`,
+    // Shop
+    inventory: {
+      root: `${ROOTS.DASHBOARD}/inventory`,
+      new: `${ROOTS.DASHBOARD}/inventory/new`,
+      edit: (id) => `${ROOTS.DASHBOARD}/inventory/${id}/edit`,
+      details: (id) => `${ROOTS.DASHBOARD}/inventory/${id}`,
+    },
+    orders: {
+      root: `${ROOTS.DASHBOARD}/orders`,
+      details: (id) => `${ROOTS.DASHBOARD}/orders/${id}`,
+    },
+    invoice: {
+      root: `${ROOTS.DASHBOARD}/invoice`,
+      new: `${ROOTS.DASHBOARD}/invoice/new`,
+      details: (id) => `${ROOTS.DASHBOARD}/invoice/${id}`,
+      edit: (id) => `${ROOTS.DASHBOARD}/invoice/${id}/edit`,
+    },
+    mail: `${ROOTS.DASHBOARD}/mail`,
+    // User
+    user: {
+      root: `${ROOTS.DASHBOARD}/user`,
+      account: `${ROOTS.DASHBOARD}/account`,
+    },
+    // Settings
+    account: `${ROOTS.DASHBOARD}/account`,
+    // Misc
+    announcement: `${ROOTS.DASHBOARD}/announcement`,
   },
   // ADMIN (Admin IT Dashboard)
   admin: {

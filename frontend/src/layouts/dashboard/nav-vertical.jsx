@@ -27,7 +27,12 @@ export function NavVertical({ sx, data, slots, isNavMini, layoutQuery, onToggleN
       <NavUserCard />
 
       <Scrollbar fillContent>
-        <NavSectionVertical data={data} sx={{ px: 2, flex: '1 1 auto' }} {...other} />
+        <NavSectionVertical 
+          data={data} 
+          enabledRootRedirect={true}
+          sx={{ px: 2, flex: '1 1 auto' }} 
+          {...other} 
+        />
 
         {slots?.bottomArea ?? <NavUpgrade />}
       </Scrollbar>
@@ -44,6 +49,7 @@ export function NavVertical({ sx, data, slots, isNavMini, layoutQuery, onToggleN
 
       <NavSectionMini
         data={data}
+        enabledRootRedirect={true}
         sx={{ pb: 2, px: 0.5, ...hideScrollY, flex: '1 1 auto', overflowY: 'auto' }}
         {...other}
       />

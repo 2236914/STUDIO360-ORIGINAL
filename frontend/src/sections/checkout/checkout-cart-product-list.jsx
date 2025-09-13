@@ -23,10 +23,18 @@ export function CheckoutCartProductList({
   onDelete,
   onIncreaseQuantity,
   onDecreaseQuantity,
+  onUpdateVariant,
 }) {
   return (
     <Scrollbar>
-      <Table sx={{ minWidth: 720 }}>
+      <Table 
+        sx={{ 
+          minWidth: { xs: 300, sm: 720 },
+          '& .MuiTableCell-root': {
+            borderBottom: 'none'
+          }
+        }}
+      >
         <TableHeadCustom headLabel={TABLE_HEAD} />
 
         <TableBody>
@@ -37,6 +45,7 @@ export function CheckoutCartProductList({
               onDelete={() => onDelete(row.id)}
               onDecrease={() => onDecreaseQuantity(row.id)}
               onIncrease={() => onIncreaseQuantity(row.id)}
+              onUpdateVariant={onUpdateVariant}
             />
           ))}
         </TableBody>

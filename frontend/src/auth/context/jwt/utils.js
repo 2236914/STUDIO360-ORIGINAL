@@ -148,45 +148,58 @@ export async function setSession(accessToken) {
 
 export async function removeSession() {
   console.log('removeSession called');
-  
+
   try {
-    // Clear all auth-related data from localStorage
+    // Clear all auth-related data from storage
     const keysToRemove = [
       STORAGE_KEY,
       'user-email',
       'user-role',
       'user-name',
+      // Legacy keys that might exist from older implementations
       'sb-access-token',
       'sb-refresh-token',
       'sb-auth-token',
-      'sb-auth-token-code-verifier'
+      'sb-auth-token-code-verifier',
+      // Supabase v2 default key
+      '@supabase.auth.token',
     ];
-    
+
+    // Also remove project-scoped Supabase key: sb-<project-ref>-auth-token
+    try {
+      const supabaseUrl = supabase?.supabaseUrl || '';
+      const match = supabaseUrl.match(/^https?:\/\/([^.]+)\./);
+      const projectRef = match && match[1] ? match[1] : null;
+      if (projectRef) {
+        keysToRemove.push(`sb-${projectRef}-auth-token`);
+      }
+    } catch (e) {
+      // ignore parsing issues
+    }
+
     console.log('Clearing storage keys...');
-    keysToRemove.forEach(key => {
+    keysToRemove.forEach((key) => {
       const hadLocal = localStorage.getItem(key) !== null;
       const hadSession = sessionStorage.getItem(key) !== null;
-      
+
       localStorage.removeItem(key);
       sessionStorage.removeItem(key);
-      
+
       if (hadLocal || hadSession) {
-        console.log(`Removed ${key} from ${hadLocal ? 'localStorage' : ''}${hadLocal && hadSession ? ' and ' : ''}${hadSession ? 'sessionStorage' : ''}`);
+        console.log(
+          `Removed ${key} from ${hadLocal ? 'localStorage' : ''}${
+            hadLocal && hadSession ? ' and ' : ''
+          }${hadSession ? 'sessionStorage' : ''}`
+        );
       }
     });
-    
+
     // Clear axios headers
     console.log('Clearing axios auth header...');
     delete axios.defaults.headers.common.Authorization;
-    
-    // Clear Supabase session
-    console.log('Signing out from Supabase...');
-    try {
-      await supabase.auth.signOut();
-      console.log('Successfully signed out from Supabase');
-    } catch (error) {
-      console.error('Error signing out from Supabase:', error);
-    }
+
+    // Intentionally DO NOT call supabase.auth.signOut() here to avoid races.
+    // Sign-out network calls should be handled by the caller (e.g., logout()).
   } catch (error) {
     console.error('Error during remove session:', error);
     throw error;

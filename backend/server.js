@@ -85,12 +85,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API Routes (to be implemented)
-app.use('/api/auth', require('./api/auth/auth.routes'));
-app.use('/api/assistant', require('./api/assistant/assistant.routes'));
-app.use('/api/ai', require('./api/ai/ai.routes'));
-app.use('/api/invoices', require('./api/invoices/invoice.routes'));
-app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes'));
+// API Routes
+try { app.use('/api/auth', require('./api/auth/auth.routes')); } catch (_) { console.warn('Auth routes missing'); }
+try { app.use('/api/assistant', require('./api/assistant/assistant.routes')); } catch (_) { console.warn('Assistant routes missing'); }
+try { app.use('/api/ai', require('./api/ai/ai.routes')); } catch (_) { console.warn('AI routes missing'); }
+try { app.use('/api/invoices', require('./api/invoices/invoice.routes')); } catch (_) { console.warn('Invoice routes missing'); }
+try { app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes')); } catch (_) { console.warn('Bookkeeping routes missing'); }
+
+// Status endpoint retained
+app.get('/api/status', (req, res) => {
+  res.json({ message: 'STUDIO360 Backend API is running!', version: '1.0.0' });
+});
 
 // 404 handler
 app.use('*', (req, res) => {

@@ -8,16 +8,33 @@ import { updateCoreWithSettings, updateComponentsWithSettings } from './with-set
 // ----------------------------------------------------------------------
 
 export function createTheme(localeComponents, settings) {
+  // Handle case where only settings is passed (starter version)
+  if (!settings && localeComponents) {
+    settings = localeComponents;
+    localeComponents = undefined;
+  }
+
+  // Ensure settings has default values
+  const defaultSettings = {
+    colorScheme: 'light',
+    direction: 'ltr',
+    fontFamily: 'Barlow',
+    primaryColor: 'default',
+    contrast: 'default',
+  };
+
+  const safeSettings = { ...defaultSettings, ...settings };
+
   const initialTheme = {
     colorSchemes,
-    shadows: shadows(settings.colorScheme),
-    customShadows: customShadows(settings.colorScheme),
-    direction: settings.direction,
+    shadows: shadows(safeSettings.colorScheme),
+    // customShadows: customShadows(safeSettings.colorScheme), // DISABLED TO PREVENT CIRCULAR REFERENCE
+    direction: safeSettings.direction,
     shape: { borderRadius: 8 },
     components,
     typography: {
       ...typography,
-      fontFamily: setFont(settings.fontFamily),
+      fontFamily: setFont(safeSettings.fontFamily),
     },
     cssVarPrefix: '',
     shouldSkipGeneratingVar,
@@ -26,7 +43,7 @@ export function createTheme(localeComponents, settings) {
   /**
    * 1.Update values from settings before creating theme.
    */
-  const updateTheme = updateCoreWithSettings(initialTheme, settings);
+  const updateTheme = updateCoreWithSettings(initialTheme, safeSettings);
 
   /**
    * 2.Create theme + add locale + update component with settings.
@@ -34,7 +51,7 @@ export function createTheme(localeComponents, settings) {
   const theme = extendTheme(
     updateTheme,
     localeComponents,
-    updateComponentsWithSettings(settings),
+    updateComponentsWithSettings(safeSettings),
     overridesTheme
   );
 

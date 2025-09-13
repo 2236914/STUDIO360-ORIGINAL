@@ -20,7 +20,7 @@ export const CONFIG = {
   auth: {
     method: 'mock',
     skip: false,
-    redirectPath: paths.dashboard.root,
+    redirectPath: '/dashboard',
   },
   /**
    * Mapbox

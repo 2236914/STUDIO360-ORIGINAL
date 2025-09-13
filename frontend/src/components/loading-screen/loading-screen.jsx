@@ -1,8 +1,9 @@
 'use client';
 
 import Box from '@mui/material/Box';
-import Portal from '@mui/material/Portal';
 import LinearProgress from '@mui/material/LinearProgress';
+
+import { PortalWrapper } from '../portal';
 
 // ----------------------------------------------------------------------
 
@@ -26,7 +27,7 @@ export function LoadingScreen({ portal, sx, ...other }) {
   );
 
   if (portal) {
-    return <Portal>{content}</Portal>;
+    return <PortalWrapper>{content}</PortalWrapper>;
   }
 
   return content;
