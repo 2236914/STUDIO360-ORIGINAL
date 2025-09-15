@@ -908,7 +908,7 @@ export default function UploadProcessPage() {
             <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
               {content.description}
             </Typography>
-            <Alert severity="info">Proceed to Step 2 to view the converted OCR text.</Alert>
+            <Alert severity="info">Proceed to Step 3 to view the converted OCR text.</Alert>
 
           </Box>
         );
