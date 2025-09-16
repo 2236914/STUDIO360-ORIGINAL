@@ -1,76 +1,79 @@
 BEGIN;
 
--- Accounts master
-CREATE TABLE IF NOT EXISTS public.accounts (
+-- Drop old tables if they exist (this will delete all data!)
+DROP TABLE IF EXISTS public.cash_disbursement_book CASCADE;
+DROP TABLE IF EXISTS public.general_journal CASCADE;
+DROP TABLE IF EXISTS public.general_ledger CASCADE;
+DROP TABLE IF EXISTS public.cash_receipt_journal CASCADE;
+DROP TABLE IF EXISTS public.accounts CASCADE;
+
+-- Chart of Accounts
+CREATE TABLE public.accounts (
   account_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  account_code TEXT NOT NULL UNIQUE,
-  account_title TEXT NOT NULL,
+  account_code VARCHAR(20) UNIQUE,
+  account_title VARCHAR(255) NOT NULL,
   account_type TEXT NOT NULL CHECK (account_type IN ('asset','liability','equity','revenue','expense'))
 );
 
--- Journal entries (header)
-CREATE TABLE IF NOT EXISTS public.journal_entries (
-  entry_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  entry_date DATE NOT NULL,
-  reference TEXT,
-  remarks TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- General Journal
+CREATE TABLE public.general_journal (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  date DATE NOT NULL,
+  account_title_particulars VARCHAR(255) NOT NULL,
+  reference VARCHAR(50),
+  debit NUMERIC(12,2) DEFAULT 0.00,
+  credit NUMERIC(12,2) DEFAULT 0.00
 );
 
--- Journal details (lines)
-CREATE TABLE IF NOT EXISTS public.journal_details (
-  entry_id BIGINT NOT NULL REFERENCES public.journal_entries(entry_id) ON DELETE CASCADE,
-  line_no INTEGER NOT NULL,
-  account_code TEXT NOT NULL REFERENCES public.accounts(account_code) ON UPDATE CASCADE,
-  description TEXT,
-  debit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  credit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  PRIMARY KEY (entry_id, line_no)
+-- Cash Receipt Journal
+CREATE TABLE public.cash_receipt_journal (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  date DATE NOT NULL,
+  invoice_no VARCHAR(50),
+  source VARCHAR(255),
+  reference VARCHAR(50),
+  dr_cash NUMERIC(12,2) DEFAULT 0.00,
+  dr_fees NUMERIC(12,2) DEFAULT 0.00,
+  dr_returns NUMERIC(12,2) DEFAULT 0.00,
+  cr_sales NUMERIC(12,2) DEFAULT 0.00,
+  cr_income NUMERIC(12,2) DEFAULT 0.00,
+  cr_ar NUMERIC(12,2) DEFAULT 0.00,
+  remarks TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_journal_entries_date ON public.journal_entries(entry_date);
-CREATE INDEX IF NOT EXISTS idx_journal_details_account ON public.journal_details(account_code);
-
--- Cash receipts
-CREATE TABLE IF NOT EXISTS public.cash_receipts (
-  receipt_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  receipt_date DATE NOT NULL,
-  invoice_no TEXT,
-  source TEXT,
-  reference TEXT,
-  cash_debit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  remarks TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+-- Cash Disbursement Book
+CREATE TABLE public.cash_disbursement_book (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  date DATE NOT NULL,
+  payee_particulars VARCHAR(255) NOT NULL,
+  reference VARCHAR(50),
+  cr_cash NUMERIC(12,2) DEFAULT 0.00,
+  dr_materials NUMERIC(12,2) DEFAULT 0.00,
+  dr_supplies NUMERIC(12,2) DEFAULT 0.00,
+  dr_rent NUMERIC(12,2) DEFAULT 0.00,
+  dr_utilities NUMERIC(12,2) DEFAULT 0.00,
+  dr_advertising NUMERIC(12,2) DEFAULT 0.00,
+  dr_delivery NUMERIC(12,2) DEFAULT 0.00,
+  dr_taxes_licenses NUMERIC(12,2) DEFAULT 0.00,
+  dr_misc NUMERIC(12,2) DEFAULT 0.00,
+  remarks TEXT
 );
 
-CREATE TABLE IF NOT EXISTS public.cash_receipt_details (
-  receipt_id BIGINT NOT NULL REFERENCES public.cash_receipts(receipt_id) ON DELETE CASCADE,
-  line_no INTEGER NOT NULL,
-  account_code TEXT NOT NULL REFERENCES public.accounts(account_code) ON UPDATE CASCADE,
-  debit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  credit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  PRIMARY KEY (receipt_id, line_no)
+-- General Ledger
+CREATE TABLE public.general_ledger (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  account_code VARCHAR(50),
+  account_title VARCHAR(255) NOT NULL,
+  debit NUMERIC(12,2) DEFAULT 0.00,
+  credit NUMERIC(12,2) DEFAULT 0.00,
+  balance NUMERIC(12,2) DEFAULT 0.00
 );
 
--- Cash disbursements
-CREATE TABLE IF NOT EXISTS public.cash_disbursements (
-  disbursement_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  disbursement_date DATE NOT NULL,
-  voucher_no TEXT,
-  payee TEXT,
-  reference TEXT,
-  cash_credit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  remarks TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Indexes
+CREATE INDEX idx_gj_date ON public.general_journal (date);
+CREATE INDEX idx_gj_account ON public.general_journal (account_title_particulars);
 
-CREATE TABLE IF NOT EXISTS public.cash_disbursement_details (
-  disbursement_id BIGINT NOT NULL REFERENCES public.cash_disbursements(disbursement_id) ON DELETE CASCADE,
-  line_no INTEGER NOT NULL,
-  account_code TEXT NOT NULL REFERENCES public.accounts(account_code) ON UPDATE CASCADE,
-  debit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  credit NUMERIC(18,2) NOT NULL DEFAULT 0,
-  PRIMARY KEY (disbursement_id, line_no)
-);
+CREATE INDEX idx_crj_date ON public.cash_receipt_journal (date);
+CREATE INDEX idx_cdb_date ON public.cash_disbursement_book (date);
 
 COMMIT;

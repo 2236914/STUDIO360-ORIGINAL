@@ -16,6 +16,10 @@ const {
   getJournalEntries,
   getLedgerSummary,
   isDbReady,
+  getCashReceiptsAll,
+  getCashDisbursementsAll,
+  getLedgerFullFromDb,
+  refreshGeneralLedger,
 } = require('../../services/bookkeepingRepo');
 
 // In-memory storage (replace with DB later)
@@ -68,6 +72,75 @@ function findJournalDuplicateByLines(date, lines) {
   const sig = hashLines(lines);
   return store.journal.find((e) => e.date === date && hashLines(e.lines) === sig) || null;
 }
+
+// --- Startup hydration: load in-memory books from DB if empty ---
+(async () => {
+  try {
+    if (!isDbReady()) return;
+    // Hydrate journal from general_journal (grouped by date+reference)
+    const { entries } = await getJournalEntries({ page: 1, limit: 10000 });
+    if (Array.isArray(entries) && store.journal.length === 0) {
+      for (const e of entries) {
+        const id = store.journal.length + 1;
+        const lines = (e.lines||[]).map(ln => {
+          const desc = String(ln.description || '').trim();
+          let code = '';
+          try {
+            const found = listAccounts().find(a => a.title === desc);
+            if (found) code = found.code;
+          } catch (_) {}
+          return { code, description: desc, debit: Number(ln.debit||0), credit: Number(ln.credit||0) };
+        });
+        store.journal.push({ id, date: e.date, ref: e.ref || `GJ${String(id).padStart(4,'0')}`, particulars: e.particulars || '', lines });
+      }
+    }
+    // Hydrate cash receipts
+    const receipts = await getCashReceiptsAll();
+    if (Array.isArray(receipts) && store.receipts.length === 0) {
+      for (const r of receipts) {
+        const id = store.receipts.length + 1;
+        store.receipts.push({
+          id,
+          date: r.date,
+          referenceNo: r.reference || '',
+          customer: r.source || '',
+          cashDebit: Number(r.dr_cash || r.dr_cashbank || 0),
+          feesChargesDebit: Number(r.dr_fees || 0),
+          salesReturnsDebit: Number(r.dr_returns || 0),
+          netSalesCredit: Number(r.cr_sales || 0),
+          otherIncomeCredit: Number(r.cr_income || 0),
+          arCredit: Number(r.cr_ar || 0),
+          ownersCapitalCredit: 0,
+          remarks: r.remarks || ''
+        });
+      }
+    }
+    // Hydrate cash disbursements
+    const disb = await getCashDisbursementsAll();
+    if (Array.isArray(disb) && store.disbursements.length === 0) {
+      for (const d of disb) {
+        const id = store.disbursements.length + 1;
+        store.disbursements.push({
+          id,
+          date: d.date,
+          referenceNo: d.reference || '',
+          payee: d.payee_particulars || '',
+          cashCredit: Number(d.cr_cash || 0),
+          purchasesDebit: Number(d.dr_materials || 0),
+          suppliesDebit: Number(d.dr_supplies || 0),
+          rentDebit: Number(d.dr_rent || 0),
+          advertisingDebit: Number(d.dr_advertising || 0),
+          deliveryDebit: Number(d.dr_delivery || 0),
+          taxesDebit: Number(d.dr_taxes_licenses || 0),
+          miscDebit: Number(d.dr_misc || 0),
+          remarks: d.remarks || ''
+        });
+      }
+    }
+  } catch (e) {
+    // non-fatal
+  }
+})();
 
 /**
  * @route   GET /api/bookkeeping/journal
@@ -124,10 +197,7 @@ router.post('/journal', (req, res) => {
   (async () => {
     try {
       const codes = Array.from(new Set(normLines.map((l) => String(l.code))));
-      for (const c of codes) {
-        const acc = getAccount(c);
-        await upsertAccount({ code: acc.code, title: acc.title, type: acc.type });
-      }
+      for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
       await insertJournal({ date, reference: entry.ref, remarks: entry.particulars, lines: normLines });
     } catch (_) {}
   })();
@@ -139,9 +209,21 @@ router.post('/journal', (req, res) => {
  * @desc    Get general ledger
  * @access  Private
  */
-router.get('/ledger', (req, res) => {
-  // Build ledger by aggregating journal lines per account code, with running balance (normal side)
-  const byCode = new Map(); // code -> { code,title,normal,entries:[{date,description,reference,debit,credit,balance,accountCode,accountTitle}], totals:{debit,credit} }
+router.get('/ledger', async (req, res) => {
+  const mode = String(req.query.mode || '').toLowerCase();
+  const summaryOnly = req.query.summary === '1' || mode === 'summary';
+  // Prefer DB-derived ledger if available, fallback to in-memory aggregation
+  if (isDbReady()) {
+    try {
+      const full = await getLedgerFullFromDb();
+      if (summaryOnly) return ok(res, { message: 'Ledger summary (DB)', data: { summary: full.summary, accounts: full.accounts } });
+      return ok(res, { message: 'Ledger aggregated (DB)', data: full });
+    } catch (_) {
+      // fall through to in-memory
+    }
+  }
+  // In-memory aggregation from store.journal
+  const byCode = new Map();
   for (const j of store.journal) {
     for (const ln of j.lines) {
       const acc = getAccount(ln.code);
@@ -159,7 +241,6 @@ router.get('/ledger', (req, res) => {
       });
     }
   }
-  // Compute running balances by account and build summary
   const ledger = [];
   const summary = [];
   for (const rec of Array.from(byCode.values()).sort((a,b)=>a.code.localeCompare(b.code))) {
@@ -169,16 +250,12 @@ router.get('/ledger', (req, res) => {
       e.balance = bal;
     }
     const closingBalance = rec.normal === 'debit' ? (rec.totals.debit - rec.totals.credit) : (rec.totals.credit - rec.totals.debit);
-    const balanceSide = rec.normal; // side where balance rests by nature
+    const balanceSide = rec.normal;
     ledger.push({ code: rec.code, accountTitle: rec.title, normal: rec.normal, totals: rec.totals, entries: rec.entries });
     summary.push({ code: rec.code, accountTitle: rec.title, debit: rec.totals.debit, credit: rec.totals.credit, balance: closingBalance, balanceSide });
   }
-  const mode = String(req.query.mode || '').toLowerCase();
-  const summaryOnly = req.query.summary === '1' || mode === 'summary';
-  if (summaryOnly) {
-    return ok(res, { message: 'Ledger summary', data: { summary, accounts: listAccounts() } });
-  }
-  ok(res, { message: 'Ledger aggregated', data: { ledger, summary, accounts: listAccounts() } });
+  if (summaryOnly) return ok(res, { message: 'Ledger summary (memory)', data: { summary, accounts: listAccounts() } });
+  ok(res, { message: 'Ledger aggregated (memory)', data: { ledger, summary, accounts: listAccounts() } });
 });
 
 // Convenience endpoint for totals-only general ledger (no daily entries)
@@ -296,10 +373,7 @@ router.post('/cash-receipts', (req, res) => {
       }
       // ensure referenced accounts exist
       const codes = ['101','510','401','402','103','301'];
-      for (const c of codes) {
-        const acc = getAccount(c);
-        await upsertAccount({ code: acc.code, title: acc.title, type: acc.type });
-      }
+      for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
     } catch (_) {}
   })();
   ok(res, { message: 'Cash receipt entry added', data: { entry } });
@@ -381,10 +455,7 @@ router.post('/cash-disbursements', (req, res) => {
       }
       // ensure referenced accounts exist
       const codes = ['501','502','503','505','506','507','508','101'];
-      for (const c of codes) {
-        const acc = getAccount(c);
-        await upsertAccount({ code: acc.code, title: acc.title, type: acc.type });
-      }
+      for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
     } catch (_) {}
   })();
   ok(res, { message: 'Cash disbursement entry added', data: { entry } });
@@ -463,6 +534,17 @@ router.get('/db/ledger/summary', async (req, res) => {
     if (!isDbReady()) return res.status(503).json({ success: false, message: 'Database not configured' });
     const data = await getLedgerSummary();
     return res.json({ success: true, data });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Manual: refresh derived general_ledger table from general_journal
+router.post('/db/ledger/refresh', async (req, res) => {
+  try {
+    if (!isDbReady()) return res.status(503).json({ success: false, message: 'Database not configured' });
+    const okRefresh = await refreshGeneralLedger();
+    return res.json({ success: okRefresh, message: okRefresh ? 'general_ledger refreshed' : 'refresh failed (function missing?)' });
   } catch (e) {
     return res.status(500).json({ success: false, message: e.message });
   }

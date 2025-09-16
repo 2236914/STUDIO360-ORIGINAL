@@ -1,8 +1,14 @@
 const { supabase } = require('./supabaseClient');
-const { getAccount } = require('../api/bookkeeping/coa');
+const { getAccount, listAccounts, COA } = require('../api/bookkeeping/coa');
 
-async function upsertAccount({ code, title }) {
-  // New schema has no accounts table; keep as no-op for compatibility.
+async function upsertAccount({ code, title, type }) {
+  if (!supabase) return String(code || '');
+  // Try to insert; on conflict (unique on account_code) update title/type
+  const payload = { account_code: String(code || ''), account_title: String(title || ''), account_type: type || 'asset' };
+  try {
+    const { error } = await supabase.from('accounts').upsert(payload, { onConflict: 'account_code' });
+    if (error) throw error;
+  } catch (_) { /* ignore */ }
   return String(code || '');
 }
 
@@ -22,6 +28,8 @@ async function insertJournal({ date, reference, remarks, lines }) {
     const { error } = await supabase.from('general_journal').insert(rows);
     if (error) throw error;
   }
+  // After journal insert, refresh derived general_ledger (best-effort)
+  try { await refreshGeneralLedger(); } catch (_) {}
   return true;
 }
 
@@ -44,6 +52,7 @@ async function insertCashReceipt({ date, invoice_no, source, reference, cash_deb
   };
   const { data, error } = await supabase.from('cash_receipt_journal').insert(payload).select('id').single();
   if (error) throw error;
+  try { await refreshGeneralLedger(); } catch (_) {}
   return data.id;
 }
 
@@ -65,6 +74,7 @@ async function insertCashReceiptDetails(receiptId, details) {
   }
   const { error } = await supabase.from('cash_receipt_journal').update(delta).eq('id', receiptId);
   if (error) throw error;
+  try { await refreshGeneralLedger(); } catch (_) {}
   return true;
 }
 
@@ -87,6 +97,7 @@ async function insertCashDisbursement({ date, voucher_no, payee, reference, cash
   };
   const { data, error } = await supabase.from('cash_disbursement_book').insert(payload).select('id').single();
   if (error) throw error;
+  try { await refreshGeneralLedger(); } catch (_) {}
   return data.id;
 }
 
@@ -106,6 +117,7 @@ async function insertCashDisbursementDetails(disbursementId, details) {
   }
   const { error } = await supabase.from('cash_disbursement_book').update(delta).eq('id', disbursementId);
   if (error) throw error;
+  try { await refreshGeneralLedger(); } catch (_) {}
   return true;
 }
 
@@ -144,30 +156,74 @@ async function getJournalEntries({ page = 1, limit = 100 } = {}) {
 
 async function getLedgerSummary() {
   if (!supabase) return { summary: [] };
-  // Read from unified view (general_ledger is now a view alias)
-  const { data: rows, error } = await supabase
-    .from('general_ledger')
-    .select('account_title, debit, credit, balance_side, balance');
-  if (error) throw error;
-  const out = (rows || []).map(r => {
-    // Try to map title back to COA code
-    let code = '';
+  // Prefer view if available; otherwise support existing table schema
+  // 1) Try presentation view directly
+  try {
+    const { data: rowsView, error: errView } = await supabase
+      .from('v_ledger_presented')
+      .select('account_title, debit, credit, balance_side, balance');
+    if (errView) throw errView;
+    const out = (rowsView || []).map(r => {
+      let code = '';
+      try {
+        const title = String(r.account_title || '').trim();
+        const entries = Object.values(require('../api/bookkeeping/coa').COA);
+        const found = entries.find(a => a.title === title);
+        if (found) code = found.code;
+      } catch (_) {}
+      return {
+        code,
+        accountTitle: r.account_title,
+        debit: Number(r.debit || 0),
+        credit: Number(r.credit || 0),
+        balance: Number(r.balance || 0),
+        balanceSide: String(r.balance_side || 'debit')
+      };
+    });
+    return { summary: out };
+  } catch (_) {
+    // 2) Fallback: support table `general_ledger` (no DB changes required)
+    // Try to fetch with balance_side present; if not, compute from COA
     try {
-      const title = String(r.account_title || '').trim();
-      const entries = Object.values(require('../api/bookkeeping/coa').COA);
-      const found = entries.find(a => a.title === title);
-      if (found) code = found.code;
-    } catch (_) {}
-    return {
-      code,
-      accountTitle: r.account_title,
-      debit: Number(r.debit || 0),
-      credit: Number(r.credit || 0),
-      balance: Number(r.balance || 0),
-      balanceSide: String(r.balance_side || 'debit')
-    };
-  });
-  return { summary: out };
+      const { data: rowsWithSide, error: e1 } = await supabase
+        .from('general_ledger')
+        .select('account_code, account_title, debit, credit, balance_side, balance');
+      if (e1) throw e1;
+      const out = (rowsWithSide || []).map(r => {
+        const code = String(r.account_code || '').trim();
+        return {
+          code,
+          accountTitle: r.account_title,
+          debit: Number(r.debit || 0),
+          credit: Number(r.credit || 0),
+          balance: Number(r.balance || 0),
+          balanceSide: String(r.balance_side || ((getAccount(code).normal) || 'debit'))
+        };
+      });
+      return { summary: out };
+    } catch (_) {
+      // 3) Minimal schema: account_code, account_title, debit, credit -> compute balance and side
+      const { data: rowsBasic, error: e2 } = await supabase
+        .from('general_ledger')
+        .select('account_code, account_title, debit, credit');
+      if (e2) throw e2;
+      const out = (rowsBasic || []).map(r => {
+        const code = String(r.account_code || '').trim();
+        let accountTitle = r.account_title || '';
+        let normal = 'debit';
+        try {
+          const acc = getAccount(code);
+          accountTitle = acc.title || accountTitle;
+          normal = acc.normal || 'debit';
+        } catch (_) {}
+        const debit = Math.abs(Number(r.debit || 0));
+        const credit = Math.abs(Number(r.credit || 0));
+        const balance = normal === 'debit' ? (debit - credit) : (credit - debit);
+        return { code, accountTitle, debit, credit, balance, balanceSide: normal };
+      });
+      return { summary: out };
+    }
+  }
 }
 
 function isDbReady() { return !!supabase; }
@@ -175,3 +231,114 @@ function isDbReady() { return !!supabase; }
 module.exports.getJournalEntries = getJournalEntries;
 module.exports.getLedgerSummary = getLedgerSummary;
 module.exports.isDbReady = isDbReady;
+
+// --- Additional read helpers for hydration ---
+async function getCashReceiptsAll() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('cash_receipt_journal')
+    .select('id, date, invoice_no, source, reference, dr_cash, dr_fees, dr_returns, cr_sales, cr_income, cr_ar, remarks')
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+async function getCashDisbursementsAll() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from('cash_disbursement_book')
+    .select('id, date, payee_particulars, reference, cr_cash, dr_materials, dr_supplies, dr_rent, dr_utilities, dr_advertising, dr_delivery, dr_taxes_licenses, dr_misc, remarks')
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+module.exports.getCashReceiptsAll = getCashReceiptsAll;
+module.exports.getCashDisbursementsAll = getCashDisbursementsAll;
+
+// --- Full ledger (summary + entries) derived from DB general_journal ---
+async function getLedgerFullFromDb() {
+  if (!supabase) return { summary: [], ledger: [], accounts: listAccounts() };
+  // 1) Summary comes from DB ledger view/table via existing helper
+  const { summary: summaryFromDb } = await getLedgerSummary();
+  // 2) Details come from general_journal grouped by COA title mapping
+  const { data: rows, error } = await supabase
+    .from('general_journal')
+    .select('id, date, account_title_particulars, reference, debit, credit')
+    .order('date', { ascending: true })
+    .order('id', { ascending: true });
+  if (error) throw error;
+  const accountsMap = new Map(Object.entries(COA).map(([code, acc]) => [String(acc.title), { code: String(code), normal: acc.normal, title: acc.title }]));
+  const byCode = new Map();
+  for (const r of rows || []) {
+    const title = String(r.account_title_particulars || '').trim();
+    const accInfo = accountsMap.get(title) || { code: '', normal: 'debit', title };
+    const code = accInfo.code;
+    const normal = accInfo.normal || 'debit';
+    if (!byCode.has(code)) byCode.set(code, { code, accountTitle: accInfo.title, normal, entries: [] });
+    const entryDebit = Math.abs(Number(r.debit || 0));
+    const entryCredit = Math.abs(Number(r.credit || 0));
+    byCode.get(code).entries.push({
+      date: r.date,
+      description: title,
+      reference: r.reference || null,
+      debit: entryDebit,
+      credit: entryCredit,
+    });
+  }
+  // 3) Merge: iterate summary as source of truth for totals/balance; attach & compute running balance on details
+  const ledger = [];
+  const summary = Array.isArray(summaryFromDb) ? summaryFromDb : [];
+  for (const s of summary) {
+    const code = String(s.code || '');
+    const normal = String(s.balanceSide || (getAccount(code).normal || 'debit'));
+    const accountTitle = s.accountTitle || (getAccount(code).title || '');
+    const rec = { code, accountTitle, normal, totals: { debit: Number(s.debit || 0), credit: Number(s.credit || 0) }, entries: [] };
+    const entries = (byCode.get(code)?.entries || []).slice();
+    entries.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    let bal = 0;
+    for (const e of entries) {
+      bal += (normal === 'debit' ? (e.debit - e.credit) : (e.credit - e.debit));
+      e.balance = bal;
+      e.accountCode = code;
+      e.accountTitle = accountTitle;
+    }
+    rec.entries = entries;
+    ledger.push(rec);
+  }
+  // Also include any codes present in details but missing from summary (unlikely), computing totals on the fly
+  for (const [code, info] of byCode.entries()) {
+    if (summary.find((s) => String(s.code || '') === String(code))) continue;
+    const acc = getAccount(code);
+    const normal = acc.normal || 'debit';
+    let totD = 0, totC = 0, bal = 0;
+    const entries = info.entries.sort((a, b) => String(a.date || '').localeCompare(String(b.date || ''))).map((e) => {
+      totD += Number(e.debit || 0);
+      totC += Number(e.credit || 0);
+      bal += (normal === 'debit' ? (Number(e.debit || 0) - Number(e.credit || 0)) : (Number(e.credit || 0) - Number(e.debit || 0)));
+      return { ...e, balance: bal, accountCode: code, accountTitle: acc.title || info.accountTitle };
+    });
+    ledger.push({ code, accountTitle: acc.title || info.accountTitle, normal, totals: { debit: totD, credit: totC }, entries });
+  }
+  // Sort ledger by code for stable output
+  ledger.sort((a, b) => String(a.code).localeCompare(String(b.code)));
+  return { summary, ledger, accounts: listAccounts() };
+}
+
+module.exports.getLedgerFullFromDb = getLedgerFullFromDb;
+
+// --- Maintenance: refresh derived general_ledger table in DB ---
+async function refreshGeneralLedger() {
+  if (!supabase) return false;
+  // Supabase-js doesn't support invoking arbitrary SQL directly; use postgres RPC via rest if exposed.
+  // Here, we try a PostgREST RPC on function name; if not available, fallback to a no-op.
+  try {
+    const { error } = await supabase.rpc('refresh_general_ledger');
+    if (error) throw error;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+module.exports.refreshGeneralLedger = refreshGeneralLedger;

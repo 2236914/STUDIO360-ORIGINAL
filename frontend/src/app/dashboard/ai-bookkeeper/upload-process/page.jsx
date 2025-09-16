@@ -165,7 +165,10 @@ const BOOK_OPTIONS = [
 function inferBookFromCategory(category = '') { // kept for backward compatibility (no longer used for primary routing)
   const c = String(category).toLowerCase();
   const incomeLike = ['online sales', 'walk-in sales', 'sales', 'revenue', 'other income'];
-  const expenseLike = ['expense', 'expenses', 'utilities', 'rent', 'insurance', 'office supplies', 'advertising', 'marketing', 'travel', 'professional fees', 'platform fees', 'cost of goods sold'];
+  const expenseLike = [
+    'purchase', 'purchases', 'materials', 'inventory', 'cogs', 'cost of goods sold',
+    'expense', 'expenses', 'utilities', 'rent', 'insurance', 'office supplies', 'advertising', 'marketing', 'travel', 'professional fees', 'platform fees'
+  ];
   if (incomeLike.some(k => c.includes(k))) return 'cash-receipts';
   if (expenseLike.some(k => c.includes(k))) return 'cash-disbursements';
   return 'journal';
@@ -361,21 +364,21 @@ export default function UploadProcessPage() {
 
   // Transfer confirmed transactions to appropriate books
   const handleTransfer = async () => {
-    // New model: every transaction goes to General Journal first.
-    // If classified as expense -> also create Cash Disbursement entry.
-    // If income -> also create Cash Receipt entry.
+    // New model w/ guards:
+    // - Expense: prefer CDB (image-only); otherwise fallback to GJ
+    // - Income: CRJ only (backend mirrors to GJ)
+    // - Other: GJ
     const items = transactions.slice();
     setProcessing(true);
     setTransferState({ transferred: 0, total: items.length, categories: [] });
     const categoriesSet = new Set();
     const counts = { journal: 0, 'cash-disbursements': 0, 'cash-receipts': 0 };
     try {
-  for (let i = 0; i < items.length; i++) {
+      for (let i = 0; i < items.length; i++) {
         const t = items[i];
         const amt = Math.abs(Number(t.amount) || 0);
         const cls = classifyCategory(t.aiCategory);
         categoriesSet.add(t.aiCategory);
-        // Journal posting: use COA codes and debit/credit amounts
         const particulars = t.description || '';
         const today = new Date().toISOString().slice(0, 10);
         const normalizeDate = (dStr) => {
@@ -384,8 +387,7 @@ export default function UploadProcessPage() {
           if (Number.isNaN(d.getTime())) return null;
           return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
         };
-  const invDate = normalizeDate(t.dateIssued) || normalizeDate(t.orderDate) || normalizeDate(t.orderPaidDate) || today;
-        // Prefer a stable reference so dedupe by ref works across Journal and CRJ/CDJ
+        const invDate = normalizeDate(t.dateIssued) || normalizeDate(t.orderDate) || normalizeDate(t.orderPaidDate) || today;
         const pickRef = (...vals) => {
           for (const v of vals) {
             const s = (v ?? '').toString().trim();
@@ -396,20 +398,23 @@ export default function UploadProcessPage() {
           return '';
         };
         const ref = pickRef(t.invoiceNumber, t.orderSummaryNo, t.orderId);
+        const isImage = typeof t.fileUrl === 'string' && /\.(jpe?g|png)$/i.test(t.fileUrl);
+
         if (cls === 'expense') {
           const exp = mapExpenseCategoryToCoa(t.aiCategory);
-          const lines = [
-            { code: exp.code, description: exp.label, debit: amt, credit: 0 },
-            { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
-          ];
-          await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+          const isPurchases = exp.code === COA_CODES.PURCHASES;
+          // For Purchases – Materials: never post a separate GJ here (CDB only).
+          // For other expenses: keep previous behavior (fallback GJ only if not an image source).
+          if (!isPurchases && !isImage) {
+            const lines = [
+              { code: exp.code, description: exp.label, debit: amt, credit: 0 },
+              { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
+            ];
+            await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+            counts.journal += 1;
+          }
         } else if (cls === 'income') {
-          const revenueCode = (String(t.aiCategory).toLowerCase().includes('other income')) ? COA_CODES.OTHER_INCOME : COA_CODES.SALES;
-          const lines = [
-            { code: COA_CODES.CASH, description: 'Cash received', debit: amt, credit: 0 },
-            { code: revenueCode, description: String(t.aiCategory || 'Sales Revenue'), debit: 0, credit: amt },
-          ];
-          await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+          // handled via CRJ below
         } else {
           const exp = mapExpenseCategoryToCoa(t.aiCategory);
           const lines = [
@@ -417,19 +422,12 @@ export default function UploadProcessPage() {
             { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
           ];
           await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+          counts.journal += 1;
         }
-        counts.journal += 1;
 
-  if (cls === 'expense') {
-          // CDB-only shaping per guide: invoice date, seller as payee, omit reference, Purchases – Materials as default, enriched remarks
+        if (cls === 'expense') {
           const e = mapExpenseCategoryToCoa(t.aiCategory);
-          const normalizeDate = (dStr) => {
-            if (!dStr) return null;
-            const d = new Date(dStr);
-            if (Number.isNaN(d.getTime())) return null;
-            return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-          };
-          const invDate = normalizeDate(t.dateIssued) || normalizeDate(t.orderDate) || normalizeDate(t.orderPaidDate) || today;
+          const isPurchases = e.code === COA_CODES.PURCHASES;
           const parts = [];
           if (t.description) parts.push(String(t.description));
           if (t.sellerName && !String(t.description || '').includes(t.sellerName)) parts.push(String(t.sellerName));
@@ -438,7 +436,6 @@ export default function UploadProcessPage() {
           const remarks = parts.filter(Boolean).join(' • ');
           const payload = {
             date: invDate,
-            // referenceNo intentionally omitted so backend generates CDB-###
             payee: t.sellerName || 'N/A',
             remarks,
             cashCredit: amt,
@@ -450,7 +447,6 @@ export default function UploadProcessPage() {
             taxesDebit: 0,
             miscDebit: 0,
           };
-          // Set the appropriate debit column (prefer Purchases – Materials)
           if (e.code === COA_CODES.PURCHASES) payload.purchasesDebit = amt;
           else if (e.code === COA_CODES.SUPPLIES) payload.suppliesDebit = amt;
           else if (e.code === COA_CODES.RENT) payload.rentDebit = amt;
@@ -459,10 +455,13 @@ export default function UploadProcessPage() {
           else if (e.code === COA_CODES.TAXES) payload.taxesDebit = amt;
           else if (e.code === COA_CODES.UTILITIES) payload.utilitiesDebit = amt;
           else if (e.code === COA_CODES.MISC) payload.miscDebit = amt;
-          else payload.purchasesDebit = amt; // fallback
-          await axios.post('/api/bookkeeping/cash-disbursements', payload);
-          counts['cash-disbursements'] += 1;
-  } else if (cls === 'income') {
+          else payload.purchasesDebit = amt;
+          // Post to CDB: always for Purchases – Materials; for other expenses, only when source is an image.
+          if (isPurchases || isImage) {
+            await axios.post('/api/bookkeeping/cash-disbursements', payload);
+            counts['cash-disbursements'] += 1;
+          }
+        } else if (cls === 'income') {
           const platformCustomer = derivePlatformCustomer(t.description) || 'Various Customers';
           const isOtherIncome = String(t.aiCategory).toLowerCase().includes('other income');
           const payload = {
@@ -481,19 +480,18 @@ export default function UploadProcessPage() {
           await axios.post('/api/bookkeeping/cash-receipts', payload);
           counts['cash-receipts'] += 1;
         }
-        setTransferState(prev => ({ ...prev, transferred: prev.transferred + 1, categories: Array.from(categoriesSet) }));
+
+        setTransferState((prev) => ({ ...prev, transferred: prev.transferred + 1, categories: Array.from(categoriesSet) }));
       }
       const newCompleted = { ...completed, 2: true };
       setCompleted(newCompleted);
       setActiveStep(3);
       setLastTransferBooks({ counts, total: items.length });
-      // Set refresh flags for affected books
       try {
-        window.localStorage.setItem('ledgerNeedsRefresh','1');
-        if (counts['cash-disbursements']>0) window.localStorage.setItem('cashDisbursementsNeedsRefresh','1');
-        if (counts['cash-receipts']>0) window.localStorage.setItem('cashReceiptsNeedsRefresh','1');
-      } catch(_) {}
-      // Navigate to journal as the primary book for review
+        window.localStorage.setItem('ledgerNeedsRefresh', '1');
+        if (counts['cash-disbursements'] > 0) window.localStorage.setItem('cashDisbursementsNeedsRefresh', '1');
+        if (counts['cash-receipts'] > 0) window.localStorage.setItem('cashReceiptsNeedsRefresh', '1');
+      } catch (_) {}
       setTimeout(() => router.push('/dashboard/bookkeeping/general-journal'), 300);
     } catch (err) {
       console.error('Transfer error:', err);
@@ -1233,10 +1231,7 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
               </>
             )}
           </Box>
-  );
-
-      case 3:
-  return null; // unreachable duplicate case removed
+        );
 
       default:
         return null;
