@@ -6,6 +6,17 @@
 const express = require('express');
 const router = express.Router();
 const { COA, getAccount, listAccounts } = require('./coa');
+const {
+  upsertAccount,
+  insertJournal,
+  insertCashReceipt,
+  insertCashReceiptDetails,
+  insertCashDisbursement,
+  insertCashDisbursementDetails,
+  getJournalEntries,
+  getLedgerSummary,
+  isDbReady,
+} = require('../../services/bookkeepingRepo');
 
 // In-memory storage (replace with DB later)
 // journal: {id,date,ref,particulars, lines:[{code,account,description,debit,credit}]}
@@ -109,6 +120,17 @@ router.post('/journal', (req, res) => {
   const id = store.journal.length + 1;
   const entry = { id, date, ref: ref || `GJ${String(id).padStart(4, '0')}`, particulars: particulars || '', lines: normLines };
   store.journal.push(entry);
+  // Best-effort persist to Supabase (does not affect response)
+  (async () => {
+    try {
+      const codes = Array.from(new Set(normLines.map((l) => String(l.code))));
+      for (const c of codes) {
+        const acc = getAccount(c);
+        await upsertAccount({ code: acc.code, title: acc.title, type: acc.type });
+      }
+      await insertJournal({ date, reference: entry.ref, remarks: entry.particulars, lines: normLines });
+    } catch (_) {}
+  })();
   ok(res, { message: 'Journal entry added', data: { entry } });
 });
 
@@ -238,6 +260,7 @@ router.post('/cash-receipts', (req, res) => {
   if (entry.otherIncomeCredit) lines.push({ code: '402', debit: 0, credit: entry.otherIncomeCredit, description: 'Other Income' });
   if (entry.arCredit) lines.push({ code: '103', debit: 0, credit: entry.arCredit, description: 'Accounts Receivable' });
   if (entry.ownersCapitalCredit) lines.push({ code: '301', debit: 0, credit: entry.ownersCapitalCredit, description: "Owner's Capital" });
+  let postedToJournal = false;
   if (lines.length >= 2) {
     const refToUse = referenceNo || `CRJ${String(id).padStart(4, '0')}`;
     // Journal idempotency: skip if same ref or identical lines on same date already recorded
@@ -246,11 +269,38 @@ router.post('/cash-receipts', (req, res) => {
   // Also guard against identical lines recorded on any date to avoid double-posting
   const sig = hashLines(lines);
   const existsByLinesAnyDate = store.journal.find((e) => hashLines(e.lines) === sig) || null;
-  if (!existsByRef && !existsByLines && !existsByLinesAnyDate) {
+    if (!existsByRef && !existsByLines && !existsByLinesAnyDate) {
       const idj = store.journal.length + 1;
       store.journal.push({ id: idj, date, ref: refToUse, particulars: customer || 'Cash Receipt', lines });
+      postedToJournal = true;
     }
   }
+  // Best-effort persist cash receipt + details to Supabase
+  (async () => {
+    try {
+      const rid = await insertCashReceipt({ date, invoice_no: null, source: customer || '', reference: referenceNo || null, cash_debit: entry.cashDebit || 0, remarks: entry.remarks || '' });
+      if (rid) {
+        const details = [];
+        if (entry.feesChargesDebit) details.push({ code: '510', debit: entry.feesChargesDebit, credit: 0 });
+        if (entry.salesReturnsDebit) details.push({ code: '401', debit: entry.salesReturnsDebit, credit: 0 });
+        if (entry.netSalesCredit) details.push({ code: '401', debit: 0, credit: entry.netSalesCredit });
+        if (entry.otherIncomeCredit) details.push({ code: '402', debit: 0, credit: entry.otherIncomeCredit });
+        if (entry.arCredit) details.push({ code: '103', debit: 0, credit: entry.arCredit });
+        if (entry.ownersCapitalCredit) details.push({ code: '301', debit: 0, credit: entry.ownersCapitalCredit });
+        if (details.length) await insertCashReceiptDetails(rid, details);
+      }
+      // Also persist equivalent journal lines for ledger + journal view
+      if (postedToJournal) {
+        await insertJournal({ date, reference: referenceNo || null, remarks: customer || 'Cash Receipt', lines });
+      }
+      // ensure referenced accounts exist
+      const codes = ['101','510','401','402','103','301'];
+      for (const c of codes) {
+        const acc = getAccount(c);
+        await upsertAccount({ code: acc.code, title: acc.title, type: acc.type });
+      }
+    } catch (_) {}
+  })();
   ok(res, { message: 'Cash receipt entry added', data: { entry } });
 });
 
@@ -289,6 +339,7 @@ router.post('/cash-disbursements', (req, res) => {
   if (entry.taxesDebit) lines.push({ code: '507', debit: entry.taxesDebit, credit: 0, description: 'Taxes & Licenses' });
   if (entry.miscDebit) lines.push({ code: '508', debit: entry.miscDebit, credit: 0, description: 'Miscellaneous Expense' });
   if (entry.cashCredit) lines.push({ code: '101', debit: 0, credit: entry.cashCredit, description: 'Cash/Bank/eWallet' });
+  let postedToJournal = false;
   if (lines.length >= 2) {
     const refToUse = entry.referenceNo || sysRef;
     const existsByRef = findJournalByRef(refToUse);
@@ -303,8 +354,37 @@ router.post('/cash-disbursements', (req, res) => {
     if (!existsByRef && !existsByLines && !existsByLinesAnyDate && !existsCashCreditSameDate) {
       const idj = store.journal.length + 1;
       store.journal.push({ id: idj, date, ref: refToUse, particulars: payee, lines });
+      postedToJournal = true;
     }
   }
+  // Best-effort persist cash disbursement + details to Supabase
+  (async () => {
+    try {
+      const did = await insertCashDisbursement({ date, voucher_no: referenceNo || sysRef, payee, reference: entry.referenceNo || null, cash_credit: entry.cashCredit || 0, remarks: entry.remarks || '' });
+      if (did) {
+        const details = [];
+        if (entry.purchasesDebit) details.push({ code: '501', debit: entry.purchasesDebit, credit: 0 });
+        if (entry.suppliesDebit) details.push({ code: '502', debit: entry.suppliesDebit, credit: 0 });
+        if (entry.rentDebit) details.push({ code: '503', debit: entry.rentDebit, credit: 0 });
+        if (entry.advertisingDebit) details.push({ code: '505', debit: entry.advertisingDebit, credit: 0 });
+        if (entry.deliveryDebit) details.push({ code: '506', debit: entry.deliveryDebit, credit: 0 });
+        if (entry.taxesDebit) details.push({ code: '507', debit: entry.taxesDebit, credit: 0 });
+        if (entry.miscDebit) details.push({ code: '508', debit: entry.miscDebit, credit: 0 });
+        if (entry.cashCredit) details.push({ code: '101', debit: 0, credit: entry.cashCredit });
+        if (details.length) await insertCashDisbursementDetails(did, details);
+      }
+      // Also persist equivalent journal lines for ledger + journal view
+      if (postedToJournal) {
+        await insertJournal({ date, reference: entry.referenceNo || null, remarks: payee, lines });
+      }
+      // ensure referenced accounts exist
+      const codes = ['501','502','503','505','506','507','508','101'];
+      for (const c of codes) {
+        const acc = getAccount(c);
+        await upsertAccount({ code: acc.code, title: acc.title, type: acc.type });
+      }
+    } catch (_) {}
+  })();
   ok(res, { message: 'Cash disbursement entry added', data: { entry } });
 });
 
@@ -361,3 +441,27 @@ router.post('/reset', (req, res) => {
 });
 
 module.exports = router; 
+
+// --- Read-only DB endpoints (non-breaking) ---
+// Expose Supabase-backed reads without altering existing routes.
+router.get('/db/journal', async (req, res) => {
+  try {
+    if (!isDbReady()) return res.status(503).json({ success: false, message: 'Database not configured' });
+    const page = parseInt(req.query.page || '1', 10);
+    const limit = parseInt(req.query.limit || '100', 10);
+    const data = await getJournalEntries({ page, limit });
+    return res.json({ success: true, data });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+router.get('/db/ledger/summary', async (req, res) => {
+  try {
+    if (!isDbReady()) return res.status(503).json({ success: false, message: 'Database not configured' });
+    const data = await getLedgerSummary();
+    return res.json({ success: true, data });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
