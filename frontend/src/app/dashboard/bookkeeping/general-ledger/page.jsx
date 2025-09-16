@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -304,7 +304,7 @@ export default function GeneralLedgerPage() {
                 const detail = ledgerDetail.find(l => l.code === acc.code);
                 const entries = detail?.entries || [];
                 return (
-                  <>
+                  <Fragment key={`row-${acc.code}`}>
                     <TableRow key={acc.code}
                       sx={{ '&:hover': { bgcolor: 'grey.50' }, bgcolor: index % 2 === 0 ? 'white' : 'grey.25', borderBottom: `1px solid ${theme.palette.divider}`, cursor: 'pointer' }}
                       onClick={() => {
@@ -353,7 +353,7 @@ export default function GeneralLedgerPage() {
                                 </TableHead>
                                 <TableBody>
                                   {entries.map((e,i) => (
-                                    <TableRow key={i} sx={{ '&:hover': { bgcolor:'grey.50' } }}>
+                                    <TableRow key={`${acc.code}-${e.reference||''}-${e.date||''}-${e.debit||0}-${e.credit||0}-${i}`} sx={{ '&:hover': { bgcolor:'grey.50' } }}>
                                       <TableCell sx={{ fontSize:11 }}>{e.date || ''}</TableCell>
                                       <TableCell sx={{ fontSize:11, maxWidth:240, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{e.description || ''}</TableCell>
                                       <TableCell sx={{ fontSize:11 }}>{e.reference || ''}</TableCell>
@@ -369,7 +369,7 @@ export default function GeneralLedgerPage() {
                         </TableCell>
                       </TableRow>
                     )}
-                  </>
+                  </Fragment>
                 );
               })}
               <TableRow sx={{ bgcolor: '#E3F2FD', borderTop: `2px solid ${theme.palette.primary.main}` }}>
