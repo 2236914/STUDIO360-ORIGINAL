@@ -177,27 +177,55 @@ async function getJournalEntries({ page = 1, limit = 100 } = {}) {
 
 async function getLedgerSummary() {
   if (!supabase) return { summary: [] };
-  const { data: rows, error } = await supabase
-    .from('general_ledger')
-    .select('account_code, account_title, debit, credit');
-  if (error) throw error;
-  const out = (rows || []).map(r => {
-    const code = String(r.account_code || '').trim();
-    let debit = Math.abs(Number(r.debit || 0));
-    let credit = Math.abs(Number(r.credit || 0));
-    // Normalize by COA rules
-    let accountTitle = r.account_title || '';
-    let normal = 'debit';
-    try {
-      const acc = getAccount(code);
-      accountTitle = acc.title || accountTitle;
-      normal = acc.normal || 'debit';
-    } catch (_) {}
-    const balance = normal === 'debit' ? (debit - credit) : (credit - debit);
-    const balanceSide = normal; // follow system depiction rules
-    return { code, accountTitle, debit, credit, balance, balanceSide };
-  });
-  return { summary: out };
+  // Prefer the presentation view if available
+  try {
+    const { data: rows, error } = await supabase
+      .from('v_ledger_presented')
+      .select('account_title, debit, credit, balance_side, balance');
+    if (error) throw error;
+    const out = (rows || []).map(r => {
+      // Try to map title back to COA code
+      let code = '';
+      try {
+        // Scan COA to find a matching title
+        const title = String(r.account_title || '').trim();
+        const entries = Object.values(require('../api/bookkeeping/coa').COA);
+        const found = entries.find(a => a.title === title);
+        if (found) code = found.code;
+      } catch (_) {}
+      return {
+        code,
+        accountTitle: r.account_title,
+        debit: Number(r.debit || 0),
+        credit: Number(r.credit || 0),
+        balance: Number(r.balance || 0),
+        balanceSide: String(r.balance_side || 'debit')
+      };
+    });
+    return { summary: out };
+  } catch (_) {
+    // Fallback to accumulated table with normalization
+    const { data: rows2, error: e2 } = await supabase
+      .from('general_ledger')
+      .select('account_code, account_title, debit, credit');
+    if (e2) throw e2;
+    const out = (rows2 || []).map(r => {
+      const code = String(r.account_code || '').trim();
+      let debit = Math.abs(Number(r.debit || 0));
+      let credit = Math.abs(Number(r.credit || 0));
+      let accountTitle = r.account_title || '';
+      let normal = 'debit';
+      try {
+        const acc = getAccount(code);
+        accountTitle = acc.title || accountTitle;
+        normal = acc.normal || 'debit';
+      } catch (_) {}
+      const balance = normal === 'debit' ? (debit - credit) : (credit - debit);
+      const balanceSide = normal;
+      return { code, accountTitle, debit, credit, balance, balanceSide };
+    });
+    return { summary: out };
+  }
 }
 
 function isDbReady() { return !!supabase; }
