@@ -1,6 +1,6 @@
 -- View to present ledger summary exactly like the app
--- Groups from general_journal and applies normal-side rules by account title
--- You can extend the CASE for more accounts or switch to a lookup table
+-- Groups from general_journal and derives normal-side via accounts.account_type
+-- Assets & Expenses => debit-normal; Liabilities, Equity, Revenue => credit-normal
 
 create or replace view public.v_ledger_presented as
 with sums as (
@@ -10,56 +10,26 @@ with sums as (
     sum(coalesce(gj.credit,0)) as credit_sum
   from public.general_journal gj
   group by trim(gj.account_title_particulars)
+), typed as (
+  select
+    s.account_title,
+    s.debit_sum,
+    s.credit_sum,
+    a.account_type
+  from sums s
+  left join public.accounts a
+    on lower(a.account_title) = lower(s.account_title)
 )
 select
-  s.account_title,
+  t.account_title,
   -- depict totals as positive numbers
-  abs(s.debit_sum) as debit,
-  abs(s.credit_sum) as credit,
-  -- infer normal side from known titles; extend as needed
-  case
-    when s.account_title in (
-      'Cash on Hand',
-      'Cash in Bank',
-      'Accounts Receivable',
-      'Inventory (Merchandise)',
-      'Prepaid Expenses',
-      'Tools & Equipment',
-      'Store Fixtures & Furniture',
-      'Withholding Tax Receivable',
-      'Platform Fees & Charges',
-      'Supplies Expense',
-      'Rent Expense',
-      'Utilities Expense',
-      'Advertising & Promotion',
-      'Transportation/Delivery',
-      'Taxes & Licenses',
-      'Miscellaneous Expense',
-      'Depreciation Expense'
-    ) then 'debit'
-    else 'credit'
-  end as balance_side,
-  case
-    when s.account_title in (
-      'Cash on Hand',
-      'Cash in Bank',
-      'Accounts Receivable',
-      'Inventory (Merchandise)',
-      'Prepaid Expenses',
-      'Tools & Equipment',
-      'Store Fixtures & Furniture',
-      'Withholding Tax Receivable',
-      'Platform Fees & Charges',
-      'Supplies Expense',
-      'Rent Expense',
-      'Utilities Expense',
-      'Advertising & Promotion',
-      'Transportation/Delivery',
-      'Taxes & Licenses',
-      'Miscellaneous Expense',
-      'Depreciation Expense'
-    ) then (abs(s.debit_sum) - abs(s.credit_sum))
-    else (abs(s.credit_sum) - abs(s.debit_sum))
+  abs(t.debit_sum) as debit,
+  abs(t.credit_sum) as credit,
+  -- infer normal side from accounts.account_type when available; default to credit-normal
+  case when coalesce(t.account_type,'') in ('asset','expense') then 'debit' else 'credit' end as balance_side,
+  case when coalesce(t.account_type,'') in ('asset','expense')
+       then (abs(t.debit_sum) - abs(t.credit_sum))
+       else (abs(t.credit_sum) - abs(t.debit_sum))
   end as balance
-from sums s
-order by s.account_title;
+from typed t
+order by t.account_title;

@@ -21,44 +21,11 @@ async function insertJournal({ date, reference, remarks, lines }) {
   if (rows.length) {
     const { error } = await supabase.from('general_journal').insert(rows);
     if (error) throw error;
-    // Update general_ledger totals best-effort
-    for (const ln of lines || []) {
-      // eslint-disable-next-line no-await-in-loop
-      await upsertLedgerDelta(ln);
-    }
   }
   return true;
 }
 
-async function upsertLedgerDelta(ln) {
-  const code = String(ln.code);
-  const acc = getAccount(code);
-  const debit = Number(ln.debit || 0);
-  const credit = Number(ln.credit || 0);
-  // Try read existing
-  const { data: existing, error: selErr } = await supabase
-    .from('general_ledger')
-    .select('id, debit, credit, balance')
-    .eq('account_code', code)
-    .limit(1)
-    .maybeSingle();
-  if (selErr) throw selErr;
-  if (existing && existing.id) {
-    const newDebit = Number(existing.debit || 0) + debit;
-    const newCredit = Number(existing.credit || 0) + credit;
-    const newBalance = newDebit - newCredit;
-    const { error: updErr } = await supabase
-      .from('general_ledger')
-      .update({ debit: newDebit, credit: newCredit, balance: newBalance })
-      .eq('id', existing.id);
-    if (updErr) throw updErr;
-  } else {
-    const { error: insErr } = await supabase
-      .from('general_ledger')
-      .insert({ account_code: code, account_title: acc.title || '', debit, credit, balance: debit - credit });
-    if (insErr) throw insErr;
-  }
-}
+// Removed: upsertLedgerDelta; ledger is now a read-only view derived from journals
 
 async function insertCashReceipt({ date, invoice_no, source, reference, cash_debit, remarks }) {
   if (!supabase) return null;
@@ -177,55 +144,30 @@ async function getJournalEntries({ page = 1, limit = 100 } = {}) {
 
 async function getLedgerSummary() {
   if (!supabase) return { summary: [] };
-  // Prefer the presentation view if available
-  try {
-    const { data: rows, error } = await supabase
-      .from('v_ledger_presented')
-      .select('account_title, debit, credit, balance_side, balance');
-    if (error) throw error;
-    const out = (rows || []).map(r => {
-      // Try to map title back to COA code
-      let code = '';
-      try {
-        // Scan COA to find a matching title
-        const title = String(r.account_title || '').trim();
-        const entries = Object.values(require('../api/bookkeeping/coa').COA);
-        const found = entries.find(a => a.title === title);
-        if (found) code = found.code;
-      } catch (_) {}
-      return {
-        code,
-        accountTitle: r.account_title,
-        debit: Number(r.debit || 0),
-        credit: Number(r.credit || 0),
-        balance: Number(r.balance || 0),
-        balanceSide: String(r.balance_side || 'debit')
-      };
-    });
-    return { summary: out };
-  } catch (_) {
-    // Fallback to accumulated table with normalization
-    const { data: rows2, error: e2 } = await supabase
-      .from('general_ledger')
-      .select('account_code, account_title, debit, credit');
-    if (e2) throw e2;
-    const out = (rows2 || []).map(r => {
-      const code = String(r.account_code || '').trim();
-      let debit = Math.abs(Number(r.debit || 0));
-      let credit = Math.abs(Number(r.credit || 0));
-      let accountTitle = r.account_title || '';
-      let normal = 'debit';
-      try {
-        const acc = getAccount(code);
-        accountTitle = acc.title || accountTitle;
-        normal = acc.normal || 'debit';
-      } catch (_) {}
-      const balance = normal === 'debit' ? (debit - credit) : (credit - debit);
-      const balanceSide = normal;
-      return { code, accountTitle, debit, credit, balance, balanceSide };
-    });
-    return { summary: out };
-  }
+  // Read from unified view (general_ledger is now a view alias)
+  const { data: rows, error } = await supabase
+    .from('general_ledger')
+    .select('account_title, debit, credit, balance_side, balance');
+  if (error) throw error;
+  const out = (rows || []).map(r => {
+    // Try to map title back to COA code
+    let code = '';
+    try {
+      const title = String(r.account_title || '').trim();
+      const entries = Object.values(require('../api/bookkeeping/coa').COA);
+      const found = entries.find(a => a.title === title);
+      if (found) code = found.code;
+    } catch (_) {}
+    return {
+      code,
+      accountTitle: r.account_title,
+      debit: Number(r.debit || 0),
+      credit: Number(r.credit || 0),
+      balance: Number(r.balance || 0),
+      balanceSide: String(r.balance_side || 'debit')
+    };
+  });
+  return { summary: out };
 }
 
 function isDbReady() { return !!supabase; }

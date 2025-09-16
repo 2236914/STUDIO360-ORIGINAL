@@ -68,6 +68,8 @@ Mock n8n mode (no Docker required):
 - `POST /api/bookkeeping/transactions` - Add transaction
 - `GET /api/bookkeeping/reports` - Get reports
 
+Note: The General Ledger is a database view. `public.general_ledger` forwards to `public.v_ledger_presented` and is read-only. All writes go to `general_journal`.
+
 ## 🛠️ Technologies
 
 - **Node.js** - Runtime environment
