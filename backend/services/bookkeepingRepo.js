@@ -179,9 +179,24 @@ async function getLedgerSummary() {
   if (!supabase) return { summary: [] };
   const { data: rows, error } = await supabase
     .from('general_ledger')
-    .select('account_code, account_title, debit, credit, balance');
+    .select('account_code, account_title, debit, credit');
   if (error) throw error;
-  const out = (rows || []).map(r => ({ code: r.account_code, accountTitle: r.account_title, debit: Number(r.debit || 0), credit: Number(r.credit || 0), balance: Number(r.balance || 0), balanceSide: (Number(r.balance || 0) >= 0 ? 'debit' : 'credit') }));
+  const out = (rows || []).map(r => {
+    const code = String(r.account_code || '').trim();
+    let debit = Math.abs(Number(r.debit || 0));
+    let credit = Math.abs(Number(r.credit || 0));
+    // Normalize by COA rules
+    let accountTitle = r.account_title || '';
+    let normal = 'debit';
+    try {
+      const acc = getAccount(code);
+      accountTitle = acc.title || accountTitle;
+      normal = acc.normal || 'debit';
+    } catch (_) {}
+    const balance = normal === 'debit' ? (debit - credit) : (credit - debit);
+    const balanceSide = normal; // follow system depiction rules
+    return { code, accountTitle, debit, credit, balance, balanceSide };
+  });
   return { summary: out };
 }
 
