@@ -291,7 +291,8 @@ router.post('/cash-receipts', (req, res) => {
       }
       // Also persist equivalent journal lines for ledger + journal view
       if (postedToJournal) {
-        await insertJournal({ date, reference: referenceNo || null, remarks: customer || 'Cash Receipt', lines });
+        const refToUse = referenceNo || `CRJ${String(id).padStart(4, '0')}`;
+        await insertJournal({ date, reference: refToUse, remarks: customer || 'Cash Receipt', lines });
       }
       // ensure referenced accounts exist
       const codes = ['101','510','401','402','103','301'];
@@ -375,7 +376,8 @@ router.post('/cash-disbursements', (req, res) => {
       }
       // Also persist equivalent journal lines for ledger + journal view
       if (postedToJournal) {
-        await insertJournal({ date, reference: entry.referenceNo || null, remarks: payee, lines });
+        const refToUse = entry.referenceNo || sysRef;
+        await insertJournal({ date, reference: refToUse, remarks: payee, lines });
       }
       // ensure referenced accounts exist
       const codes = ['501','502','503','505','506','507','508','101'];
