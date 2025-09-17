@@ -173,6 +173,72 @@ export default function GeneralJournalPage() {
     return { totalDebit: sums.debit, totalCredit: sums.credit };
   }, [journalEntries]);
 
+  // Filtered entries (search + month) — original journalEntries left untouched
+  const filteredEntries = useMemo(() => {
+    const month = selectedMonth;
+    const query = searchQuery.trim().toLowerCase();
+    return (journalEntries || []).filter(entry => {
+      // Month filter: dates currently formatted like 'Sep 1, 2024' from backend or raw 'YYYY-MM-DD'
+      if (month && month !== 'All') {
+        let entryMonthName = '';
+        if (/^[A-Za-z]{3}/.test(entry.date)) {
+          // Format like 'Sep 1, 2024'
+            entryMonthName = entry.date.split(' ')[0];
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
+          const mIdx = parseInt(entry.date.slice(5,7),10) - 1;
+          const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+          entryMonthName = names[mIdx];
+        }
+        // Normalize short month to full (e.g., 'Sep' -> 'September')
+        const shortToFull = { Jan:'January', Feb:'February', Mar:'March', Apr:'April', May:'May', Jun:'June', Jul:'July', Aug:'August', Sep:'September', Oct:'October', Nov:'November', Dec:'December' };
+        if (shortToFull[entryMonthName]) entryMonthName = shortToFull[entryMonthName];
+        if (entryMonthName !== month) return false;
+      }
+      if (!query) return true;
+      // Search across ref, date, and any line's account/description
+      if ((entry.ref || '').toLowerCase().includes(query)) return true;
+      if ((entry.date || '').toLowerCase().includes(query)) return true;
+      return (entry.entries || []).some(e => (
+        (e.account || '').toLowerCase().includes(query) ||
+        (e.description || '').toLowerCase().includes(query)
+      ));
+    });
+  }, [journalEntries, selectedMonth, searchQuery]);
+
+  // Totals for filtered set
+  const { filteredDebit, filteredCredit } = useMemo(() => {
+    const sums = (filteredEntries || []).reduce(
+      (acc, entry) => {
+        (entry.entries || []).forEach((e) => {
+          if (e.type === 'debit') acc.debit += Number(e.amount) || 0;
+          if (e.type === 'credit') acc.credit += Number(e.amount) || 0;
+        });
+        return acc;
+      },
+      { debit: 0, credit: 0 }
+    );
+    return { filteredDebit: sums.debit, filteredCredit: sums.credit };
+  }, [filteredEntries]);
+
+  // Dynamic month list derived from loaded entries (full month names)
+  const monthOptions = useMemo(() => {
+    const fullNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const set = new Set();
+    (journalEntries || []).forEach(entry => {
+      if (!entry?.date) return;
+      // Support both 'Sep 1, 2024' and '2024-09-01'
+      if (/^[A-Za-z]{3}/.test(entry.date)) {
+        const short = entry.date.split(' ')[0];
+        const map = { Jan:'January', Feb:'February', Mar:'March', Apr:'April', May:'May', Jun:'June', Jul:'July', Aug:'August', Sep:'September', Oct:'October', Nov:'November', Dec:'December' };
+        if (map[short]) set.add(map[short]);
+      } else if (/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) {
+        const mIdx = parseInt(entry.date.slice(5,7),10) - 1;
+        if (mIdx >=0 && mIdx < 12) set.add(fullNames[mIdx]);
+      }
+    });
+    return Array.from(set).sort((a,b)=> fullNames.indexOf(a) - fullNames.indexOf(b));
+  }, [journalEntries]);
+
   // Create entry via backend
   const handleAddEntry = async () => {
     try {
@@ -263,12 +329,12 @@ export default function GeneralJournalPage() {
             select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
-            sx={{ minWidth: 120 }}
+            sx={{ minWidth: 140 }}
           >
             <MenuItem value="All">All</MenuItem>
-            <MenuItem value="September">September</MenuItem>
-            <MenuItem value="October">October</MenuItem>
-            <MenuItem value="November">November</MenuItem>
+            {monthOptions.map(m => (
+              <MenuItem key={m} value={m}>{m}</MenuItem>
+            ))}
           </TextField>
           
           <Button
@@ -291,7 +357,7 @@ export default function GeneralJournalPage() {
               GENERAL JOURNAL
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {journalEntries.length} journal entries • September 2024
+              {filteredEntries.length} / {journalEntries.length} journal entries {selectedMonth !== 'All' ? `• ${selectedMonth}` : ''}
             </Typography>
           </Box>
           
@@ -317,7 +383,7 @@ export default function GeneralJournalPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {journalEntries.map((entry, entryIndex) => 
+              {filteredEntries.map((entry, entryIndex) => 
                 entry.entries.map((item, itemIndex) => (
                   <TableRow 
                     key={`${entry.id}-${itemIndex}`} 
@@ -388,19 +454,19 @@ export default function GeneralJournalPage() {
               }}>
                 <TableCell colSpan={3} sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                    TOTAL
+                    TOTAL (Filtered)
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={{ 
                   borderRight: `1px solid ${theme.palette.divider}`,
                 }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(totalDebit)}
+                    ₱{fNumber(filteredDebit)}
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                    ₱{fNumber(totalCredit)}
+                    ₱{fNumber(filteredCredit)}
                   </Typography>
                 </TableCell>
               </TableRow>
