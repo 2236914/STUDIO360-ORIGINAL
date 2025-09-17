@@ -324,6 +324,27 @@ router.post('/stats', express.json(), (req, res) => {
     }
     // ensure updatedAt
     kpiStats.updatedAt = Date.now();
+    // Fire-and-forget DB persistence (non-blocking, does not affect response)
+    try {
+      const { supabase } = require('../../services/supabaseClient');
+      if (supabase) {
+        const monthKey = new Date(); monthKey.setDate(1); monthKey.setHours(0,0,0,0);
+        const monthStr = monthKey.toISOString().substring(0,10);
+        // Ensure row exists
+        supabase.from('kpi_stats').upsert({ month_key: monthStr }).then(() => {
+          const delta = {
+            transactions_processed: kpiStats.processed,
+            docs_count: kpiStats.docsCount,
+            time_saved_minutes: kpiStats.timeSavedMinutes,
+            cost_savings: kpiStats.costSavings,
+            accuracy_rate: kpiStats.accuracyRate || null,
+            last_calculated_at: new Date().toISOString()
+          };
+          // Overwrite snapshot: update values directly
+          supabase.from('kpi_stats').update(delta).eq('month_key', monthStr).then(()=>{}).catch(()=>{});
+        }).catch(()=>{});
+      }
+    } catch(_) { /* ignore persistence errors */ }
     return res.json({ success: true, data: kpiStats });
   } catch (e) {
     return res.status(400).json({ success: false, message: e.message });
