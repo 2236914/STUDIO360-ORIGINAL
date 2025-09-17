@@ -337,7 +337,52 @@ async function refreshGeneralLedger() {
     if (error) throw error;
     return true;
   } catch (_) {
-    return false;
+    // Fallback manual rebuild: aggregate from general_journal and populate general_ledger
+    try {
+      // Fetch journal rows
+      const { data: gjRows, error: gjErr } = await supabase
+        .from('general_journal')
+        .select('account_title_particulars, debit, credit');
+      if (gjErr) throw gjErr;
+      if (!Array.isArray(gjRows)) return false;
+      const agg = new Map();
+      for (const r of gjRows) {
+        const title = String(r.account_title_particulars || '').trim();
+        if (!title) continue;
+        if (!agg.has(title)) agg.set(title, { title, debit: 0, credit: 0 });
+        const rec = agg.get(title);
+        rec.debit += Math.abs(Number(r.debit || 0));
+        rec.credit += Math.abs(Number(r.credit || 0));
+      }
+      // Load accounts for type / code mapping
+      const { data: acctRows } = await supabase.from('accounts').select('account_code, account_title, account_type');
+      const acctIndex = new Map();
+      for (const a of acctRows || []) {
+        acctIndex.set(String(a.account_title).toLowerCase(), a);
+      }
+      // Clear existing ledger rows (derived dataset)
+      await supabase.from('general_ledger').delete().neq('id', 0); // delete all rows
+      const batch = [];
+      for (const { title, debit, credit } of agg.values()) {
+        const acc = acctIndex.get(title.toLowerCase());
+        const account_code = acc?.account_code || '';
+        const account_type = acc?.account_type || '';
+        const balance = (account_type === 'asset' || account_type === 'expense') ? (debit - credit) : (credit - debit);
+        batch.push({ account_code, account_title: title, debit: Number(debit.toFixed(2)), credit: Number(credit.toFixed(2)), balance: Number(balance.toFixed(2)) });
+      }
+      if (batch.length) {
+        // Insert in chunks to avoid payload limits
+        const chunkSize = 500;
+        for (let i = 0; i < batch.length; i += chunkSize) {
+          const slice = batch.slice(i, i + chunkSize);
+          const { error: insErr } = await supabase.from('general_ledger').insert(slice);
+          if (insErr) throw insErr;
+        }
+      }
+      return true;
+    } catch (e2) {
+      return false;
+    }
   }
 }
 

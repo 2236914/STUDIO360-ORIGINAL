@@ -737,18 +737,21 @@ export default function UploadProcessPage() {
       setOcrCanonical(canonicalAccumulator);
       setOcrWarnings(warningsAccumulator);
       // Build transactions only for expense (non-sales) mode
+      let parsedLen = 0;
       if (!salesMode) {
         const parsed = parseOcrToTransactions(results, structuredAccumulator, canonicalAccumulator).map(t => ({ ...t, autoBook: true }));
+        parsedLen = Array.isArray(parsed) ? parsed.length : 0;
         setTransactions(parsed);
       } else {
         setTransactions([]); // clear any prior expense transactions
+        parsedLen = 0; // sales mode handled separately
       }
 
       // Accumulate KPIs on each successful upload batch
       try {
-        const incProcessed = parsed.length;
-        const incDocs = Object.keys(results).length;
-        const incTx = parsed.length;
+        const incDocs = Array.isArray(uploadedFiles) ? uploadedFiles.length : Object.keys(results).length;
+        const incTx = salesAccumulator.length ? salesAccumulator.length : parsedLen;
+        const incProcessed = incTx;
         const incTime = incProcessed * 2;
         const incCost = incProcessed * 10;
         // Backend accumulate
@@ -781,8 +784,8 @@ export default function UploadProcessPage() {
           window.localStorage.setItem('aiBookkeeperStats', JSON.stringify(updated));
         } catch (_) { /* ignore */ }
       } catch (_) { /* ignore */ }
-      // Mark only Step 0 complete and go to AI Recognition (Step 1)
-  const newCompleted = { ...completed, 0: true };
+      // Mark Step 0 complete and proceed only to Step 1 (AI Recognition) preserving original multi-step review.
+      const newCompleted = { ...completed, 0: true };
       setCompleted(newCompleted);
       setActiveStep(1);
     } catch (err) {

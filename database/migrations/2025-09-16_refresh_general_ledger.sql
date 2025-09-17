@@ -39,7 +39,8 @@ BEGIN
     CASE WHEN COALESCE(t.account_type,'') IN ('asset','expense')
          THEN (ABS(t.debit_sum) - ABS(t.credit_sum))
          ELSE (ABS(t.credit_sum) - ABS(t.debit_sum))
-    END AS balance;
+    END AS balance
+  FROM typed t;
 END;
 $$;
 

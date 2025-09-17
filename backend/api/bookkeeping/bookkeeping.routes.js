@@ -73,6 +73,26 @@ function findJournalDuplicateByLines(date, lines) {
   return store.journal.find((e) => e.date === date && hashLines(e.lines) === sig) || null;
 }
 
+// Cash receipts idempotency helpers
+function receiptSignature({ date, referenceNo, customer, cashDebit, feesChargesDebit, salesReturnsDebit, netSalesCredit, otherIncomeCredit, arCredit, ownersCapitalCredit }) {
+  return JSON.stringify({
+    date: String(date || ''),
+    ref: String(referenceNo || ''),
+    customer: String(customer || ''),
+    cashDebit: Number(cashDebit || 0),
+    feesChargesDebit: Number(feesChargesDebit || 0),
+    salesReturnsDebit: Number(salesReturnsDebit || 0),
+    netSalesCredit: Number(netSalesCredit || 0),
+    otherIncomeCredit: Number(otherIncomeCredit || 0),
+    arCredit: Number(arCredit || 0),
+    ownersCapitalCredit: Number(ownersCapitalCredit || 0),
+  });
+}
+function findReceiptDuplicate(payload) {
+  const sig = receiptSignature(payload);
+  return store.receipts.find(r => receiptSignature(r) === sig) || null;
+}
+
 // --- Startup hydration: load in-memory books from DB if empty ---
 (async () => {
   try {
@@ -216,8 +236,17 @@ router.get('/ledger', async (req, res) => {
   if (isDbReady()) {
     try {
       const full = await getLedgerFullFromDb();
-      if (summaryOnly) return ok(res, { message: 'Ledger summary (DB)', data: { summary: full.summary, accounts: full.accounts } });
-      return ok(res, { message: 'Ledger aggregated (DB)', data: full });
+      const hasDbData = Array.isArray(full?.summary) && full.summary.length > 0;
+      if (hasDbData) {
+        if (summaryOnly) return ok(res, { message: 'Ledger summary (DB)', data: { summary: full.summary, accounts: full.accounts } });
+        return ok(res, { message: 'Ledger aggregated (DB)', data: full });
+      }
+      // If DB returned empty but we have in-memory journal lines, fall through to legacy aggregation
+      if (!hasDbData && store.journal.length === 0) {
+        // Truly no data anywhere
+        if (summaryOnly) return ok(res, { message: 'Ledger summary (empty)', data: { summary: [], accounts: listAccounts() } });
+        return ok(res, { message: 'Ledger aggregated (empty)', data: { ledger: [], summary: [], accounts: listAccounts() } });
+      }
     } catch (_) {
       // fall through to in-memory
     }
@@ -325,6 +354,11 @@ router.get('/cash-receipts', (req, res) => {
 router.post('/cash-receipts', (req, res) => {
   const { date, referenceNo, customer, cashDebit = 0, feesChargesDebit = 0, salesReturnsDebit = 0, netSalesCredit = 0, otherIncomeCredit = 0, arCredit = 0, ownersCapitalCredit = 0, remarks } = req.body || {};
   if (!date) return bad(res, 'Date is required');
+  // Idempotency: avoid duplicate receipts with identical signature
+  const dup = findReceiptDuplicate({ date, referenceNo, customer, cashDebit, feesChargesDebit, salesReturnsDebit, netSalesCredit, otherIncomeCredit, arCredit, ownersCapitalCredit });
+  if (dup) {
+    return ok(res, { message: 'Cash receipt duplicate', data: { entry: dup, duplicate: true } });
+  }
   const id = store.receipts.length + 1;
   const entry = { id, date, referenceNo: referenceNo || '', customer: customer || '', cashDebit: Number(cashDebit)||0, feesChargesDebit: Number(feesChargesDebit)||0, salesReturnsDebit: Number(salesReturnsDebit)||0, netSalesCredit: Number(netSalesCredit)||0, otherIncomeCredit: Number(otherIncomeCredit)||0, arCredit: Number(arCredit)||0, ownersCapitalCredit: Number(ownersCapitalCredit)||0, remarks: remarks || '' };
   store.receipts.push(entry);
