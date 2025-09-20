@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -199,6 +199,15 @@ export default function CashReceiptPage() {
   const [selectedMonth, setSelectedMonth] = useState('All');
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [receiptEntries, setReceiptEntries] = useState([]);
+  const [monthLabel, setMonthLabel] = useState('');
+  useEffect(() => {
+    try {
+      setMonthLabel(new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' }));
+    } catch (_) {
+      const d = new Date();
+      setMonthLabel(`${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`);
+    }
+  }, []);
 
   const [newEntry, setNewEntry] = useState({
     date: '',
@@ -212,8 +221,76 @@ export default function CashReceiptPage() {
     loansPayable: '',
   });
 
-  // Calculate totals from current entries
-  const TOTALS = calculateTotals(receiptEntries);
+  // Helpers for filtering
+  const getMonthName = (dStr) => {
+    if (!dStr) return '';
+    try {
+      const d = new Date(dStr);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleString('en-US', { month: 'long' });
+    } catch (_) {}
+    // Fallbacks for common formats
+    const m = String(dStr);
+    // Match 'Sep'/'September'
+    const monthWord = (m.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\b/i) || [])[0];
+    if (monthWord) {
+      const map = {
+        jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August',
+        sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December',
+      };
+      return map[monthWord.slice(0, 4).toLowerCase()] || monthWord;
+    }
+    // Match YYYY-MM-DD
+    const iso = m.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      const idx = parseInt(iso[2], 10) - 1;
+      const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      return names[idx] || '';
+    }
+    return '';
+  };
+
+  const norm = (v) => String(v ?? '').toLowerCase();
+
+  // Build filtered entries
+  const filteredEntries = (() => {
+    const q = norm(searchQuery).trim();
+    return (receiptEntries || []).filter((e) => {
+      // Month filter
+      if (selectedMonth !== 'All') {
+        const em = getMonthName(e.date);
+        if (em !== selectedMonth) return false;
+      }
+      if (!q) return true;
+      // Search across common fields
+      const hay = [
+        e.date,
+        e.invoiceNumber || e.referenceNo,
+        e.customer,
+        e.description,
+        e.remarks,
+        e.cashDebit, e.feesChargesDebit, e.salesReturnsDebit,
+        e.netSalesCredit, e.otherIncomeCredit, e.arCredit,
+        e.netSales, e.feesAndCharges, e.cash, e.withholdingTax, e.ownersCapital, e.loansPayable,
+      ].map(norm).join(' | ');
+      return hay.includes(q);
+    });
+  })();
+
+  // Calculate totals from filtered entries
+  const TOTALS = calculateTotals(filteredEntries);
+
+  // Dynamic month options from data
+  const monthOrder = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const availableMonths = useMemo(() => {
+    const set = new Set();
+    (receiptEntries || []).forEach((e) => {
+      const m = getMonthName(e?.date);
+      if (m) set.add(m);
+    });
+    const arr = Array.from(set);
+    arr.sort((a,b) => monthOrder.indexOf(a) - monthOrder.indexOf(b));
+    return arr;
+  }, [receiptEntries]);
 
   // Fetch entries memoized
   const fetchReceipts = useCallback(async () => {
@@ -337,9 +414,9 @@ export default function CashReceiptPage() {
             sx={{ minWidth: 120 }}
           >
             <MenuItem value="All">All</MenuItem>
-            <MenuItem value="September">September</MenuItem>
-            <MenuItem value="October">October</MenuItem>
-            <MenuItem value="November">November</MenuItem>
+            {availableMonths.map((m) => (
+              <MenuItem key={m} value={m}>{m}</MenuItem>
+            ))}
           </TextField>
           
           <Button
@@ -361,7 +438,7 @@ export default function CashReceiptPage() {
               CASH RECEIPT JOURNAL (BOOK)
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {receiptEntries.length} receipt entries • September 2024
+              {filteredEntries.length} receipt entries • {selectedMonth === 'All' ? monthLabel : selectedMonth}
             </Typography>
           </Box>
           
@@ -405,7 +482,7 @@ export default function CashReceiptPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {receiptEntries.map((entry, index) => (
+              {filteredEntries.map((entry, index) => (
                 <TableRow 
                   key={entry.id} 
                   sx={{ 

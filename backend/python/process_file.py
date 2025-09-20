@@ -609,6 +609,116 @@ def _extract_items_from_pdfplumber(file_path: str) -> List[Dict[str, Any]]:
     return items
 
 
+def _pdfplumber_find_order_details_regions(file_path: str) -> List[Tuple[int, Tuple[float, float, float, float]]]:
+    """Use pdfplumber to detect likely items-table regions per page.
+
+    - First, try explicit section headers like 'Order Details', 'Order Items'.
+    - Else, detect a header row by synonyms (Product/Item/Description + Qty + Price/Subtotal)
+      and use it as the top boundary.
+
+    Returns list of (page_index, (x0, y0, x1, y1)) in PDF point coordinates.
+    Non-throwing; empty list on failure or when pdfplumber is unavailable.
+    """
+    regions: List[Tuple[int, Tuple[float, float, float, float]]] = []
+    if not pdfplumber:
+        return regions
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            for pi, page in enumerate(pdf.pages):
+                try:
+                    words = page.extract_words() or []
+                except Exception:
+                    words = []
+                if not words:
+                    continue
+                # Build line-ish structures by y to help detect headers
+                lines_rb = []
+                # group by integer top
+                lines_map: Dict[int, List[dict]] = {}
+                for w in words:
+                    top_i = int(float(w.get('top', 0)))
+                    lines_map.setdefault(top_i, []).append(w)
+                for top_i, lst in lines_map.items():
+                    lst_sorted = sorted(lst, key=lambda ww: float(ww.get('x0', ww.get('left', 0)) or 0))
+                    text = ' '.join([(ww.get('text') or '').strip() for ww in lst_sorted if (ww.get('text') or '').strip()])
+                    if text:
+                        y = float(lst_sorted[0].get('top', top_i) or top_i)
+                        lines_rb.append((y, text))
+                lines_rb.sort(key=lambda t: t[0])
+
+                y_top: Optional[float] = None
+                y_bottom: Optional[float] = None
+
+                # 1) Explicit section headers
+                header_sec_pat = re.compile(r"^\s*(Order\s+Details|Order\s+Items|Items\s+List)\b", re.I)
+                for y, text in lines_rb:
+                    if header_sec_pat.search(text):
+                        y_top = y + 2
+                        break
+
+                # 2) If not found, header row by synonyms (Product+Qty+Price/Subtotal)
+                if y_top is None:
+                    for y, text in lines_rb[:20]:
+                        tnorm = text.lower()
+                        if (re.search(r"product|item|description", tnorm)
+                            and re.search(r"qty|quantity", tnorm)
+                            and (re.search(r"price|unit\s*price|unitprice", tnorm) or re.search(r"subtotal|amount|total", tnorm))):
+                            y_top = y + 2
+                            break
+
+                if y_top is None:
+                    # No region candidate on this page
+                    continue
+
+                # 3) Find bottom near totals/summary lines
+                for y, text in lines_rb:
+                    if y <= y_top:
+                        continue
+                    if re.search(r"Grand\s+Total|Merchandise\s+Subtotal|Shipping\s+Fee|Amount\s+Due|Total\s+Quantity", text, re.I):
+                        y_bottom = y - 2
+                        break
+                if y_bottom is None:
+                    y_bottom = float(page.height) - 2
+
+                x0, x1 = 0.0, float(page.width)
+                regions.append((pi, (x0, float(y_top), x1, float(y_bottom))))
+    except Exception:
+        return []
+    return regions
+
+
+def _render_pdf_regions_to_images(file_path: str, regions: List[Tuple[int, Tuple[float, float, float, float]]], scale: float = None) -> List["Image.Image"]:
+    """Render given page regions (x0,y0,x1,y1) to PIL Images using PyMuPDF.
+    Coordinates are expected in PDF points with origin at top-left.
+    """
+    images: List["Image.Image"] = []
+    if not regions:
+        return images
+    try:
+        # ROI scale configurable via env; defaults to 3.0 for higher OCR fidelity
+        if scale is None:
+            try:
+                scale = float(os.environ.get('ROI_SCALE', '3.0'))
+            except Exception:
+                scale = 3.0
+        doc = fitz.open(file_path)
+        for pi, (x0, y0, x1, y1) in regions:
+            if pi < 0 or pi >= len(doc):
+                continue
+            try:
+                page = doc[pi]
+                rect = fitz.Rect(float(x0), float(y0), float(x1), float(y1))
+                mat = fitz.Matrix(scale, scale)
+                pix = page.get_pixmap(matrix=mat, clip=rect)
+                img = Image.open(io.BytesIO(pix.tobytes("png")))
+                images.append(img)
+            except Exception:
+                continue
+    except Exception:
+        return images
+    return images
+
+
 def _extract_items_from_tesseract_images(images: List[Image.Image]) -> List[Dict[str, Any]]:
     """Use Tesseract TSV output to detect a tabular items section on page images.
     Works for scanned PDFs or images by reconstructing lines and mapping to columns using header positions.
@@ -705,14 +815,24 @@ def _extract_items_from_tesseract_images(images: List[Image.Image]) -> List[Dict
                     header_cols = dedup
                     break
         if header_idx is None or not header_cols:
-            # Region-based fallback between 'Order Details' and totals, similar to PDF/Vision paths
+            # Region-based fallback: between an items header (synonyms) or 'Order Details' and the totals
             stop_pattern = re.compile(r"Grand\s+Total|Merchandise\s+Subtotal|Shipping\s+Fee|Amount\s+Due|Total\s+Quantity", re.I)
             y_start = None
             y_end = None
+            # Prefer explicit section headers
             for (_x, _y, text, _lst) in lines_list:
                 if re.search(r"^\s*Order\s+Details\b", text, re.I):
                     y_start = _y + 3
                     break
+            # Else, anchor to a header-like line with column synonyms
+            if y_start is None:
+                for (_x, _y, text, _lst) in lines_list[:20]:
+                    tnorm = text.lower()
+                    if (re.search(r"product|item|description", tnorm)
+                        and re.search(r"qty|quantity", tnorm)
+                        and (re.search(r"price|unit\s*price|unitprice", tnorm) or re.search(r"subtotal|amount|total", tnorm))):
+                        y_start = _y + 3
+                        break
             if y_start is None:
                 continue
             for (_x, _y, text, _lst) in lines_list:
@@ -1851,6 +1971,10 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
     plumber_items: List[Dict[str, Any]] = []
     tesseract_items: List[Dict[str, Any]] = []
     paddle_items: List[Dict[str, Any]] = []
+    tess_roi_items: List[Dict[str, Any]] = []
+    paddle_roi_items: List[Dict[str, Any]] = []
+    roi_regions_debug: List[Tuple[int, Tuple[float,float,float,float]]] = []
+    roi_images_len: int = 0
     paddle_lines_text: str = ''
     vision_items: List[Dict[str, Any]] = []
     ocrspace_items: List[Dict[str, Any]] = []
@@ -1973,6 +2097,24 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
             except Exception as e:
                 warnings.append(f'pdfplumber_failed: {e}')
                 plumber_items = []
+        # If we have pdfplumber, guide Tesseract to only read the Order Details table region
+        try:
+            if pdfplumber is not None:
+                roi_regions = _pdfplumber_find_order_details_regions(file_path)
+                roi_regions_debug = roi_regions or []
+                if roi_regions:
+                    roi_images = _render_pdf_regions_to_images(file_path, [r for _, r in roi_regions])
+                    roi_images_len = len(roi_images)
+                    if roi_images:
+                        tess_roi_items = _extract_items_from_tesseract_images(roi_images)
+                        # Optionally run PaddleOCR on ROIs for better table capture
+                        enable_paddle_tables = os.environ.get('ENABLE_PADDLE_TABLES', '0') in ('1','true','True')
+                        if enable_paddle_tables and PaddleOCR is not None:
+                            _lines_txt, paddle_roi_items = _paddle_ocr_extract_lines_and_items(roi_images)
+                        elif enable_paddle_tables and PaddleOCR is None:
+                            warnings.append('paddleocr_unavailable')
+        except Exception as e:
+            warnings.append(f'tesseract_roi_failed: {e}')
         # Try layout-based table extraction for items
         if not strict_tess:
             try:
@@ -2072,6 +2214,15 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
     if plumber_items:
         items_hint = plumber_items
         items_hint_source = 'pdfplumber'
+    elif tess_roi_items:
+        items_hint = tess_roi_items
+        items_hint_source = 'tesseract_roi'
+    elif tess_roi_items:
+        items_hint = tess_roi_items
+        items_hint_source = 'tesseract_roi'
+    elif (enable_paddle_tables or items_empty_before_paddle) and paddle_roi_items:
+        items_hint = paddle_roi_items
+        items_hint_source = 'paddleocr_roi'
     elif (enable_paddle_tables or items_empty_before_paddle) and paddle_items:
         items_hint = paddle_items
         items_hint_source = 'paddleocr'
@@ -2106,11 +2257,17 @@ def process_file(file_path: str, poppler_path: str | None = None) -> Dict[str, A
     diagnostics.setdefault('items', {})
     diagnostics['items']['counts'] = {
         'pdfplumber': len(plumber_items or []),
+        'tesseract_roi': len(tess_roi_items or []),
+        'paddleocr_roi': len(paddle_roi_items or []),
         'paddleocr': len(paddle_items or []),
         'layout': len(layout_items or []),
         'tesseract': len(tesseract_items or []),
         'vision': len(vision_items or []),
         'ocrspace': len(ocrspace_items or []),
+    }
+    diagnostics['items']['roi'] = {
+        'regions': roi_regions_debug,
+        'roiImageCount': roi_images_len,
     }
     diagnostics['items']['selectedSource'] = items_hint_source
     diagnostics['items']['fallbackByNoItems'] = bool(items_empty_before_paddle)

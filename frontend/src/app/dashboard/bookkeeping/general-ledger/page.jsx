@@ -148,9 +148,42 @@ export default function GeneralLedgerPage() {
       type: 'debit',
       amount: '',
     });
+  // Runtime month label (e.g., "September 2025")
+  const [monthLabel, setMonthLabel] = useState('');
+  useEffect(() => {
+    try {
+      const label = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' });
+      setMonthLabel(label);
+    } catch (_) {
+      // Fallback simple formatter
+      const d = new Date();
+      setMonthLabel(`${d.toLocaleString('en-US', { month: 'long' })} ${d.getFullYear()}`);
+    }
+  }, []);
 
-  // Filter by selected account code (from COA). 'All' shows every account.
-  const filteredRows = selectedAccount === 'All' ? ledgerSummary : ledgerSummary.filter((a) => a.code === selectedAccount);
+  // Filter by selected account and search query (code/title or any entry fields)
+  const filteredRows = (() => {
+    const q = (searchQuery || '').trim().toLowerCase();
+    const base = selectedAccount === 'All' ? ledgerSummary : ledgerSummary.filter((a) => a.code === selectedAccount);
+    if (!q) return base;
+    return base.filter((acc) => {
+      const codeMatch = String(acc.code || '').toLowerCase().includes(q);
+      const titleMatch = String(acc.accountTitle || '').toLowerCase().includes(q);
+      if (codeMatch || titleMatch) return true;
+      const detail = ledgerDetail.find((l) => l.code === acc.code);
+      const entries = detail?.entries || [];
+      return entries.some((e) => {
+        const desc = String(e.description || '').toLowerCase();
+        const ref = String(e.reference || '').toLowerCase();
+        const date = String(e.date || '').toLowerCase();
+        const debit = typeof e.debit === 'number' ? String(e.debit) : String(e.debit || '');
+        const credit = typeof e.credit === 'number' ? String(e.credit) : String(e.credit || '');
+        return (
+          desc.includes(q) || ref.includes(q) || date.includes(q) || debit.includes(q) || credit.includes(q)
+        );
+      });
+    });
+  })();
   const TOTAL_DEBIT = filteredRows.reduce((sum, acc) => sum + Number(acc.debit || 0), 0);
   const TOTAL_CREDIT = filteredRows.reduce((sum, acc) => sum + Number(acc.credit || 0), 0);
 
@@ -266,7 +299,7 @@ export default function GeneralLedgerPage() {
               GENERAL LEDGER
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {ledgerSummary.length} accounts • September 2024
+              {ledgerSummary.length} accounts • {monthLabel || ''}
             </Typography>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main', mt: 0.5 }}>SUMMARY (Totals per Account)</Typography>
           </Box>
@@ -302,7 +335,18 @@ export default function GeneralLedgerPage() {
               {filteredRows.map((acc, index) => {
                 const isExpanded = expanded.has(acc.code);
                 const detail = ledgerDetail.find(l => l.code === acc.code);
-                const entries = detail?.entries || [];
+                const entriesAll = detail?.entries || [];
+                const q = (searchQuery || '').trim().toLowerCase();
+                const entries = q
+                  ? entriesAll.filter((e) => {
+                      const desc = String(e.description || '').toLowerCase();
+                      const ref = String(e.reference || '').toLowerCase();
+                      const date = String(e.date || '').toLowerCase();
+                      const debit = typeof e.debit === 'number' ? String(e.debit) : String(e.debit || '');
+                      const credit = typeof e.credit === 'number' ? String(e.credit) : String(e.credit || '');
+                      return desc.includes(q) || ref.includes(q) || date.includes(q) || debit.includes(q) || credit.includes(q);
+                    })
+                  : entriesAll;
                 return (
                   <Fragment key={`row-${acc.code}`}>
                     <TableRow key={acc.code}
