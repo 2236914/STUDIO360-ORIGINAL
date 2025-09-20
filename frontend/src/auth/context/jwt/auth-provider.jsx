@@ -26,8 +26,31 @@ export function AuthProvider({ children }) {
     
     try {
       setState(prev => ({ ...prev, loading: true }));
+      // Backend bootId check to detect server restarts
+      let backendBootId = null;
+      try {
+        const resp = await fetch('/api/health', { cache: 'no-store' });
+        if (resp.ok) {
+          const j = await resp.json();
+          backendBootId = j?.bootId || null;
+          if (backendBootId && typeof window !== 'undefined') {
+            const prev = sessionStorage.getItem('backend-boot-id');
+            if (!prev) {
+              sessionStorage.setItem('backend-boot-id', backendBootId);
+            } else if (prev !== backendBootId) {
+              // Backend restarted: force sign-out once
+              await supabase.auth.signOut();
+              await removeSession();
+              sessionStorage.setItem('backend-boot-id', backendBootId);
+              setState({ user: null, loading: false });
+              if (typeof window !== 'undefined') window.location.href = '/auth/jwt/sign-in';
+              return;
+            }
+          }
+        }
+      } catch (_) { /* ignore health errors */ }
       
-      // First check if we have a stored session in localStorage
+  // First check if we have a stored session in localStorage
       console.log('Checking for stored session...');
       const sessionData = localStorage.getItem(STORAGE_KEY);
       
@@ -56,7 +79,7 @@ export function AuthProvider({ children }) {
             return;
           }
           
-          // Validate token with Supabase
+          // Validate token with Supabase (persisted across refresh)
           console.log('Validating session with Supabase...');
           const { data: { session }, error } = await supabase.auth.getSession();
           console.log('Supabase session response:', { session, error });

@@ -7,8 +7,8 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGci
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     autoRefreshToken: true,
-    // Do not persist sessions across reloads: forces fresh sign-in after restart
-    persistSession: false,
+    // Persist across reloads; we control logout via backend bootId
+    persistSession: true,
     detectSessionInUrl: true,
     storage: {
       getItem: (key) => {

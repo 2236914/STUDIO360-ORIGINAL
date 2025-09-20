@@ -10,12 +10,14 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const dotenv = require('dotenv');
 const path = require('path');
+const crypto = require('crypto');
 
 // Load environment variables from backend/.env explicitly
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const BOOT_ID = crypto.randomUUID();
 
 // Security middleware
 app.use(helmet());
@@ -81,7 +83,8 @@ app.get('/api/health', (req, res) => {
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    bootId: BOOT_ID,
   });
 });
 
