@@ -27,6 +27,27 @@ function freshKPI() {
   };
 }
 let kpiStats = freshKPI();
+// On module load, try to hydrate in-memory KPI from DB snapshot
+try {
+  const { getMonth } = require('../../services/kpiRepo');
+  (async () => {
+    try {
+      const { data } = await getMonth();
+      if (data) {
+        kpiStats = {
+          processed: Number(data.transactions_processed || 0),
+          accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
+          timeSavedMinutes: Number(data.time_saved_minutes || 0),
+          costSavings: Number(data.cost_savings || 0),
+          docsCount: Number(data.docs_count || 0),
+          txCount: Number(kpiStats.txCount || 0),
+          transferred: Number(kpiStats.transferred || 0),
+          updatedAt: Date.now(),
+        };
+      }
+    } catch (_) {}
+  })();
+} catch (_) { /* supabase not configured or repo missing */ }
 
 // In-memory processed invoice/receipt JSON store (ephemeral)
 const processedStore = []; // { id, originalName, storedPath, size, mimetype, extractedAt, canonical }
@@ -293,6 +314,27 @@ router.get('/stats', (req, res) => {
   return res.json({ success: true, data: kpiStats });
 });
 
+// Diagnostic: compare DB snapshot vs in-memory
+router.get('/stats/db', async (req, res) => {
+  try {
+    const { getMonth } = require('../../services/kpiRepo');
+    const { data, error } = await getMonth();
+    if (error) return res.json({ success: true, data: { memory: kpiStats, db: null, warning: 'supabase not configured or query failed' } });
+    const db = data ? {
+      processed: Number(data.transactions_processed || 0),
+      accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
+      timeSavedMinutes: Number(data.time_saved_minutes || 0),
+      costSavings: Number(data.cost_savings || 0),
+      docsCount: Number(data.docs_count || 0),
+      monthKey: data.month_key,
+      lastCalculatedAt: data.last_calculated_at,
+    } : null;
+    return res.json({ success: true, data: { memory: kpiStats, db } });
+  } catch (_) {
+    return res.json({ success: true, data: { memory: kpiStats, db: null } });
+  }
+});
+
 /**
  * @route   POST /api/ai/stats
  * @desc    Update AI Bookkeeper KPI stats (merge)
@@ -324,25 +366,19 @@ router.post('/stats', express.json(), (req, res) => {
     }
     // ensure updatedAt
     kpiStats.updatedAt = Date.now();
-    // Fire-and-forget DB persistence (non-blocking, does not affect response)
+    // Fire-and-forget DB persistence using repo (non-blocking)
     try {
-      const { supabase } = require('../../services/supabaseClient');
-      if (supabase) {
-        const monthKey = new Date(); monthKey.setDate(1); monthKey.setHours(0,0,0,0);
-        const monthStr = monthKey.toISOString().substring(0,10);
-        // Ensure row exists
-        supabase.from('kpi_stats').upsert({ month_key: monthStr }).then(() => {
-          const delta = {
-            transactions_processed: kpiStats.processed,
-            docs_count: kpiStats.docsCount,
-            time_saved_minutes: kpiStats.timeSavedMinutes,
-            cost_savings: kpiStats.costSavings,
-            accuracy_rate: kpiStats.accuracyRate || null,
-            last_calculated_at: new Date().toISOString()
-          };
-          // Overwrite snapshot: update values directly
-          supabase.from('kpi_stats').update(delta).eq('month_key', monthStr).then(()=>{}).catch(()=>{});
+      const { snapshot, accumulate: dbAccumulate } = require('../../services/kpiRepo');
+      if (body.mode === 'accumulate') {
+        dbAccumulate({
+          processed: Number(body.processed || 0),
+          docsCount: Number(body.docsCount || 0),
+          timeSavedMinutes: Number(body.timeSavedMinutes || 0),
+          costSavings: Number(body.costSavings || 0),
+          accuracyRate: typeof body.accuracyRate === 'number' ? body.accuracyRate : undefined,
         }).catch(()=>{});
+      } else {
+        snapshot(kpiStats).catch(()=>{});
       }
     } catch(_) { /* ignore persistence errors */ }
     return res.json({ success: true, data: kpiStats });

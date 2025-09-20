@@ -149,10 +149,35 @@ export function AuthProvider({ children }) {
     };
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // Idle auto-logout (5 minutes of no activity)
+    let idleTimer;
+    const IDLE_MS = 5 * 60 * 1000;
+    const resetIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(() => {
+        // Only logout if currently authenticated
+        try {
+          if (typeof window !== 'undefined') {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (raw) {
+              logout();
+            }
+          }
+        } catch (_) {
+          // ignore
+        }
+      }, IDLE_MS);
+    };
+    const activityEvents = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'];
+    activityEvents.forEach((evt) => window.addEventListener(evt, resetIdle, { passive: true }));
+    resetIdle();
     
     // Clean up
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (idleTimer) clearTimeout(idleTimer);
+      activityEvents.forEach((evt) => window.removeEventListener(evt, resetIdle));
     };
   }, [checkUserSession]);
 

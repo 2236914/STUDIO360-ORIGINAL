@@ -3,6 +3,7 @@ import { paths } from 'src/routes/paths';
 import axios from 'src/utils/axios';
 
 import { STORAGE_KEY } from './constant';
+import { supabase } from './supabaseClient';
 
 // ----------------------------------------------------------------------
 
@@ -177,21 +178,9 @@ export async function removeSession() {
       // ignore parsing issues
     }
 
-    console.log('Clearing storage keys...');
     keysToRemove.forEach((key) => {
-      const hadLocal = localStorage.getItem(key) !== null;
-      const hadSession = sessionStorage.getItem(key) !== null;
-
-      localStorage.removeItem(key);
-      sessionStorage.removeItem(key);
-
-      if (hadLocal || hadSession) {
-        console.log(
-          `Removed ${key} from ${hadLocal ? 'localStorage' : ''}${
-            hadLocal && hadSession ? ' and ' : ''
-          }${hadSession ? 'sessionStorage' : ''}`
-        );
-      }
+      try { localStorage.removeItem(key); } catch (_) {}
+      try { sessionStorage.removeItem(key); } catch (_) {}
     });
 
     // Clear axios headers
