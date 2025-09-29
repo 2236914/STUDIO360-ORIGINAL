@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
 import axios from 'src/utils/axios';
 
 import Box from '@mui/material/Box';
@@ -197,6 +197,8 @@ export default function CashReceiptPage() {
   const theme = useTheme();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedMonth, setSelectedMonth] = useState('All');
+  const [selectedChannel, setSelectedChannel] = useState('All');
+  const [expandedChannels, setExpandedChannels] = useState(() => new Set());
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [receiptEntries, setReceiptEntries] = useState([]);
   const [monthLabel, setMonthLabel] = useState('');
@@ -251,6 +253,16 @@ export default function CashReceiptPage() {
 
   const norm = (v) => String(v ?? '').toLowerCase();
 
+  // Classify entry into one of the required channels
+  const classifyChannel = (entry) => {
+    const base = norm(entry?.customer || entry?.description || '');
+    if (base.includes('shopee')) return 'SHOPEE';
+    if (base.includes('tiktok')) return 'TIKTOK';
+    if (base.includes('360')) return '360';
+    return null;
+  };
+  const ALLOWED_CHANNELS = new Set(['SHOPEE','TIKTOK','360']);
+
   // Build filtered entries
   const filteredEntries = (() => {
     const q = norm(searchQuery).trim();
@@ -276,8 +288,18 @@ export default function CashReceiptPage() {
     });
   })();
 
-  // Calculate totals from filtered entries
-  const TOTALS = calculateTotals(filteredEntries);
+  // Apply channel filter (only keep SHOPEE, TIKTOK, 360)
+  const channelFilteredEntries = filteredEntries.filter((e) => ALLOWED_CHANNELS.has(classifyChannel(e)));
+
+  // Build groups similar to General Ledger organization
+  const CHANNEL_ORDER = ['SHOPEE', 'TIKTOK', '360'];
+  let channelGroups = CHANNEL_ORDER.map((ch) => {
+    const entries = channelFilteredEntries.filter((e) => classifyChannel(e) === ch);
+    if (!entries.length) return null;
+    return { channel: ch, entries, totals: calculateTotals(entries) };
+  }).filter(Boolean);
+  if (selectedChannel !== 'All') channelGroups = channelGroups.filter(g => g.channel === selectedChannel);
+  const TOTALS = calculateTotals(channelGroups.flatMap(g => g.entries));
 
   // Dynamic month options from data
   const monthOrder = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -418,6 +440,18 @@ export default function CashReceiptPage() {
               <MenuItem key={m} value={m}>{m}</MenuItem>
             ))}
           </TextField>
+          <TextField
+            select
+            label="Channel"
+            value={selectedChannel}
+            onChange={(e) => setSelectedChannel(e.target.value)}
+            sx={{ minWidth: 140 }}
+          >
+            <MenuItem value="All">All Channels</MenuItem>
+            <MenuItem value="SHOPEE">SHOPEE</MenuItem>
+            <MenuItem value="TIKTOK">TIKTOK</MenuItem>
+            <MenuItem value="360">360</MenuItem>
+          </TextField>
           
           <Button
             variant="contained"
@@ -438,7 +472,7 @@ export default function CashReceiptPage() {
               CASH RECEIPT JOURNAL (BOOK)
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {filteredEntries.length} receipt entries • {selectedMonth === 'All' ? monthLabel : selectedMonth}
+              {channelGroups.reduce((sum, g) => sum + g.entries.length, 0)} receipt entries • {selectedMonth === 'All' ? monthLabel : selectedMonth}
             </Typography>
           </Box>
           
@@ -482,90 +516,142 @@ export default function CashReceiptPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {filteredEntries.map((entry, index) => (
-                <TableRow 
-                  key={entry.id} 
-                  sx={{ 
-                    '&:hover': { bgcolor: 'grey.50' },
-                    bgcolor: index % 2 === 0 ? 'white' : 'grey.25',
-                    borderBottom: `1px solid ${theme.palette.divider}`,
-                  }}
-                >
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    {entry.date}
-                  </TableCell>
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    <Label 
-                      variant="soft" 
-                      color="primary"
-                      sx={{ 
-                        bgcolor: '#E3F2FD',
-                        color: '#1976D2',
-                        border: '1px solid #90CAF9',
-                        borderRadius: '12px',
-                        px: 1.5,
-                        py: 0.5,
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
+              {channelGroups.map((group, gi) => {
+                const isExpanded = expandedChannels.has(group.channel);
+                return (
+                  <Fragment key={`group-${group.channel}`}>
+                    {/* Group summary row (click to expand/collapse) */}
+                    <TableRow
+                      key={`group-${group.channel}`}
+                      sx={{ bgcolor: gi % 2 === 0 ? 'grey.100' : 'grey.200', cursor: 'pointer', '&:hover': { bgcolor: gi % 2 === 0 ? 'grey.200' : 'grey.300' } }}
+                      onClick={() => {
+                        setExpandedChannels(prev => {
+                          const next = new Set(prev);
+                          if (next.has(group.channel)) next.delete(group.channel); else next.add(group.channel);
+                          return next;
+                        });
                       }}
                     >
-                      {entry.referenceNo || entry.invoiceNumber}
-                    </Label>
+                      <TableCell colSpan={3} sx={{ fontWeight: 700, borderRight: `1px solid ${theme.palette.divider}`, display:'flex', alignItems:'center', gap:0.5 }}>
+                        {group.entries.length > 0 && (
+                          <Iconify icon={isExpanded ? 'eva:arrow-ios-downward-fill' : 'eva:arrow-ios-forward-fill'} width={16} />
+                        )}
+                        {group.channel}
+                      </TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}`, fontWeight:700 }}>
+                        ₱{fNumber((group.totals.cashDebit || 0) + (group.totals.cash || 0))}
+                      </TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}`, fontWeight:700 }}>
+                        ₱{fNumber((group.totals.feesChargesDebit || 0) + (group.totals.feesAndCharges || 0))}
+                      </TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}`, fontWeight:700 }}>
+                        ₱{fNumber(group.totals.salesReturnsDebit || 0)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}`, fontWeight:700 }}>
+                        ₱{fNumber((group.totals.netSalesCredit || 0) + (group.totals.netSales || 0))}
+                      </TableCell>
+                      <TableCell align="right" sx={{ borderRight: `1px solid ${theme.palette.divider}`, fontWeight:700 }}>
+                        ₱{fNumber(group.totals.otherIncomeCredit || 0)}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight:700 }}>
+                        ₱{fNumber(group.totals.arCredit || 0)}
+                      </TableCell>
+                      <TableCell align="right" />
+                    </TableRow>
+                    {isExpanded && group.entries.map((entry, index) => (
+                      <TableRow
+                        key={`entry-${group.channel}-${entry.id || index}`}
+                        sx={{
+                          '&:hover': { bgcolor: 'grey.50' },
+                          bgcolor: (index % 2 === 0 ? 'white' : 'grey.25'),
+                          borderBottom: `1px solid ${theme.palette.divider}`,
+                        }}
+                      >
+                        <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>{entry.date}</TableCell>
+                        <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                          <Label
+                            variant="soft"
+                            color="primary"
+                            sx={{
+                              bgcolor: '#E3F2FD',
+                              color: '#1976D2',
+                              border: '1px solid #90CAF9',
+                              borderRadius: '12px',
+                              px: 1.5,
+                              py: 0.5,
+                              fontSize: '0.75rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {entry.referenceNo || entry.invoiceNumber}
+                          </Label>
+                        </TableCell>
+                        <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                            {entry.customer || entry.description}
+                          </Typography>
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            borderRight: `1px solid ${theme.palette.divider}`,
+                            fontWeight: entry.cashDebit > 0 || entry.cash > 0 ? 600 : 400,
+                          }}
+                        >
+                          {entry.cashDebit > 0 ? `₱${fNumber(entry.cashDebit)}` : (entry.cash > 0 ? `₱${fNumber(entry.cash)}` : '-')}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            borderRight: `1px solid ${theme.palette.divider}`,
+                            fontWeight: (entry.feesChargesDebit || entry.feesAndCharges) > 0 ? 600 : 400,
+                          }}
+                        >
+                          {(entry.feesChargesDebit || entry.feesAndCharges) > 0 ? `₱${fNumber(entry.feesChargesDebit || entry.feesAndCharges)}` : '-'}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            borderRight: `1px solid ${theme.palette.divider}`,
+                            fontWeight: (entry.salesReturnsDebit || 0) > 0 ? 600 : 400,
+                          }}
+                        >
+                          {(entry.salesReturnsDebit || 0) > 0 ? `₱${fNumber(entry.salesReturnsDebit)}` : '-'}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            borderRight: `1px solid ${theme.palette.divider}`,
+                            fontWeight: (entry.netSalesCredit || entry.netSales) > 0 ? 600 : 400,
+                          }}
+                        >
+                          {(entry.netSalesCredit || entry.netSales) > 0 ? `₱${fNumber(entry.netSalesCredit || entry.netSales)}` : '-'}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            borderRight: `1px solid ${theme.palette.divider}`,
+                            fontWeight: (entry.otherIncomeCredit || 0) > 0 ? 600 : 400,
+                          }}
+                        >
+                          {(entry.otherIncomeCredit || 0) > 0 ? `₱${fNumber(entry.otherIncomeCredit)}` : '-'}
+                        </TableCell>
+                        <TableCell align="right">
+                          {(entry.arCredit || 0) > 0 ? `₱${fNumber(entry.arCredit)}` : '-'}
+                        </TableCell>
+                        <TableCell align="right">{entry.remarks || ''}</TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                );
+              })}
+              {channelGroups.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={10} align="center" sx={{ py:4, color:'text.secondary' }}>
+                    No entries for the selected filters.
                   </TableCell>
-                  <TableCell sx={{ borderRight: `1px solid ${theme.palette.divider}` }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>{entry.customer || entry.description}</Typography>
-                  </TableCell>
-                  <TableCell
-                    align="right" 
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: entry.cashDebit > 0 || entry.cash > 0 ? 600 : 400,
-                    }}
-                  >
-                    {entry.cashDebit > 0 ? `₱${fNumber(entry.cashDebit)}` : (entry.cash > 0 ? `₱${fNumber(entry.cash)}` : '-')}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: (entry.feesChargesDebit || entry.feesAndCharges) > 0 ? 600 : 400,
-                    }}
-                  >
-                    {(entry.feesChargesDebit || entry.feesAndCharges) > 0 ? `₱${fNumber(entry.feesChargesDebit || entry.feesAndCharges)}` : '-'}
-                  </TableCell>
-                  <TableCell
-                    align="right"
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: (entry.salesReturnsDebit || 0) > 0 ? 600 : 400,
-                    }}
-                  >
-                    {(entry.salesReturnsDebit || 0) > 0 ? `₱${fNumber(entry.salesReturnsDebit)}` : '-'}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: (entry.netSalesCredit || entry.netSales) > 0 ? 600 : 400,
-                    }}
-                  >
-                    {(entry.netSalesCredit || entry.netSales) > 0 ? `₱${fNumber(entry.netSalesCredit || entry.netSales)}` : '-'}
-                  </TableCell>
-                  <TableCell 
-                    align="right"
-                    sx={{ 
-                      borderRight: `1px solid ${theme.palette.divider}`,
-                      fontWeight: (entry.otherIncomeCredit || 0) > 0 ? 600 : 400,
-                    }}
-                  >
-                    {(entry.otherIncomeCredit || 0) > 0 ? `₱${fNumber(entry.otherIncomeCredit)}` : '-'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {(entry.arCredit || 0) > 0 ? `₱${fNumber(entry.arCredit)}` : '-'}
-                  </TableCell>
-                  <TableCell align="right">{entry.remarks || ''}</TableCell>
                 </TableRow>
-              ))}
+              )}
               
               {/* Total Row */}
               <TableRow sx={{ 
@@ -722,4 +808,4 @@ export default function CashReceiptPage() {
       </Dialog>
     </DashboardContent>
   );
-} 
+}
