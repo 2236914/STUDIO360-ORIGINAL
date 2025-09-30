@@ -42,24 +42,28 @@ const DEFAULT_DELIVERY_OPTIONS = [
 
 const PAYMENT_OPTIONS = [
   {
-    value: 'cod',
-    label: 'Cash on Delivery',
-    description: 'Pay with cash when your order is delivered.',
+    value: 'qrph',
+    label: 'QRPh',
+    description: 'Pay using QR Philippines for instant and secure payments.',
+    icon: '/assets/icons/payment/ic-qrph.svg'
   },
   {
     value: 'gcash',
     label: 'GCash',
     description: 'Pay using your GCash wallet.',
+    icon: '/assets/icons/payment/ic-gcash.svg'
   },
   {
     value: 'paypal',
     label: 'PayPal',
     description: 'You will be redirected to PayPal website to complete your purchase securely.',
+    icon: 'logos:paypal'
   },
   {
     value: 'credit',
     label: 'Credit / Debit card',
     description: 'We support Mastercard, Visa, Discover and Stripe.',
+    icon: 'logos:visa'
   },
 ];
 
@@ -168,9 +172,17 @@ export function CheckoutAddressPayment() {
       const region = getShippingRegion(selectedProvince);
       setCustomerRegion(region);
       
+      // Get store ID from URL
+      let storeId = null;
+      if (typeof window !== 'undefined') {
+        const pathname = window.location.pathname;
+        const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
+        storeId = storeIdMatch ? storeIdMatch[1] : null;
+      }
+      
       // Calculate shipping options with order amount for free shipping eligibility
       const orderAmount = checkout.total || 0;
-      const shippingOptions = calculateShippingOptions(selectedProvince, selectedCity, null, orderAmount);
+      const shippingOptions = calculateShippingOptions(selectedProvince, selectedCity, null, orderAmount, storeId);
       
       if (shippingOptions.length > 0) {
         const formattedOptions = shippingOptions.map(option => ({

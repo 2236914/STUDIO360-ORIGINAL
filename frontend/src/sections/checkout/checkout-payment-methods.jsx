@@ -79,7 +79,7 @@ export function CheckoutPaymentMethods({ options, ...other }) {
 }
 
 function OptionItem({ option, cardOptions, selected, isCredit, onOpen, ...other }) {
-  const { value, label, description } = option;
+  const { value, label, description, icon } = option;
 
   return (
     <Paper
@@ -95,21 +95,27 @@ function OptionItem({ option, cardOptions, selected, isCredit, onOpen, ...other 
     >
       <ListItemText
         primary={
-          <Stack direction="row" alignItems="center">
+          <Stack direction="row" alignItems="center" spacing={2}>
+            {icon && (
+              icon.startsWith('/') ? (
+                <Box
+                  component="img"
+                  src={icon}
+                  alt={label}
+                  sx={{ width: 24, height: 24, flexShrink: 0 }}
+                />
+              ) : (
+                <Iconify icon={icon} width={24} sx={{ flexShrink: 0 }} />
+              )
+            )}
+            {value === 'credit' && (
+              <Stack spacing={1} direction="row" alignItems="center">
+                <Iconify icon="logos:mastercard" width={24} />
+              </Stack>
+            )}
             <Box component="span" sx={{ flexGrow: 1 }}>
               {label}
             </Box>
-            <Stack spacing={1} direction="row" alignItems="center">
-              {value === 'credit' && (
-                <>
-                  <Iconify icon="logos:mastercard" width={24} />
-                  ,
-                  <Iconify icon="logos:visa" width={24} />
-                </>
-              )}
-              {value === 'paypal' && <Iconify icon="logos:paypal" width={24} />}
-              {value === 'cash' && <Iconify icon="solar:wad-of-money-bold" width={32} />}
-            </Stack>
           </Stack>
         }
         secondary={description}

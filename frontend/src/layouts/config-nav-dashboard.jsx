@@ -36,8 +36,10 @@ const ICONS = {
   aiBookkeeper: icon('ic-robot'),
   inventory: icon('ic-product'),
   invoice: icon('ic-file'),
+  vouchers: icon('ic-label'),
   account: icon('ic-user'),
   announcement: icon('ic-blog'),
+  store: icon('ic-ecommerce'),
 };
 
 // ----------------------------------------------------------------------
@@ -91,9 +93,21 @@ export const navData = [
   {
     subheader: 'SHOP',
     items: [
+      {
+        title: 'Store',
+        path: paths.dashboard.store.root,
+        icon: ICONS.store,
+        children: [
+          { title: 'Homepage', path: paths.dashboard.store.homepage },
+          { title: 'About', path: paths.dashboard.store.about },
+          { title: 'Shipping & Returns', path: paths.dashboard.store.shipping },
+          { title: 'Events', path: paths.dashboard.store.events },
+        ],
+      },
       { title: 'Inventory', path: paths.dashboard.inventory.root, icon: ICONS.inventory },
       { title: 'Orders', path: paths.dashboard.orders.root, icon: ICONS.order },
       { title: 'Invoice', path: paths.dashboard.invoice.root, icon: ICONS.invoice },
+      { title: 'Vouchers', path: paths.dashboard.vouchers.root, icon: ICONS.vouchers },
       { title: 'Mail', path: paths.dashboard.mail, icon: ICONS.mail },
     ],
   },

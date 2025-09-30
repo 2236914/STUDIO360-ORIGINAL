@@ -4,11 +4,11 @@ import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
+// import Tab from '@mui/material/Tab';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
-import Tabs from '@mui/material/Tabs';
+// import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Avatar from '@mui/material/Avatar';
@@ -21,7 +21,7 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import InputLabel from '@mui/material/InputLabel';
 import Menu from '@mui/material/Menu';
-import Pagination from '@mui/material/Pagination';
+// import Pagination from '@mui/material/Pagination';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Fab from '@mui/material/Fab';
@@ -199,7 +199,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
   const [mounted, setMounted] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
   
-  const [selectedTab, setSelectedTab] = useState(0);
+  // tabs removed for simplified mock layout
   const [selectedColor, setSelectedColor] = useState(0);
   const [selectedSize, setSelectedSize] = useState(() => {
     // Get product data first to set the initial size
@@ -208,7 +208,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
   });
   const [quantity, setQuantity] = useState(1);
   const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
-  const [reviewsPage, setReviewsPage] = useState(1);
+  // const [reviewsPage, setReviewsPage] = useState(1);
 
   // Get product data (in real app, this would be from API)
   const product = additionalProducts[id] || PRODUCT_DATA[id] || PRODUCT_DATA['1'];
@@ -234,9 +234,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const handleTabChange = useCallback((event, newValue) => {
-    setSelectedTab(newValue);
-  }, []);
+  // tabs removed
 
   const handleQuantityChange = useCallback((delta) => {
     setQuantity(prev => Math.max(1, Math.min(prev + delta, product.availableQuantity)));
@@ -288,6 +286,14 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
     <Grid item xs={12} lg={6}>
       <Card sx={{ p: { xs: 1.5, md: 2 }, boxShadow: 'none', border: 'none', mt: { xs: 1.5, md: 2 } }}>
         <Box sx={{ position: 'relative', mb: 1.5 }}>
+          {/* Share icon button in the top-right of main image */}
+          <IconButton
+            aria-label="share"
+            onClick={handleShareMenuOpen}
+            sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2, bgcolor: 'white', boxShadow: 1, '&:hover': { bgcolor: 'primary.lighter' } }}
+          >
+            <Iconify icon="solar:share-bold" sx={{ color: 'primary.main' }} />
+          </IconButton>
           <Box
             component="img"
             src="https://via.placeholder.com/600x600/8B5CF6/FFFFFF?text=Ballet+Shoes"
@@ -598,239 +604,13 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
     </Grid>
   );
 
-  const renderTabs = (
+  const renderDescription = (
     <Grid item xs={12}>
-      <Card sx={{ mt: { xs: 1.5, md: 2 } }}>
-        <Tabs value={selectedTab} onChange={handleTabChange} sx={{ px: 3 }}>
-          <Tab 
-            icon={<Iconify icon="eva:file-text-fill" width={20} />}
-            iconPosition="start"
-            label="Description" 
-          />
-          <Tab 
-            icon={<Iconify icon="eva:star-fill" width={20} />}
-            iconPosition="start"
-            label={`Reviews (${product.reviewCount.toLocaleString()})`} 
-          />
-          <Tab 
-            icon={<Iconify icon="eva:truck-fill" width={20} />}
-            iconPosition="start"
-            label="Shipping & Returns" 
-          />
-        </Tabs>
-        
-        <Divider />
-        
-        <Box sx={{ p: { xs: 2, md: 2.5 } }}>
-          {selectedTab === 0 && (
-            <Stack spacing={3}>
-              {/* Specifications */}
-              <Stack spacing={1.5}>
-                <Typography variant="h6">Specifications</Typography>
-                <Grid container spacing={1.5}>
-                  <Grid item xs={6} sm={3}>
+      <Card sx={{ mt: { xs: 1.5, md: 2 }, p: { xs: 2, md: 2.5 } }}>
+        <Typography variant="h6" sx={{ mb: 1 }}>Description</Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Category
+          {product.description}
                     </Typography>
-                    <Typography variant="body2">{product.specifications.category}</Typography>
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Manufacturer
-                    </Typography>
-                    <Typography variant="body2">{product.specifications.manufacturer}</Typography>
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Serial number
-                    </Typography>
-                    <Typography variant="body2">{product.specifications.serialNumber}</Typography>
-                  </Grid>
-                  <Grid item xs={6} sm={3}>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                      Ships from
-                    </Typography>
-                    <Typography variant="body2">{product.specifications.shipsFrom}</Typography>
-                  </Grid>
-                </Grid>
-              </Stack>
-
-              {/* Product Details */}
-              <Stack spacing={2}>
-                <Typography variant="h6">Product details</Typography>
-                <Stack spacing={1}>
-                  {product.productDetails.map((detail, index) => (
-                    <Typography key={index} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <Box component="span" sx={{ mr: 1 }}>•</Box>
-                      {detail}
-                    </Typography>
-                  ))}
-                </Stack>
-              </Stack>
-
-              {/* Benefits */}
-              <Stack spacing={2}>
-                <Typography variant="h6">Benefits</Typography>
-                <Stack spacing={1}>
-                  {product.benefits.map((benefit, index) => (
-                    <Typography key={index} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                      <Box component="span" sx={{ mr: 1 }}>•</Box>
-                      {benefit}
-                    </Typography>
-                  ))}
-                </Stack>
-              </Stack>
-            </Stack>
-          )}
-
-          {selectedTab === 1 && (
-            <Stack spacing={2}>
-              <Typography variant="h6">Customer Reviews</Typography>
-              <Stack spacing={2}>
-                {PRODUCT_REVIEWS.slice((reviewsPage - 1) * 3, reviewsPage * 3).map((review) => (
-                  <Box key={review.id} sx={{ p: 1.5, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-                    <Stack direction="row" spacing={1.5} sx={{ mb: 1 }}>
-                      <Avatar sx={{ width: 40, height: 40 }}>
-                        {review.isAnonymous ? 'A' : review.customerName.charAt(0)}
-                      </Avatar>
-                      <Box sx={{ flex: 1 }}>
-                        <Stack direction="row" alignItems="center" spacing={1}>
-                          <Typography variant="subtitle2">
-                            {review.isAnonymous ? 'Anonymous' : review.customerName}
-                          </Typography>
-                          <Rating value={review.rating} readOnly size="small" />
-                        </Stack>
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                          {review.date}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                    <Typography variant="body2" sx={{ mb: 1 }}>
-                      {review.comment}
-                    </Typography>
-                    {review.images.length > 0 && (
-                      <Stack direction="row" spacing={1}>
-                        {review.images.map((image, index) => (
-                          <Box
-                            key={index}
-                            component="img"
-                            src={image}
-                            alt={`Review ${index + 1}`}
-                            sx={{
-                              width: 60,
-                              height: 60,
-                              borderRadius: 1,
-                              objectFit: 'cover',
-                              cursor: 'pointer'
-                            }}
-                          />
-                        ))}
-                      </Stack>
-                    )}
-                  </Box>
-                ))}
-              </Stack>
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 3 }}>
-                <Pagination
-                  count={Math.ceil(PRODUCT_REVIEWS.length / 3)}
-                  page={reviewsPage}
-                  onChange={(event, value) => setReviewsPage(value)}
-                  color="primary"
-                />
-              </Box>
-            </Stack>
-          )}
-
-          {selectedTab === 2 && (
-            <Stack spacing={3}>
-              <Typography variant="h6">Shipping & Returns</Typography>
-              
-              {/* Shipping Options */}
-              <Stack spacing={2}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                  🚚 Shipping Options
-                </Typography>
-                
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={4}>
-                    <Box sx={{ p: 2, border: 1, borderColor: 'success.lighter', borderRadius: 2, bgcolor: 'success.lighter', textAlign: 'center' }}>
-                      <Iconify icon="eva:gift-fill" width={32} sx={{ color: 'success.main', mb: 1 }} />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Free Delivery</Typography>
-                      <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
-                        Orders ₱2,000+ get free standard delivery
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={4}>
-                    <Box sx={{ p: 2, border: 1, borderColor: 'info.lighter', borderRadius: 2, bgcolor: 'info.lighter', textAlign: 'center' }}>
-                      <Iconify icon="eva:truck-fill" width={32} sx={{ color: 'info.main', mb: 1 }} />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Standard Delivery</Typography>
-                      <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
-                        4-5 Business Days
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={4}>
-                    <Box sx={{ p: 2, border: 1, borderColor: 'warning.lighter', borderRadius: 2, bgcolor: 'warning.lighter', textAlign: 'center' }}>
-                      <Iconify icon="eva:flash-fill" width={32} sx={{ color: 'warning.main', mb: 1 }} />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Express Delivery</Typography>
-                      <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
-                        2-4 Business Days
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-              </Stack>
-
-              {/* Returns & Exchanges */}
-              <Stack spacing={2}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: 'primary.main' }}>
-                  🔄 Returns & Exchanges
-                </Typography>
-                
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                        <Iconify icon="eva:clock-fill" width={20} sx={{ color: 'info.main' }} />
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Return Period</Typography>
-                      </Stack>
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        10 days from delivery date for returns and exchanges
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={12} sm={6}>
-                    <Box sx={{ p: 2, border: 1, borderColor: 'divider', borderRadius: 2 }}>
-                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                        <Iconify icon="eva:shield-fill" width={20} sx={{ color: 'success.main' }} />
-                        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Condition</Typography>
-                      </Stack>
-                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                        Items must be in original condition with tags attached
-                      </Typography>
-                    </Box>
-                  </Grid>
-                </Grid>
-              </Stack>
-
-              {/* Processing Information */}
-              <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2, border: 1, borderColor: 'grey.200' }}>
-                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                  <Iconify icon="eva:info-fill" width={20} sx={{ color: 'info.main' }} />
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Processing Information</Typography>
-                </Stack>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Orders are processed and delivered Monday-Friday (excluding public holidays). 
-                  Same-day processing for orders placed before 2:00 PM.
-                </Typography>
-              </Box>
-            </Stack>
-          )}
-        </Box>
       </Card>
     </Grid>
   );
@@ -1023,7 +803,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
         {renderProductImages}
         {renderProductInfo}
         {renderWarrantyBenefits}
-        {renderTabs}
+        {renderDescription}
       </Grid>
 
       {/* Floating Back to Top Button */}

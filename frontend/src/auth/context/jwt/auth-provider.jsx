@@ -173,9 +173,9 @@ export function AuthProvider({ children }) {
     
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Idle auto-logout (5 minutes of no activity)
+    // Idle auto-logout (1 hour of no activity)
     let idleTimer;
-    const IDLE_MS = 5 * 60 * 1000;
+    const IDLE_MS = 60 * 60 * 1000;
     const resetIdle = () => {
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {

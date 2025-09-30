@@ -10,6 +10,7 @@ import { MotionLazy } from 'src/components/animate/motion-lazy';
 import { detectSettings } from 'src/components/settings/server';
 import { defaultSettings, SettingsProvider } from 'src/components/settings';
 import { React19Compatibility } from 'src/components/react19-compat';
+import 'src/utils/debug-info-fix';
 
 import { AuthProvider } from 'src/auth/context/jwt';
 import { CheckoutProvider } from 'src/sections/checkout/context';

@@ -4,6 +4,7 @@
 
 import { VISAYAS_ADDRESS } from './visayas-address';
 import { MOUNTAIN_PROVINCES_ADDRESS } from './mountain-provinces-address';
+import { MINDANAO_ADDRESS } from './mindanao-address';
 
 const LUZON_ADDRESS = {
   "BATANGAS": {
@@ -1771,7 +1772,8 @@ const LUZON_ADDRESS = {
 export const PHILIPPINES_ADDRESS = {
   ...LUZON_ADDRESS,
   ...VISAYAS_ADDRESS,
-  ...MOUNTAIN_PROVINCES_ADDRESS
+  ...MOUNTAIN_PROVINCES_ADDRESS,
+  ...MINDANAO_ADDRESS
 };
 
 // Export provinces list

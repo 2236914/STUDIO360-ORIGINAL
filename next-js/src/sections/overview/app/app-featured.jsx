@@ -4,6 +4,7 @@ import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Card from '@mui/material/Card';
 import Typography from '@mui/material/Typography';
+import { styled, keyframes } from '@mui/material/styles';
 
 import { varAlpha } from 'src/theme/styles';
 
@@ -17,29 +18,75 @@ import {
 
 // ----------------------------------------------------------------------
 
+// Create infinite scroll animation
+const infiniteScroll = keyframes`
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+`;
+
+// Create smooth infinite scroll animation
+const smoothInfiniteScroll = keyframes`
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+`;
+
+const InfiniteScrollContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  width: '200%', // Double width to create seamless loop
+  animation: `${smoothInfiniteScroll} 30s linear infinite`,
+  '&:hover': {
+    animationPlayState: 'paused', // Pause on hover for better UX
+  },
+}));
+
+const ScrollItem = styled(Box)(({ theme }) => ({
+  width: '50%', // Each item takes half the container width
+  flexShrink: 0,
+}));
+
 export function AppFeatured({ list, sx, ...other }) {
-  const carousel = useCarousel({ loop: true }, [Autoplay({ playOnInit: true, delay: 8000 })]);
+  // Duplicate the list to create seamless infinite scroll
+  const duplicatedList = [...list, ...list];
 
   return (
-    <Card sx={{ bgcolor: 'common.black', ...sx }} {...other}>
-      <CarouselDotButtons
-        scrollSnaps={carousel.dots.scrollSnaps}
-        selectedIndex={carousel.dots.selectedIndex}
-        onClickDot={carousel.dots.onClickDot}
-        sx={{ top: 16, left: 16, position: 'absolute', color: 'primary.light' }}
-      />
-
-      <CarouselArrowBasicButtons
-        {...carousel.arrows}
-        options={carousel.options}
-        sx={{ top: 8, right: 8, position: 'absolute', color: 'common.white' }}
-      />
-
-      <Carousel carousel={carousel}>
-        {list.map((item) => (
-          <CarouselItem key={item.id} item={item} />
+    <Card 
+      sx={{ 
+        bgcolor: 'common.black', 
+        overflow: 'hidden',
+        position: 'relative',
+        ...sx 
+      }} 
+      {...other}
+    >
+      <InfiniteScrollContainer>
+        {duplicatedList.map((item, index) => (
+          <ScrollItem key={`${item.id}-${index}`}>
+            <CarouselItem item={item} />
+          </ScrollItem>
         ))}
-      </Carousel>
+      </InfiniteScrollContainer>
+      
+      {/* Optional: Add gradient overlays for better visual effect */}
+      <Box
+        sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'linear-gradient(to right, rgba(0,0,0,0.8) 0%, transparent 10%, transparent 90%, rgba(0,0,0,0.8) 100%)',
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      />
     </Card>
   );
 }
@@ -48,7 +95,13 @@ export function AppFeatured({ list, sx, ...other }) {
 
 function CarouselItem({ item, ...other }) {
   return (
-    <Box sx={{ width: 1, position: 'relative', ...other }}>
+    <Box sx={{ 
+      width: 1, 
+      height: { xs: 288, xl: 320 },
+      position: 'relative', 
+      margin: '0 8px', // Add some spacing between items
+      ...other 
+    }}>
       <Box
         sx={{
           p: 3,
@@ -86,7 +139,8 @@ function CarouselItem({ item, ...other }) {
         }}
         sx={{
           width: 1,
-          height: { xs: 288, xl: 320 },
+          height: 1,
+          borderRadius: 1,
         }}
       />
     </Box>

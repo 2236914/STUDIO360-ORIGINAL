@@ -24,7 +24,8 @@ export function ProgressBar() {
       const targetUrl = event.currentTarget.href;
       const currentUrl = window.location.href;
 
-      if (targetUrl !== currentUrl) {
+      // Don't show progress bar for dashboard navigation
+      if (targetUrl !== currentUrl && !targetUrl.includes('/dashboard/')) {
         NProgress.start();
       }
     };
@@ -76,12 +77,20 @@ export function ProgressBar() {
       const originalReplaceState = window.history.replaceState;
       
       window.history.pushState = function(...args) {
-        NProgress.start();
+        // Don't show progress bar for dashboard navigation
+        const url = args[2] || '';
+        if (!url.includes('/dashboard/')) {
+          NProgress.start();
+        }
         return originalPushState.apply(this, args);
       };
       
       window.history.replaceState = function(...args) {
-        NProgress.start();
+        // Don't show progress bar for dashboard navigation
+        const url = args[2] || '';
+        if (!url.includes('/dashboard/')) {
+          NProgress.start();
+        }
         return originalReplaceState.apply(this, args);
       };
     }
@@ -109,7 +118,7 @@ function NProgressDone() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Ensure progress bar completes when route changes
+    // Always complete progress bar when route changes, regardless of route
     const timer = setTimeout(() => {
       NProgress.done();
     }, 100);

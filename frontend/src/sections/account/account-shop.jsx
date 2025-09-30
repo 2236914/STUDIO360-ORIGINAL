@@ -128,24 +128,9 @@ export function AccountShop() {
       city: 'Quezon City',
       province: 'Metro Manila',
       zipCode: '1100',
-      about: 'Premium fashion and lifestyle products with exceptional quality and customer service.',
       profileImage: null,
-      backgroundImage: null,
       shopCategory: '',
       customCategory: '',
-      // Business Hours
-      mondayToFriday: '9:00 AM - 6:00 PM',
-      saturday: '10:00 AM - 4:00 PM',
-      sunday: 'Closed',
-      // Social Media Links
-      facebookUrl: '',
-      instagramUrl: '',
-      twitterUrl: '',
-      youtubeUrl: '',
-      tiktokUrl: '',
-      // Announcement Banner
-      announcementText: 'Spend ₱1,500 and get FREE tracked nationwide shipping!',
-      announcementEnabled: true,
       freeShippingEnabled: true,
       freeShippingMinAmount: 2000,
     },
@@ -197,6 +182,18 @@ export function AccountShop() {
         }
       }
       
+      // Save shipping configuration
+      const shippingConfig = {
+        freeShippingEnabled: data.freeShippingEnabled,
+        freeShippingMinAmount: parseFloat(data.freeShippingMinAmount) || 0,
+        couriers: couriers
+      };
+      
+      // Import and save the shipping config
+      const { saveSellerShippingConfig } = await import('src/services/shippingConfigService');
+      const storeId = 'kitschstudio'; // In real app, this would come from user context
+      saveSellerShippingConfig(storeId, shippingConfig);
+      
       await new Promise((resolve) => setTimeout(resolve, 500));
       toast.success('Shop information updated successfully!');
       console.info('Shop Data:', data);
@@ -204,7 +201,26 @@ export function AccountShop() {
       toast.error('Failed to update shop information');
       console.error('Save error:', error);
     }
-  }, []);
+  }, [couriers]);
+
+  // Helper function to save couriers configuration
+  const saveCouriersConfig = useCallback(async (updatedCouriers) => {
+    try {
+      const { saveSellerShippingConfig } = await import('src/services/shippingConfigService');
+      const storeId = 'kitschstudio'; // In real app, this would come from user context
+      
+      const currentConfig = shopMethods.getValues();
+      const shippingConfig = {
+        freeShippingEnabled: currentConfig.freeShippingEnabled,
+        freeShippingMinAmount: parseFloat(currentConfig.freeShippingMinAmount) || 0,
+        couriers: updatedCouriers
+      };
+      
+      saveSellerShippingConfig(storeId, shippingConfig);
+    } catch (error) {
+      console.error('Error saving couriers config:', error);
+    }
+  }, [shopMethods]);
 
   const handleAddCourier = useCallback(async (data) => {
     try {
@@ -249,7 +265,12 @@ export function AccountShop() {
         regions: defaultRegions,
       };
       
-      setCouriers((prev) => [...prev, newCourier]);
+      setCouriers((prev) => {
+        const updated = [...prev, newCourier];
+        // Save the updated couriers configuration
+        saveCouriersConfig(updated);
+        return updated;
+      });
       courierMethods.reset();
       courierDialog.onFalse();
       toast.success('Courier added successfully! Please set shipping fees for each region.');
@@ -424,6 +445,9 @@ export function AccountShop() {
         }));
       }
       
+      // Save the updated couriers configuration
+      saveCouriersConfig(updatedShipping);
+      
       return updatedShipping;
     });
     toast.success('Shipping type status updated!');
@@ -575,44 +599,6 @@ export function AccountShop() {
 
   return (
     <Stack spacing={3}>
-      {/* Announcement Banner Card */}
-      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
-        <Box sx={{ p: 3 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
-            <Iconify icon="eva:megaphone-outline" width={20} sx={{ color: 'text.primary' }} />
-            <Typography variant="h6">
-              Announcement Banner
-            </Typography>
-          </Stack>
-
-          <Form methods={shopMethods} onSubmit={shopMethods.handleSubmit(handleSaveShopInfo)}>
-            <Stack spacing={3}>
-              <Field.Switch
-                name="announcementEnabled"
-                label="Enable Announcement Banner"
-                helperText="Show promotional banner at the top of your store page"
-              />
-              
-              <Field.Text
-                name="announcementText"
-                label="Announcement Text"
-                placeholder="e.g., Spend ₱1,500 and get FREE tracked nationwide shipping!"
-                disabled={!shopMethods.watch('announcementEnabled')}
-                multiline
-                rows={2}
-                inputProps={{ maxLength: 200 }}
-                helperText="Maximum 200 characters"
-              />
-
-              <Stack direction="row" justifyContent="flex-end">
-                <Button type="submit" variant="outlined" size="small">
-                  Save Announcement
-                </Button>
-              </Stack>
-            </Stack>
-          </Form>
-        </Box>
-      </Card>
 
       {/* Shop Info Card */}
       <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
@@ -650,30 +636,6 @@ export function AccountShop() {
                     />
                   </Stack>
 
-                  <Stack spacing={2} alignItems="center">
-                    <Typography variant="subtitle2" sx={{ color: 'text.primary' }}>
-                      Shop Background Image
-                    </Typography>
-                    <Field.Upload
-                      name="backgroundImage"
-                      maxSize={5242880}
-                      helperText={
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            mt: 2,
-                            mx: 'auto',
-                            display: 'block',
-                            textAlign: 'center',
-                            color: 'text.disabled',
-                          }}
-                        >
-                          Recommended: 1920x400px
-                          <br /> Max size of 5MB
-                        </Typography>
-                      }
-                    />
-                  </Stack>
                 </Stack>
               </Grid>
 
@@ -749,7 +711,6 @@ export function AccountShop() {
                     </Grid>
                   </Grid>
 
-                  <Field.Text name="about" label="About" multiline rows={4} />
 
                   <Stack direction="row" justifyContent="flex-end">
                     <Button type="submit" variant="contained" size="large">
@@ -763,158 +724,7 @@ export function AccountShop() {
         </Box>
       </Card>
 
-      {/* Business Hours Card */}
-      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
-        <Box sx={{ p: 3 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
-            <Iconify icon="eva:clock-outline" width={20} sx={{ color: 'text.primary' }} />
-            <Typography variant="h6">
-              Business Hours
-            </Typography>
-          </Stack>
 
-          <Form methods={shopMethods} onSubmit={shopMethods.handleSubmit(handleSaveShopInfo)}>
-            <Stack spacing={3}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={4}>
-                  <Field.Text
-                    name="mondayToFriday"
-                    label="Monday - Friday"
-                    placeholder="e.g., 9:00 AM - 6:00 PM"
-                    helperText="Operating hours for weekdays"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Field.Text
-                    name="saturday"
-                    label="Saturday"
-                    placeholder="e.g., 10:00 AM - 4:00 PM"
-                    helperText="Saturday operating hours"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Field.Text
-                    name="sunday"
-                    label="Sunday"
-                    placeholder="e.g., Closed or 12:00 PM - 4:00 PM"
-                    helperText="Sunday operating hours"
-                  />
-                </Grid>
-              </Grid>
-
-              <Stack direction="row" justifyContent="flex-end">
-                <Button type="submit" variant="outlined" size="small">
-                  Save Business Hours
-                </Button>
-              </Stack>
-            </Stack>
-          </Form>
-        </Box>
-      </Card>
-
-      {/* Social Media Card */}
-      <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>
-        <Box sx={{ p: 3 }}>
-          <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3 }}>
-            <Iconify icon="eva:share-outline" width={20} sx={{ color: 'text.primary' }} />
-            <Typography variant="h6">
-              Social Media Links
-            </Typography>
-          </Stack>
-
-          <Form methods={shopMethods} onSubmit={shopMethods.handleSubmit(handleSaveShopInfo)}>
-            <Stack spacing={3}>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Field.Text
-                    name="facebookUrl"
-                    label="Facebook URL"
-                    placeholder="https://facebook.com/yourpage"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Iconify icon="eva:facebook-fill" width={20} sx={{ color: '#1877F2' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Field.Text
-                    name="instagramUrl"
-                    label="Instagram URL"
-                    placeholder="https://instagram.com/yourpage"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Iconify icon="eva:instagram-fill" width={20} sx={{ color: '#E4405F' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Field.Text
-                    name="twitterUrl"
-                    label="Twitter URL"
-                    placeholder="https://twitter.com/yourpage"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Iconify icon="eva:twitter-fill" width={20} sx={{ color: '#1DA1F2' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Field.Text
-                    name="youtubeUrl"
-                    label="YouTube URL"
-                    placeholder="https://youtube.com/yourchannel"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Iconify icon="eva:youtube-fill" width={20} sx={{ color: '#FF0000' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Field.Text
-                    name="tiktokUrl"
-                    label="TikTok URL"
-                    placeholder="https://tiktok.com/@yourpage"
-                    InputProps={{
-                      startAdornment: (
-                        <InputAdornment position="start">
-                          <Iconify icon="eva:video-outline" width={20} sx={{ color: '#000000' }} />
-                        </InputAdornment>
-                      ),
-                    }}
-                  />
-                </Grid>
-              </Grid>
-
-              <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                <Stack direction="row" spacing={1.5} alignItems="flex-start">
-                  <Iconify icon="eva:info-outline" width={16} sx={{ color: 'text.secondary', mt: 0.25 }} />
-                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                    Add your social media links to help customers connect with your brand. Leave fields empty if you don't have those social media accounts.
-                  </Typography>
-                </Stack>
-              </Box>
-
-              <Stack direction="row" justifyContent="flex-end">
-                <Button type="submit" variant="outlined" size="small">
-                  Save Social Media Links
-                </Button>
-              </Stack>
-            </Stack>
-          </Form>
-        </Box>
-      </Card>
 
       {/* Shipping Info Card */}
       <Card variant="outlined" sx={{ borderRadius: 2, boxShadow: 'none' }}>

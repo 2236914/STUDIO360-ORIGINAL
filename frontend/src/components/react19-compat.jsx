@@ -11,6 +11,38 @@ const applyReact19Patches = () => {
     return;
   }
 
+  // Patch Object.defineProperty to handle _debugInfo conflicts
+  const originalDefineProperty = Object.defineProperty;
+  Object.defineProperty = function(obj, prop, descriptor) {
+    // Handle _debugInfo property specifically to prevent redefinition errors
+    if (prop === '_debugInfo') {
+      try {
+        // Check if property already exists
+        if (obj.hasOwnProperty('_debugInfo')) {
+          console.warn('_debugInfo already exists, skipping redefinition');
+          return obj;
+        }
+        
+        // Make sure the new descriptor allows future configuration
+        const safeDescriptor = {
+          ...descriptor,
+          configurable: true,
+        };
+        
+        return originalDefineProperty.call(this, obj, prop, safeDescriptor);
+      } catch (error) {
+        if (error.message && error.message.includes('Cannot redefine property')) {
+          console.warn('Prevented _debugInfo redefinition error');
+          return obj;
+        }
+        throw error;
+      }
+    }
+    
+    // For all other properties, use the original function
+    return originalDefineProperty.call(this, obj, prop, descriptor);
+  };
+
 // Patch console.error as early as possible (module load) to catch warnings
 // that may fire before React effects run (e.g., during initial render in dev).
   const originalError = console.error;
@@ -74,6 +106,20 @@ const applyReact19Patches = () => {
     ) {
       // Only suppress in development
       if (process.env.NODE_ENV === 'development') {
+        return;
+      }
+    }
+    
+    // Suppress _debugInfo property redefinition errors (Next.js 15.x with React DevTools)
+    if (
+      typeof message === 'string' &&
+      (message.includes('Cannot redefine property: _debugInfo') ||
+        message.includes('_debugInfo') ||
+        message.includes('Object.defineProperty'))
+    ) {
+      // Only suppress in development - this is a known Next.js 15.x DevTools issue
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('Next.js DevTools _debugInfo warning suppressed (known issue in 15.x)');
         return;
       }
     }

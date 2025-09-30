@@ -94,6 +94,7 @@ export function AccountGeneral() {
           >
             <Field.UploadAvatar
               name="photoURL"
+              allowUrl
               maxSize={3145728}
               helperText={
                 <Typography

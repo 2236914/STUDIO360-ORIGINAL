@@ -97,7 +97,21 @@ export const paths = {
       details: (id) => `${ROOTS.DASHBOARD}/invoice/${id}`,
       edit: (id) => `${ROOTS.DASHBOARD}/invoice/${id}/edit`,
     },
+    vouchers: {
+      root: `${ROOTS.DASHBOARD}/vouchers`,
+      new: `${ROOTS.DASHBOARD}/vouchers/new`,
+      details: (id) => `${ROOTS.DASHBOARD}/vouchers/${id}`,
+      edit: (id) => `${ROOTS.DASHBOARD}/vouchers/${id}/edit`,
+    },
     mail: `${ROOTS.DASHBOARD}/mail`,
+    // Store Storefront Editor
+    store: {
+      root: `${ROOTS.DASHBOARD}/store`,
+      homepage: `${ROOTS.DASHBOARD}/store/homepage`,
+      shipping: `${ROOTS.DASHBOARD}/store/shipping`,
+      about: `${ROOTS.DASHBOARD}/store/about`,
+      events: `${ROOTS.DASHBOARD}/store/events`,
+    },
     // User
     user: {
       root: `${ROOTS.DASHBOARD}/user`,

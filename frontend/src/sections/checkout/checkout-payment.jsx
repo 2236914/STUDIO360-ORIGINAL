@@ -25,16 +25,29 @@ const DELIVERY_OPTIONS = [
 
 const PAYMENT_OPTIONS = [
   {
+    value: 'qrph',
+    label: 'QRPh',
+    description: 'Pay using QR Philippines for instant and secure payments.',
+    icon: '/assets/icons/payment/ic-qrph.svg'
+  },
+  {
+    value: 'gcash',
+    label: 'GCash',
+    description: 'Pay using your GCash wallet.',
+    icon: '/assets/icons/payment/ic-gcash.svg'
+  },
+  {
     value: 'paypal',
-    label: 'Pay with Paypal',
+    label: 'PayPal',
     description: 'You will be redirected to PayPal website to complete your purchase securely.',
+    icon: 'logos:paypal'
   },
   {
     value: 'credit',
     label: 'Credit / Debit card',
     description: 'We support Mastercard, Visa, Discover and Stripe.',
+    icon: 'logos:visa'
   },
-  { value: 'cash', label: 'Cash', description: 'Pay with cash when your order is delivered.' },
 ];
 
 const CARDS_OPTIONS = [

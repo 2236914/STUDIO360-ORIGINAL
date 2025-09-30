@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import Box from '@mui/material/Box';
+import { styled, keyframes } from '@mui/material/styles';
 
 import { Image } from 'src/components/image';
 import { Lightbox, useLightBox } from 'src/components/lightbox';
@@ -14,47 +15,78 @@ import {
 
 // ----------------------------------------------------------------------
 
-export function ProductDetailsCarousel({ images }) {
-  const carousel = useCarousel({
-    thumbs: {
-      slidesToShow: 'auto',
-    },
-  });
+// Create smooth infinite scroll animation for product images
+const smoothInfiniteScroll = keyframes`
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+`;
 
+const InfiniteScrollContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  width: '200%', // Double width to create seamless loop
+  animation: `${smoothInfiniteScroll} 40s linear infinite`,
+  '&:hover': {
+    animationPlayState: 'paused', // Pause on hover for better UX
+  },
+}));
+
+const ScrollItem = styled(Box)(({ theme }) => ({
+  width: '50%', // Each item takes half the container width
+  flexShrink: 0,
+  padding: theme.spacing(0, 1), // Add spacing between items
+}));
+
+export function ProductDetailsCarousel({ images }) {
   const slides = images?.map((img) => ({ src: img })) || [];
+  
+  // Duplicate the slides to create seamless infinite scroll
+  const duplicatedSlides = [...slides, ...slides];
 
   const lightbox = useLightBox(slides);
 
-  useEffect(() => {
-    if (lightbox.open) {
-      carousel.mainApi?.scrollTo(lightbox.selected, true);
-    }
-  }, [carousel.mainApi, lightbox.open, lightbox.selected]);
-
   return (
     <>
-      <div>
-        <Box sx={{ mb: 2.5, position: 'relative' }}>
-          <CarouselArrowNumberButtons
-            {...carousel.arrows}
-            options={carousel.options}
-            totalSlides={carousel.dots.dotCount}
-            selectedIndex={carousel.dots.selectedIndex + 1}
-            sx={{ right: 16, bottom: 16, position: 'absolute' }}
-          />
-
-          <Carousel carousel={carousel} sx={{ borderRadius: 2 }}>
-            {slides.map((slide) => (
-              <Image
-                key={slide.src}
-                alt={slide.src}
-                src={slide.src}
-                ratio="1/1"
-                onClick={() => lightbox.onOpen(slide.src)}
-                sx={{ cursor: 'zoom-in', minWidth: 320 }}
-              />
+      <Box sx={{ mb: 2.5, position: 'relative' }}>
+        <Box sx={{ position: 'relative', overflow: 'hidden', borderRadius: 2 }}>
+          <InfiniteScrollContainer>
+            {duplicatedSlides.map((slide, index) => (
+              <ScrollItem key={`${slide.src}-${index}`}>
+                <Image
+                  alt={slide.src}
+                  src={slide.src}
+                  ratio="1/1"
+                  onClick={() => lightbox.onOpen(slide.src)}
+                  sx={{ 
+                    cursor: 'zoom-in', 
+                    minWidth: 320,
+                    borderRadius: 1,
+                    transition: 'transform 0.3s ease',
+                    '&:hover': {
+                      transform: 'scale(1.02)',
+                    }
+                  }}
+                />
+              </ScrollItem>
             ))}
-          </Carousel>
+          </InfiniteScrollContainer>
+          
+          {/* Optional: Add gradient overlays for better visual effect */}
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(to right, rgba(0,0,0,0.3) 0%, transparent 10%, transparent 90%, rgba(0,0,0,0.3) 100%)',
+              pointerEvents: 'none',
+              zIndex: 1,
+            }}
+          />
         </Box>
 
         <CarouselThumbs

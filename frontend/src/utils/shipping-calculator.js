@@ -125,17 +125,32 @@ export const MOCK_SELLER_SHIPPING_CONFIG = {
  * Calculates available shipping options based on customer address and seller configuration
  * @param {string} province - Customer's province
  * @param {string} city - Customer's city (optional, for future city-specific rates)
- * @param {Object} sellerConfig - Seller's shipping configuration (optional, uses mock if not provided)
+ * @param {Object} sellerConfig - Seller's shipping configuration (optional, uses seller's actual config if not provided)
  * @param {number} orderAmount - Total order amount to check free shipping eligibility (optional)
+ * @param {string} storeId - Store ID to fetch seller's configuration (optional)
  * @returns {Array} - Available shipping options with prices
  */
-export function calculateShippingOptions(province, city = null, sellerConfig = null, orderAmount = 0) {
+export function calculateShippingOptions(province, city = null, sellerConfig = null, orderAmount = 0, storeId = null) {
   if (!province) {
     return [];
   }
   
   const region = getShippingRegion(province);
-  const config = sellerConfig || MOCK_SELLER_SHIPPING_CONFIG;
+  
+  // Use provided config, or fetch seller's actual config, or fallback to mock
+  let config = sellerConfig;
+  if (!config && storeId) {
+    try {
+      // Import the service dynamically to avoid circular dependencies
+      const { getShippingConfigForStore } = require('../services/shippingConfigService');
+      config = getShippingConfigForStore(storeId);
+    } catch (error) {
+      console.warn('Could not load seller shipping config, using mock:', error);
+      config = MOCK_SELLER_SHIPPING_CONFIG;
+    }
+  } else if (!config) {
+    config = MOCK_SELLER_SHIPPING_CONFIG;
+  }
   
   const availableOptions = [];
   

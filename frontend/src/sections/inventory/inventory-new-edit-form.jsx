@@ -256,6 +256,7 @@ export function InventoryNewEditForm({ currentProduct }) {
             multiple
             thumbnail
             name="images"
+            allowUrl
             maxSize={3145728}
             onRemove={handleRemoveFile}
             onRemoveAll={handleRemoveAllFiles}
