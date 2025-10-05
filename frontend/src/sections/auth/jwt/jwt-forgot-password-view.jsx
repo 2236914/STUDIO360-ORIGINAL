@@ -1,15 +1,22 @@
 'use client';
 
+import { z as zod } from 'zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z as zod } from 'zod';
+
 import Link from '@mui/material/Link';
+import Alert from '@mui/material/Alert';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import LoadingButton from '@mui/lab/LoadingButton';
+
 import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
+
+import { Iconify } from 'src/components/iconify';
+import { Form, Field } from 'src/components/hook-form';
+
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
@@ -22,7 +29,6 @@ const ForgotPasswordSchema = zod.object({
 });
 
 export function JwtForgotPasswordView() {
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitted, setIsSubmitted] = useState(false);
 
@@ -35,12 +41,11 @@ export function JwtForgotPasswordView() {
 
   const {
     handleSubmit,
-    formState: { errors },
+    formState: { isSubmitting },
   } = methods;
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      setIsSubmitting(true);
       setErrorMsg('');
       
       const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
@@ -53,94 +58,89 @@ export function JwtForgotPasswordView() {
     } catch (error) {
       console.error('Error:', error);
       setErrorMsg(error.message || 'Failed to send reset email');
-    } finally {
-      setIsSubmitting(false);
     }
   });
 
-  return (
-    <Stack spacing={3} sx={{ maxWidth: 400, mx: 'auto' }}>
-      <Typography variant="h4" gutterBottom>
-        Forgot Password
-      </Typography>
+  const renderHead = (
+    <Stack spacing={1.5} sx={{ mb: 5 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" />
+      <Typography variant="h5">Forgot your password?</Typography>
 
-      {errorMsg && (
-        <Typography color="error" variant="body2" sx={{ mb: 2 }}>
-          {errorMsg}
+      <Stack direction="row" spacing={0.5}>
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          {`Remember your password?`}
         </Typography>
+
+        <Link component={RouterLink} href={paths.auth.jwt.signIn} variant="subtitle2">
+          Sign in
+        </Link>
+      </Stack>
+    </Stack>
+  );
+
+  const renderForm = (
+    <Stack spacing={3}>
+      <Field.Text
+        name="email"
+        label="Email address"
+        placeholder="Enter your email"
+        InputLabelProps={{ shrink: true }}
+      />
+
+      <LoadingButton
+        fullWidth
+        color="inherit"
+        size="large"
+        type="submit"
+        variant="contained"
+        loading={isSubmitting}
+        loadingIndicator="Sending..."
+      >
+        Send Reset Link
+      </LoadingButton>
+    </Stack>
+  );
+
+  const renderSuccess = (
+    <Stack spacing={3}>
+      <Alert severity="success" sx={{ mb: 3 }}>
+        We've sent a password reset link to your email. Please check your inbox.
+      </Alert>
+      
+      <Link
+        component={RouterLink}
+        href={paths.auth.jwt.signIn}
+        color="inherit"
+        variant="subtitle2"
+        sx={{
+          mt: 3,
+          mx: 'auto',
+          alignItems: 'center',
+          display: 'inline-flex',
+        }}
+      >
+        Back to sign in
+      </Link>
+    </Stack>
+  );
+
+  return (
+    <>
+      {renderHead}
+
+      {!!errorMsg && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {errorMsg}
+        </Alert>
       )}
 
       {isSubmitted ? (
-        <Stack spacing={2}>
-          <Typography>
-            We've sent a password reset link to your email. Please check your inbox.
-          </Typography>
-          <Link
-            component={RouterLink}
-            href={paths.auth.jwt.signIn}
-            color="inherit"
-            variant="subtitle2"
-            sx={{
-              mt: 3,
-              mx: 'auto',
-              alignItems: 'center',
-              display: 'inline-flex',
-            }}
-          >
-            Back to sign in
-          </Link>
-        </Stack>
+        renderSuccess
       ) : (
-        <form onSubmit={onSubmit}>
-          <Stack spacing={3}>
-            <Stack spacing={1}>
-              <Typography variant="subtitle2">Email address</Typography>
-              <input
-                name="email"
-                type="email"
-                placeholder="Enter your email"
-                {...methods.register('email')}
-                style={{
-                  padding: '12px',
-                  borderRadius: '8px',
-                  border: errors.email ? '1px solid red' : '1px solid #ccc',
-                  width: '100%',
-                }}
-              />
-              {errors.email && (
-                <Typography color="error" variant="caption">
-                  {errors.email.message}
-                </Typography>
-              )}
-            </Stack>
-
-            <LoadingButton
-              fullWidth
-              size="large"
-              type="submit"
-              variant="contained"
-              loading={isSubmitting}
-            >
-              Send Reset Link
-            </LoadingButton>
-
-            <Link
-              component={RouterLink}
-              href={paths.auth.jwt.signIn}
-              color="inherit"
-              variant="subtitle2"
-              sx={{
-                mt: 3,
-                mx: 'auto',
-                alignItems: 'center',
-                display: 'inline-flex',
-              }}
-            >
-              Back to sign in
-            </Link>
-          </Stack>
-        </form>
+        <Form methods={methods} onSubmit={onSubmit}>
+          {renderForm}
+        </Form>
       )}
-    </Stack>
+    </>
   );
 }

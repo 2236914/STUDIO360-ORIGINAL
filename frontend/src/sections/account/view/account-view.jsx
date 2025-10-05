@@ -15,7 +15,6 @@ import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 import { AccountShop } from '../account-shop';
-import { AccountCustomerSupport } from '../account-customer-support';
 import { AccountHistory } from '../account-history';
 import { AccountSettings } from '../account-settings';
 
@@ -26,11 +25,6 @@ const TABS = [
     value: 'shop',
     label: 'Shop',
     icon: <Iconify icon="solar:shop-bold" width={24} />,
-  },
-  {
-    value: 'customer-support',
-    label: 'Customer Support',
-    icon: <Iconify icon="solar:headphones-round-sound-bold" width={24} />,
   },
   {
     value: 'history',
@@ -89,7 +83,6 @@ export function AccountView() {
 
         <Box sx={{ p: 3 }}>
           {currentTab === 'shop' && <AccountShop />}
-          {currentTab === 'customer-support' && <AccountCustomerSupport />}
           {currentTab === 'history' && <AccountHistory />}
           {currentTab === 'settings' && <AccountSettings />}
         </Box>

@@ -37,6 +37,7 @@ import { fCurrency } from 'src/utils/format-number';
 import { fDate, fTime } from 'src/utils/format-time';
 
 import { DashboardContent } from 'src/layouts/dashboard';
+import { getOrders } from 'src/services/ordersLocalService';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
@@ -62,7 +63,7 @@ const HIDE_COLUMNS_TOGGLABLE = ['category', 'actions'];
 
 const SYSTEM_LOGO = '/assets/logo/system-logo.png'; // Adjust path as needed
 
-// Sample orders data
+// Initial sample orders data (used only if no saved orders yet)
 const ORDERS_DATA = [
   {
     id: '#6010',
@@ -315,7 +316,10 @@ export function OrdersListView() {
   const router = useRouter();
 
   const filters = useSetState({ status: [] });
-  const [tableData, setTableData] = useState(ORDERS_DATA);
+  const [tableData, setTableData] = useState(() => {
+    const saved = getOrders();
+    return (saved && saved.length) ? saved : ORDERS_DATA;
+  });
   const [selectedRowIds, setSelectedRowIds] = useState([]);
   const [filterButtonEl, setFilterButtonEl] = useState(null);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState(HIDE_COLUMNS);
@@ -330,6 +334,7 @@ export function OrdersListView() {
   const [selectedOrderForAction, setSelectedOrderForAction] = useState(null);
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [orderForInvoice, setOrderForInvoice] = useState(null);
+  const [bulkStatusMenuAnchor, setBulkStatusMenuAnchor] = useState(null);
 
   // Filter data based on search and status
   const dataFiltered = useMemo(() => {
@@ -375,9 +380,9 @@ export function OrdersListView() {
 
   const handleViewRow = useCallback(
     (id) => {
-      console.log('View order:', id);
+      router.push(`/dashboard/orders/${id.toString().replace('#', '')}`);
     },
-    []
+    [router]
   );
 
   const handleEditRow = useCallback(
@@ -511,6 +516,29 @@ export function OrdersListView() {
 
   const handlePrintInvoice = useCallback(() => {
     window.print();
+  }, []);
+
+  // Bulk status update handlers
+  const handleBulkStatusChange = useCallback((newStatus) => {
+    setTableData(prevData => 
+      prevData.map(order => 
+        selectedRowIds.includes(order.id) 
+          ? { ...order, status: newStatus }
+          : order
+      )
+    );
+    setSelectedRowIds([]);
+    setBulkStatusMenuAnchor(null);
+  }, [selectedRowIds]);
+
+
+  // Bulk status menu handlers
+  const handleBulkStatusMenuOpen = useCallback((event) => {
+    setBulkStatusMenuAnchor(event.currentTarget);
+  }, []);
+
+  const handleBulkStatusMenuClose = useCallback(() => {
+    setBulkStatusMenuAnchor(null);
   }, []);
 
 
@@ -714,42 +742,53 @@ export function OrdersListView() {
           })}
         </Stack>
 
+
         {/* Filters and Search Toolbar */}
         <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Start date
-            </Typography>
-            <IconButton size="small" sx={{ bgcolor: 'grey.100' }}>
-              <Iconify icon="eva:calendar-fill" width={16} />
-            </IconButton>
-          </Stack>
+          {selectedRowIds.length === 0 ? (
+            <>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Start date
+                </Typography>
+                <IconButton size="small" sx={{ bgcolor: 'grey.100' }}>
+                  <Iconify icon="eva:calendar-fill" width={16} />
+                </IconButton>
+              </Stack>
 
-          <Stack direction="row" spacing={1} alignItems="center">
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              End date
-            </Typography>
-            <IconButton size="small" sx={{ bgcolor: 'grey.100' }}>
-              <Iconify icon="eva:calendar-fill" width={16} />
-            </IconButton>
-          </Stack>
+              <Stack direction="row" spacing={1} alignItems="center">
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  End date
+                </Typography>
+                <IconButton size="small" sx={{ bgcolor: 'grey.100' }}>
+                  <Iconify icon="eva:calendar-fill" width={16} />
+                </IconButton>
+              </Stack>
 
-          <Box sx={{ flexGrow: 1 }} />
+              <Box sx={{ flexGrow: 1 }} />
 
-          <TextField
-            placeholder="Search customer or order number..."
-            size="small"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Iconify icon="eva:search-fill" width={20} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ minWidth: 300 }}
-          />
+              <TextField
+                placeholder="Search customer or order number..."
+                size="small"
+                value={searchQuery}
+                onChange={handleSearchChange}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Iconify icon="eva:search-fill" width={20} />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ minWidth: 300 }}
+              />
+            </>
+          ) : (
+            <Stack direction="row" alignItems="center" spacing={2} sx={{ flexGrow: 1 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+                {selectedRowIds.length} order{selectedRowIds.length > 1 ? 's' : ''} selected
+              </Typography>
+            </Stack>
+          )}
 
           <Button
             variant="outlined"
@@ -785,9 +824,45 @@ export function OrdersListView() {
             </MenuItem>
           </Menu>
 
-          <IconButton>
-            <Iconify icon="eva:more-vertical-fill" />
-          </IconButton>
+          <Button
+            variant="outlined"
+            startIcon={<Iconify icon="eva:edit-fill" />}
+            endIcon={<Iconify icon="eva:chevron-down-fill" />}
+            onClick={handleBulkStatusMenuOpen}
+            sx={{
+              borderColor: 'grey.300',
+              color: 'text.primary',
+              textTransform: 'none',
+            }}
+          >
+            Change Status
+          </Button>
+
+          <Menu
+            anchorEl={bulkStatusMenuAnchor}
+            open={Boolean(bulkStatusMenuAnchor)}
+            onClose={handleBulkStatusMenuClose}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+          >
+            {STATUS_OPTIONS.map((status) => (
+              <MenuItem 
+                key={status.value}
+                onClick={() => handleBulkStatusChange(status.value)}
+                sx={{
+                  py: 1.5,
+                  px: 2,
+                  '&:hover': { bgcolor: 'grey.100' }
+                }}
+              >
+                <Label variant="soft" color={status.color} sx={{ mr: 2, minWidth: 80 }}>
+                  {status.label}
+                </Label>
+                <Typography variant="body2">
+                  Mark as {status.label}
+                </Typography>
+              </MenuItem>
+            ))}
+          </Menu>
         </Stack>
 
         {/* Table */}
@@ -1253,6 +1328,7 @@ export function OrdersListView() {
            <Button onClick={handlePrintInvoice} variant="contained" startIcon={<Iconify icon="eva:printer-fill" />}>Print</Button>
          </DialogActions>
        </Dialog>
+
     </>
   );
 }
