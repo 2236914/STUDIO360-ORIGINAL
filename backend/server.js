@@ -96,6 +96,7 @@ try { app.use('/api/assistant', require('./api/assistant/assistant.routes')); } 
 try { app.use('/api/ai', require('./api/ai/ai.routes')); } catch (_) { console.warn('AI routes missing'); }
 try { app.use('/api/invoices', require('./api/invoices/invoice.routes')); } catch (_) { console.warn('Invoice routes missing'); }
 try { app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes')); } catch (_) { console.warn('Bookkeeping routes missing'); }
+try { app.use('/api/analytics', require('./api/analytics/analytics.routes')); } catch (_) { console.warn('Analytics routes missing'); }
 try { app.use('/api/vouchers', require('./api/vouchers/voucher.routes')); } catch (_) { console.warn('Voucher routes missing'); }
 
 // Status endpoint retained

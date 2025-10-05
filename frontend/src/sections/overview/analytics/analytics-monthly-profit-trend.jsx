@@ -4,20 +4,26 @@ import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import { useState, useEffect } from 'react';
 
 import { fNumber } from 'src/utils/format-number';
 
 import { Iconify } from 'src/components/iconify';
 import { Chart, useChart } from 'src/components/chart';
+import { CONFIG } from 'src/config-global';
 
 // ----------------------------------------------------------------------
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const SALES_DATA = [125000, 140000, 110000, 140000, 100000, 130000, 120000, 150000, 165000, 130000, 145000, 135000];
-const EXPENSES_DATA = [45000, 55000, 40000, 65000, 25000, 40000, 35000, 50000, 60000, 30000, 45000, 35000];
+// Default placeholders (used only before data loads)
+const SALES_DATA = Array(12).fill(0);
+const EXPENSES_DATA = Array(12).fill(0);
 
 const LEGENDS = [
   { name: 'Sales', color: '#00AB55' },
@@ -26,6 +32,117 @@ const LEGENDS = [
 
 export function AnalyticsMonthlyProfitTrend() {
   const theme = useTheme();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [data, setData] = useState({ sales: SALES_DATA, expenses: EXPENSES_DATA, months: MONTHS, lastUpdated: null, source: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        setLoading(true);
+        setError('');
+        const cacheKey = `profit-trend:${year}`;
+        let localSnapshot = null;
+        try {
+          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
+          if (cached) localSnapshot = cached;
+          if (cached && !cancelled) setData(cached);
+        } catch (_) {}
+        async function detectServerUrl() {
+          try {
+            const cached = sessionStorage.getItem('serverUrl:detected');
+            if (cached) return cached;
+          } catch (_) {}
+          const candidates = [
+            CONFIG.site.serverUrl,
+            typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
+            typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
+            'http://localhost:3001',
+            'http://localhost:3021',
+            'http://127.0.0.1:3001',
+            'http://127.0.0.1:3021',
+          ].filter(Boolean);
+          for (const base of candidates) {
+            try {
+              const ac = new AbortController();
+              const t = setTimeout(() => ac.abort(), 2500);
+              const r = await fetch(`${base}/api/health`, { signal: ac.signal });
+              clearTimeout(t);
+              if (r.ok) {
+                try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
+                return base;
+              }
+            } catch (_) {}
+          }
+          return CONFIG.site.serverUrl;
+        }
+        const base = await detectServerUrl();
+        const res = await fetch(`${base}/api/analytics/profit?year=${year}`);
+        const json = await res.json();
+        if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to load');
+        if (!cancelled) {
+          const payload = json.data || {};
+          const hasAny = Array.isArray(payload?.sales) && payload.sales.some((v)=>Number(v)>0) || Array.isArray(payload?.expenses) && payload.expenses.some((v)=>Number(v)>0);
+          if (hasAny) {
+            setData(payload);
+            try { localStorage.setItem(cacheKey, JSON.stringify(payload)); } catch (_) {}
+            // sync to backend cache for persistence
+            try {
+              await fetch(`${base}/api/analytics/profit/cache`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+              });
+            } catch (_) {}
+          } else if (localSnapshot) {
+            // seed backend cache if API has no data but we have local snapshot
+            setData(localSnapshot);
+            try {
+              await fetch(`${base}/api/analytics/profit/cache`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(localSnapshot),
+              });
+            } catch (_) {}
+          } else {
+            // Try backend cache explicitly
+            try {
+              const r = await fetch(`${base}/api/analytics/profit/cache?year=${year}`);
+              const j = await r.json();
+              const cached = j?.data;
+              if (r.ok && cached) {
+                setData(cached);
+                try { localStorage.setItem(cacheKey, JSON.stringify(cached)); } catch (_) {}
+              } else {
+                setData(payload);
+              }
+            } catch (_) {
+              setData(payload);
+            }
+          }
+        }
+      } catch (e) {
+        if (!cancelled) {
+          // try local cache if available
+          try {
+            const cached = JSON.parse(localStorage.getItem(`profit-trend:${year}`) || 'null');
+            if (cached) {
+              setData(cached);
+              setError('');
+              return;
+            }
+          } catch (_) {}
+          setError(e.message || 'Failed to load');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [year]);
 
   const chartOptions = useChart({
     chart: {
@@ -92,11 +209,11 @@ export function AnalyticsMonthlyProfitTrend() {
   const series = [
     {
       name: 'Sales',
-      data: SALES_DATA,
+      data: (data?.sales || SALES_DATA).map((v) => Number(v) || 0),
     },
     {
       name: 'Expenses',
-      data: EXPENSES_DATA,
+      data: (data?.expenses || EXPENSES_DATA).map((v) => Number(v) || 0),
     },
   ];
 
@@ -107,18 +224,23 @@ export function AnalyticsMonthlyProfitTrend() {
           <Typography variant="h6" sx={{ mb: 0.5 }}>
             Monthly Profit Trend
           </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Profit analysis over 6 months
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Profit analysis over 6 months
+            </Typography>
+            {data?.lastUpdated ? (
+              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                Last updated: {new Date(data.lastUpdated).toLocaleString()}
+              </Typography>
+            ) : null}
+          </Stack>
         </Box>
 
-        <Button
-          variant="outlined"
-          endIcon={<Iconify icon="eva:arrow-ios-downward-fill" />}
-          sx={{ minWidth: 120 }}
-        >
-          2024
-        </Button>
+        <Select size="small" value={year} onChange={(e) => setYear(Number(e.target.value))} sx={{ minWidth: 120 }}>
+          {Array.from({ length: 8 }, (_, i) => new Date().getFullYear() - i).map((y) => (
+            <MenuItem key={y} value={y}>{y}</MenuItem>
+          ))}
+        </Select>
       </Stack>
 
       {/* Legends positioned horizontally */}
@@ -141,7 +263,17 @@ export function AnalyticsMonthlyProfitTrend() {
         ))}
       </Stack>
 
-      <Chart type="area" series={series} options={chartOptions} height={280} />
+      <Box sx={{ position: 'relative', minHeight: 280 }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 280 }}>
+            <CircularProgress size={24} />
+          </Box>
+        ) : error ? (
+          <Typography color="error" variant="body2">{error}</Typography>
+        ) : (
+          <Chart type="area" series={series} options={chartOptions} height={280} />
+        )}
+      </Box>
     </Card>
   );
 } 

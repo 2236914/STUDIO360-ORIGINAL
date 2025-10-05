@@ -21,9 +21,6 @@ const {
   getLedgerFullFromDb,
   refreshGeneralLedger,
 } = require('../../services/bookkeepingRepo');
-// Sales analytics (non-intrusive addition)
-let salesAnalyticsService = null;
-try { salesAnalyticsService = require('../../services/salesAnalyticsService'); } catch (_) { /* optional */ }
 
 // In-memory storage (replace with DB later)
 // journal: {id,date,ref,particulars, lines:[{code,account,description,debit,credit}]}
@@ -548,36 +545,6 @@ router.post('/reset', (req, res) => {
   store.receipts.length = 0;
   store.disbursements.length = 0;
   ok(res, { message: 'Bookkeeping data reset', data: { journal: [], receipts: [], disbursements: [] } });
-});
-
-/**
- * @route   GET /api/bookkeeping/analytics/sales
- * @desc    Aggregated monthly sales analytics (gross sales + components)
- */
-router.get('/analytics/sales', async (req, res) => {
-  if (!salesAnalyticsService) return bad(res, 'Sales analytics service unavailable', 503);
-  try {
-    const data = await salesAnalyticsService.getSalesAnalytics();
-    ok(res, { message: 'Sales analytics aggregated', data });
-  } catch (e) {
-    bad(res, e.message || 'Failed to aggregate sales analytics');
-  }
-});
-
-/**
- * @route   GET /api/bookkeeping/analytics/sales/forecast
- * @desc    Sales forecast (Prophet) appended
- * @query   months (optional) number of future months (default 6)
- */
-router.get('/analytics/sales/forecast', async (req, res) => {
-  if (!salesAnalyticsService) return bad(res, 'Sales analytics service unavailable', 503);
-  const months = Math.min(24, Math.max(1, parseInt(req.query.months || '6', 10)));
-  try {
-    const data = await salesAnalyticsService.getSalesForecast(months);
-    ok(res, { message: 'Sales forecast generated', data });
-  } catch (e) {
-    bad(res, e.message || 'Failed to forecast sales');
-  }
 });
 
 module.exports = router; 
