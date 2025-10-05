@@ -8,4 +8,7 @@ pdfplumber>=0.11.0
 # Optional: for improved OCR on tables/currency (install matching paddlepaddle for your OS)
 paddleocr>=2.7.0
 openpyxl>=3.1.0
-prophet>=1.1.5
+prophet>=1.1.5; platform_system != 'Windows' or python_version >= '3.9'
+# On Windows, installing prophet may require cmdstanpy build tools; you can alternatively use fbprophet if available
+# fbprophet is deprecated but sometimes easier to install on older environments
+cmdstanpy>=1.2.4
