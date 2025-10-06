@@ -102,6 +102,7 @@ export const navData = [
           { title: 'About', path: paths.dashboard.store.about },
           { title: 'Shipping & Returns', path: paths.dashboard.store.shipping },
           { title: 'Events', path: paths.dashboard.store.events },
+          { title: 'Customer Support', path: paths.dashboard.store.customerSupport },
         ],
       },
       { title: 'Inventory', path: paths.dashboard.inventory.root, icon: ICONS.inventory },

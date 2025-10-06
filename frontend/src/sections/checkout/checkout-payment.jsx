@@ -14,6 +14,7 @@ import { CheckoutSummary } from './checkout-summary';
 import { CheckoutDelivery } from './checkout-delivery';
 import { CheckoutBillingInfo } from './checkout-billing-info';
 import { CheckoutPaymentMethods } from './checkout-payment-methods';
+import { addOrder } from 'src/services/ordersLocalService';
 
 // ----------------------------------------------------------------------
 
@@ -83,6 +84,49 @@ export function CheckoutPayment() {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
+      // Compose and save order (front-only)
+      const selectedDelivery = DELIVERY_OPTIONS.find((opt) => opt.value === data.delivery);
+      const orderItems = (checkout.items || []).map((item) => ({
+        id: item.id,
+        name: item.name || item.title || `Item ${item.id}`,
+        image: item.image || item.cover || item.thumbnail,
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+      }));
+
+      const orderInput = {
+        customer: {
+          name: checkout?.billing?.name || 'Customer',
+          email: checkout?.billing?.email || '',
+          avatar: '/assets/images/avatar/avatar_1.jpg',
+        },
+        items: orderItems.length, // keep compatibility with current list view
+        orderItems,
+        price: checkout.total || 0,
+        status: 'pending',
+        delivery: {
+          method: selectedDelivery ? selectedDelivery.label : 'Standard',
+          speed: selectedDelivery ? selectedDelivery.description : '3-5 days delivery',
+          trackingNo: '',
+        },
+        shipping: {
+          address: checkout?.billing?.fullAddress || '',
+          phone: checkout?.billing?.phoneNumber || '',
+        },
+        payment: {
+          method: data.payment,
+        },
+        summary: {
+          subtotal: checkout.subtotal || 0,
+          shipping: checkout.shipping || 0,
+          discount: checkout.discount || 0,
+          taxes: 0,
+          total: checkout.total || 0,
+        },
+      };
+
+      const saved = addOrder(orderInput);
+
       checkout.onNextStep();
       checkout.onReset();
       console.info('DATA', data);

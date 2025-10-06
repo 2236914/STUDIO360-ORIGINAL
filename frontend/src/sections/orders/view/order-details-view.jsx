@@ -21,6 +21,7 @@ import TimelineContent from '@mui/lab/TimelineContent';
 import TimelineDot from '@mui/lab/TimelineDot';
 
 import { paths } from 'src/routes/paths';
+import { getOrderById } from 'src/services/ordersLocalService';
 import { useRouter as useRouterHook } from 'src/routes/hooks';
 
 import { fCurrency } from 'src/utils/format-number';
@@ -31,8 +32,8 @@ import { DashboardContent } from 'src/layouts/dashboard';
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
-// Sample order data (in real app, this would come from API)
-const ORDER_DATA = {
+// Fallback sample order (used if not found in storage)
+const ORDER_DATA_FALLBACK = {
   id: '#6010',
   customer: {
     name: 'Jayvion Simon',
@@ -134,6 +135,9 @@ export function OrderDetailsView() {
   const router = useRouterHook();
   const params = useParams();
   const orderId = params?.id || '#6010';
+
+  const stored = getOrderById(orderId.toString());
+  const ORDER_DATA = stored || ORDER_DATA_FALLBACK;
 
   const handleBack = useCallback(() => {
     router.push(paths.dashboard.orders.root);

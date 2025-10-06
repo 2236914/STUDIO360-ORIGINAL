@@ -111,6 +111,7 @@ export const paths = {
       shipping: `${ROOTS.DASHBOARD}/store/shipping`,
       about: `${ROOTS.DASHBOARD}/store/about`,
       events: `${ROOTS.DASHBOARD}/store/events`,
+      customerSupport: `${ROOTS.DASHBOARD}/store/customer-support`,
     },
     // User
     user: {
