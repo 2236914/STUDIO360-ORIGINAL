@@ -1,8 +1,28 @@
 import { today } from 'src/utils/format-time';
-
 import { CONFIG } from 'src/config-global';
-
 import { _mock } from './_mock';
+
+// Server-side helper to fetch JSON with timeout
+async function fetchJson(url, opts = {}) {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), opts.timeout || 3000);
+  try {
+    const res = await fetch(url, { ...opts, signal: ac.signal, cache: 'no-store' });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    clearTimeout(t);
+    return null;
+  }
+}
+// Detect backend base URL for server-side rendering
+function detectServerBases() {
+  const env = process.env.NEXT_PUBLIC_SERVER_URL || process.env.SERVER_URL || CONFIG?.site?.serverUrl || '';
+  const list = [env, 'http://localhost:3001', 'http://127.0.0.1:3001', 'http://localhost:3021', 'http://127.0.0.1:3021']
+    .filter(Boolean);
+  return Array.from(new Set(list));
+}
 
 // APP
 // ----------------------------------------------------------------------
@@ -350,53 +370,71 @@ export const _coursesReminder = [...Array(4)].map((_, index) => ({
 // ANALYTICS
 // ----------------------------------------------------------------------
 
-export const _analyticsWidgets = [
-  {
-    id: _mock.id(1),
-    title: 'Total Sales',
-    total: 847000,
-    percent: 15.2,
-    color: 'success',
-    chart: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'],
-      series: [111, 136, 76, 108, 74, 54, 57, 84],
-      colors: ['#22c55e'],
+// Dynamic KPI source: compute from backend analytics, fall back when unavailable.
+export async function _analyticsWidgets(yearParam) {
+  const year = Number.isInteger(yearParam) ? yearParam : new Date().getFullYear();
+  const bases = detectServerBases();
+  let sales = null;
+  let profit = null;
+  for (const base of bases) {
+    // Try live endpoints
+    const s = await fetchJson(`${base}/api/analytics/sales?year=${year}`);
+    const p = await fetchJson(`${base}/api/analytics/profit?year=${year}`);
+    if (s?.success && p?.success) { sales = s.data; profit = p.data; break; }
+    // Try caches explicitly
+    const sc = await fetchJson(`${base}/api/analytics/sales/cache?year=${year}`);
+    const pc = await fetchJson(`${base}/api/analytics/profit/cache?year=${year}`);
+    if (sc?.data || pc?.data) { sales = sc?.data || sales; profit = pc?.data || profit; break; }
+  }
+  // Compute totals
+  const months = profit?.months || ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug'];
+  const salesTotal = sales ? Object.values(sales.series || {}).reduce((sum, arr) => sum + (arr||[]).reduce((a,b)=>a+Number(b||0),0), 0) : 0;
+  const expensesTotal = profit ? (profit.expenses || []).reduce((a,b)=>a+Number(b||0),0) : 0;
+  const ordersTotal = typeof sales?.orderCount === 'number' ? sales.orderCount : 0;
+  const netProfitTotal = profit ? ((profit.sales || []).reduce((a,b)=>a+Number(b||0),0) - (profit.expenses || []).reduce((a,b)=>a+Number(b||0),0)) : 0;
+  // Small sparkline series (last 8 months) from data when available
+  const last8 = (arr) => (arr || []).slice(-8).map((v)=>Number(v)||0);
+  const sparkSales = sales ? last8((sales.series?.['360']||[]).map((v,i)=> v + (sales.series?.Shopee?.[i]||0) + (sales.series?.['TikTok Shop']?.[i]||0))) : Array(8).fill(0);
+  const sparkExpenses = profit ? last8(profit.expenses) : Array(8).fill(0);
+  const sparkProfit = profit ? last8((profit.sales||[]).map((v,i)=> Number(v||0) - Number(profit.expenses?.[i]||0))) : Array(8).fill(0);
+  // Percent deltas (simple YoY where available, else 0)
+  const salesPct = typeof sales?.yoy === 'number' ? sales.yoy*100 : 0;
+  const expPct = typeof profit?.yoyExpenses === 'number' ? profit.yoyExpenses*100 : 0;
+  const ordersPct = 0; // baseline unknown — can add later
+  const profitPct = typeof profit?.yoyProfit === 'number' ? profit.yoyProfit*100 : 0;
+
+  return [
+    {
+      id: _mock.id(1),
+      title: 'Total Sales',
+      total: Math.round(salesTotal),
+      percent: Number.isFinite(salesPct) ? Number(salesPct.toFixed(1)) : 0,
+      color: 'success',
+      chart: { categories: months.slice(-8), series: sparkSales, colors: ['#22c55e'] },
     },
-  },
-  {
-    id: _mock.id(2),
-    title: 'Total Expenses',
-    total: 250000,
-    percent: -8.5,
-    color: 'error',
-    chart: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'],
-      series: [56, 47, 145, 101, 234, 115, 33, 78],
-      colors: ['#ef4444'],
+    {
+      id: _mock.id(2),
+      title: 'Total Expenses',
+      total: Math.round(expensesTotal),
+      percent: expPct,
+      color: 'error',
+      chart: { categories: months.slice(-8), series: sparkExpenses, colors: ['#ef4444'] },
     },
-  },
-  {
-    id: _mock.id(3),
-    title: 'Total Orders',
-    total: 1247,
-    percent: 23.6,
-    color: 'primary',
-    chart: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'],
-      series: [28, 41, 145, 35, 80, 114, 48, 70],
-      colors: ['#3b82f6'],
+    {
+      id: _mock.id(3),
+      title: 'Total Orders',
+      total: ordersTotal,
+      percent: ordersPct,
+      color: 'primary',
+      chart: { categories: months.slice(-8), series: sparkSales, colors: ['#3b82f6'] },
     },
-  },
-  {
-    id: _mock.id(4),
-    title: 'Net Profit',
-    total: 597000,
-    percent: 18.9,
-    color: 'warning',
-    chart: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug'],
-      series: [89, 67, 123, 95, 156, 87, 43, 92],
-      colors: ['#f59e0b'],
+    {
+      id: _mock.id(4),
+      title: 'Net Profit',
+      total: Math.round(netProfitTotal),
+      percent: profitPct,
+      color: 'warning',
+      chart: { categories: months.slice(-8), series: sparkProfit, colors: ['#f59e0b'] },
     },
-  },
-];
+  ];
+}

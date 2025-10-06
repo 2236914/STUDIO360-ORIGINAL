@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { getCashReceiptsAll, isDbReady } = require('../../services/bookkeepingRepo');
+const { getCashReceiptsAll, getCashDisbursementsAll, getLedgerFullFromDb, isDbReady } = require('../../services/bookkeepingRepo');
 const cache = require('../../services/analyticsCache');
 const { supabase } = require('../../services/supabaseClient');
 const path = require('path');
@@ -71,6 +71,8 @@ router.get('/sales', async (req, res) => {
   let totalThisYear = 0;
   let totalPrevYear = 0;
 
+    let orderCount = 0;
+    const orderKeys = new Set();
     for (const r of receipts || []) {
       const idx = monthIndexFromDate(r.date);
       if (idx == null) continue;
@@ -83,6 +85,12 @@ router.get('/sales', async (req, res) => {
           seriesMap.get(ch)[idx] += netSales;
         }
         totalThisYear += netSales;
+        if (netSales > 0) {
+          const key = String(r?.invoice_no || r?.id || `${r.date}|${r.reference||''}`);
+          if (!orderKeys.has(key)) {
+            orderKeys.add(key);
+          }
+        }
       } else if (y === year - 1) {
         if (ch && prevSeriesMap.has(ch) && idx != null) {
           prevSeriesMap.get(ch)[idx] += netSales;
@@ -90,6 +98,7 @@ router.get('/sales', async (req, res) => {
         totalPrevYear += netSales;
       }
     }
+    orderCount = orderKeys.size;
 
     // Month-aligned YoY based on CRJ series by default
     const monthHasData = months.map((m) => {
@@ -109,23 +118,20 @@ router.get('/sales', async (req, res) => {
       yoy = null; // no baseline
     }
 
-    // Accuracy pass: if possible, compute YoY from general_journal Sales Revenue (account_title_particulars = 'Sales Revenue')
-    if (supabase && dbOk) {
+    // Accuracy pass: Prefer General Ledger entries via existing fetcher
+    if (dbOk) {
       try {
-        const { data: gj, error: gjErr } = await supabase
-          .from('general_journal')
-          .select('date, account_title_particulars, debit, credit');
-        if (!gjErr && Array.isArray(gj)) {
+        const { ledger } = await getLedgerFullFromDb();
+        const salesLedger = (ledger || []).find((acc) => String(acc.code || acc.accountCode || acc.code) === '401' || String(acc.accountTitle || '').toLowerCase() === 'sales revenue');
+        if (salesLedger && Array.isArray(salesLedger.entries)) {
           const thisByM = Array(12).fill(0);
           const prevByM = Array(12).fill(0);
-          for (const r of gj) {
-            const title = String(r.account_title_particulars || '').trim().toLowerCase();
-            if (title !== 'sales revenue') continue;
-            const d = new Date(r.date);
+          for (const e of salesLedger.entries) {
+            const d = new Date(e.date);
             if (Number.isNaN(d.getTime())) continue;
-            const m = d.getMonth();
             const y = d.getFullYear();
-            const val = Number(r.credit || 0) - Number(r.debit || 0);
+            const m = d.getMonth();
+            const val = Number(e.credit || 0) - Number(e.debit || 0);
             if (y === year) thisByM[m] += val;
             else if (y === year - 1) prevByM[m] += val;
           }
@@ -134,7 +140,7 @@ router.get('/sales', async (req, res) => {
           const aPrev = prevByM.reduce((s, v, i) => s + (active[i] ? v : 0), 0);
           if (aPrev > 0) {
             yoy = (aThis - aPrev) / aPrev;
-            yoySource = 'general_journal';
+            yoySource = 'ledger';
           }
         }
       } catch (_) { /* ignore */ }
@@ -151,6 +157,7 @@ router.get('/sales', async (req, res) => {
       yoy,
       yoySource,
       lastUpdated: new Date().toISOString(),
+      orderCount,
     };
     // Determine if payload has any data
     const hasAny = Object.values(payload.series).some((arr) => (arr || []).some((v) => Number(v) > 0));
@@ -292,76 +299,89 @@ router.get('/forecast/ready', async (req, res) => {
 router.get('/profit', async (req, res) => {
   try {
     const year = parseInt(req.query.year || new Date().getFullYear(), 10);
-    let months = Array.from({ length: 12 }, (_, i) => i);
+    const months = Array.from({ length: 12 }, (_, i) => i);
     let sales = Array(12).fill(0);
     let expenses = Array(12).fill(0);
-    let source = 'journal';
+    let prevSales = Array(12).fill(0);
+    let prevExpenses = Array(12).fill(0);
+    let source = 'ledger';
 
-    const canDb = !!supabase;
-    if (!canDb) {
+    if (!isDbReady()) {
       // fallback to cache
       const cached = cache.readProfit(year);
       if (cached) return res.json({ success: true, data: { year, months: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], sales: cached.sales||[], expenses: cached.expenses||[], source: 'cache', lastUpdated: cached.savedAt } });
       return res.json({ success: true, data: { year, months: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], sales, expenses, source: 'none', lastUpdated: new Date().toISOString() } });
     }
 
-    // Prefer general_journal: Sales = credit - debit where account_title_particulars='Sales Revenue'
-    // Expenses: sum debit - credit for accounts known as expenses from COA mapping
-    const { COA } = require('../bookkeeping/coa');
-    const expenseTitles = new Set(Object.values(COA).filter(a => a.type === 'expense').map(a => a.title.toLowerCase()));
-
-    // Load general_journal rows
-    const { data: gj, error: gjErr } = await supabase
-      .from('general_journal')
-      .select('date, account_title_particulars, debit, credit')
-      .order('date', { ascending: true });
-    if (!gjErr && Array.isArray(gj)) {
-      for (const r of gj) {
-        const d = new Date(r.date);
-        if (Number.isNaN(d.getTime())) continue;
-        const y = d.getFullYear();
-        if (y !== year) continue;
-        const m = d.getMonth();
-        const title = String(r.account_title_particulars || '').trim().toLowerCase();
-        const debit = Number(r.debit || 0);
-        const credit = Number(r.credit || 0);
-        if (title === 'sales revenue') sales[m] += (credit - debit);
-        else if (expenseTitles.has(title)) expenses[m] += (debit - credit);
+    // Prefer General Ledger via existing fetcher: compute monthly Sales (401 credit-debit) and Expenses (sum of expense accounts debit-credit)
+    try {
+      const { ledger } = await getLedgerFullFromDb();
+      const expenseCodes = new Set(['501','502','503','504','505','506','507','508','509','510']);
+      for (const acc of ledger || []) {
+        const code = String(acc.code || acc.accountCode || '');
+        if (!Array.isArray(acc.entries)) continue;
+        if (code === '401' || String(acc.accountTitle || '').toLowerCase() === 'sales revenue') {
+          for (const e of acc.entries) {
+            const d = new Date(e.date);
+            if (Number.isNaN(d.getTime())) continue;
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            const val = Number(e.credit || 0) - Number(e.debit || 0);
+            if (y === year) sales[m] += val;
+            else if (y === year - 1) prevSales[m] += val;
+          }
+        } else if (expenseCodes.has(code)) {
+          for (const e of acc.entries) {
+            const d = new Date(e.date);
+            if (Number.isNaN(d.getTime())) continue;
+            const y = d.getFullYear();
+            const m = d.getMonth();
+            const val = Number(e.debit || 0) - Number(e.credit || 0);
+            if (y === year) expenses[m] += val;
+            else if (y === year - 1) prevExpenses[m] += val;
+          }
+        }
       }
-    } else {
-      source = 'crj_cdb';
-    }
+    } catch (_) { source = 'crj_cdb'; }
 
-    // If still all zeros (e.g., journal not populated), approximate: 
-    // sales from cash_receipt_journal.cr_sales; expenses from cash_disbursement_book debit columns sum
+    // If still all zeros (e.g., ledger not populated), approximate via CRJ and CDB using existing fetchers
     const noSales = sales.every((v) => v === 0);
     const noExp = expenses.every((v) => v === 0);
     if (noSales || noExp) {
+      source = 'crj_cdb';
       try {
-        const { data: crj } = await supabase
-          .from('cash_receipt_journal')
-          .select('date, cr_sales');
+        const crj = await getCashReceiptsAll();
         for (const r of crj || []) {
           const d = new Date(r.date);
-          if (d.getFullYear() !== year) continue;
+          const y = d.getFullYear();
           const m = d.getMonth();
-          sales[m] += Number(r.cr_sales || 0);
+          if (y === year) sales[m] += Number(r.cr_sales || 0);
+          else if (y === year - 1) prevSales[m] += Number(r.cr_sales || 0);
         }
       } catch (_) {}
       try {
-        const { data: cdb } = await supabase
-          .from('cash_disbursement_book')
-          .select('date, dr_materials, dr_supplies, dr_rent, dr_utilities, dr_advertising, dr_delivery, dr_taxes_licenses, dr_misc');
+        const cdb = await getCashDisbursementsAll();
         for (const r of cdb || []) {
           const d = new Date(r.date);
-          if (d.getFullYear() !== year) continue;
+          const y = d.getFullYear();
           const m = d.getMonth();
           const sum = ['dr_materials','dr_supplies','dr_rent','dr_utilities','dr_advertising','dr_delivery','dr_taxes_licenses','dr_misc']
             .reduce((s,k)=> s + Number(r[k] || 0), 0);
-          expenses[m] += sum;
+          if (y === year) expenses[m] += sum; else if (y === year - 1) prevExpenses[m] += sum;
         }
       } catch (_) {}
     }
+
+    // Compute month-aligned YoY for Expenses and Net Profit
+    const activeMonths = months.map((m) => Number(expenses[m] || 0) > 0 || Number(sales[m] || 0) > 0);
+    const thisExpAligned = months.reduce((acc,m)=> acc + (activeMonths[m] ? Number(expenses[m]||0) : 0), 0);
+    const prevExpAligned = months.reduce((acc,m)=> acc + (activeMonths[m] ? Number(prevExpenses[m]||0) : 0), 0);
+    let yoyExpenses = null;
+    if (prevExpAligned > 0) yoyExpenses = (thisExpAligned - prevExpAligned) / prevExpAligned;
+    const thisProfitAligned = months.reduce((acc,m)=> acc + (activeMonths[m] ? (Number(sales[m]||0) - Number(expenses[m]||0)) : 0), 0);
+    const prevProfitAligned = months.reduce((acc,m)=> acc + (activeMonths[m] ? (Number(prevSales[m]||0) - Number(prevExpenses[m]||0)) : 0), 0);
+    let yoyProfit = null;
+    if (prevProfitAligned > 0) yoyProfit = (thisProfitAligned - prevProfitAligned) / prevProfitAligned;
 
     const payload = {
       year,
@@ -370,6 +390,8 @@ router.get('/profit', async (req, res) => {
       expenses: expenses.map((v) => Number(v) || 0),
       source,
       lastUpdated: new Date().toISOString(),
+      yoyExpenses,
+      yoyProfit,
     };
     try { cache.writeProfit(year, payload); } catch (_) {}
     return res.json({ success: true, data: payload });
