@@ -27,27 +27,7 @@ function freshKPI() {
   };
 }
 let kpiStats = freshKPI();
-// On module load, try to hydrate in-memory KPI from DB snapshot
-try {
-  const { getMonth } = require('../../services/kpiRepo');
-  (async () => {
-    try {
-      const { data } = await getMonth();
-      if (data) {
-        kpiStats = {
-          processed: Number(data.transactions_processed || 0),
-          accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
-          timeSavedMinutes: Number(data.time_saved_minutes || 0),
-          costSavings: Number(data.cost_savings || 0),
-          docsCount: Number(data.docs_count || 0),
-          txCount: Number(kpiStats.txCount || 0),
-          transferred: Number(kpiStats.transferred || 0),
-          updatedAt: Date.now(),
-        };
-      }
-    } catch (_) {}
-  })();
-} catch (_) { /* supabase not configured or repo missing */ }
+// Note: DB-backed KPI snapshots removed (kpi_stats table deleted). Using in-memory only.
 
 // In-memory processed invoice/receipt JSON store (ephemeral)
 const processedStore = []; // { id, originalName, storedPath, size, mimetype, extractedAt, canonical }
@@ -316,23 +296,8 @@ router.get('/stats', (req, res) => {
 
 // Diagnostic: compare DB snapshot vs in-memory
 router.get('/stats/db', async (req, res) => {
-  try {
-    const { getMonth } = require('../../services/kpiRepo');
-    const { data, error } = await getMonth();
-    if (error) return res.json({ success: true, data: { memory: kpiStats, db: null, warning: 'supabase not configured or query failed' } });
-    const db = data ? {
-      processed: Number(data.transactions_processed || 0),
-      accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
-      timeSavedMinutes: Number(data.time_saved_minutes || 0),
-      costSavings: Number(data.cost_savings || 0),
-      docsCount: Number(data.docs_count || 0),
-      monthKey: data.month_key,
-      lastCalculatedAt: data.last_calculated_at,
-    } : null;
-    return res.json({ success: true, data: { memory: kpiStats, db } });
-  } catch (_) {
-    return res.json({ success: true, data: { memory: kpiStats, db: null } });
-  }
+  // KPI DB snapshot disabled (kpi_stats table removed). Always return memory only.
+  return res.json({ success: true, data: { memory: kpiStats, db: null, warning: 'kpi_stats removed; DB snapshot disabled' } });
 });
 
 /**
@@ -366,21 +331,7 @@ router.post('/stats', express.json(), (req, res) => {
     }
     // ensure updatedAt
     kpiStats.updatedAt = Date.now();
-    // Fire-and-forget DB persistence using repo (non-blocking)
-    try {
-      const { snapshot, accumulate: dbAccumulate } = require('../../services/kpiRepo');
-      if (body.mode === 'accumulate') {
-        dbAccumulate({
-          processed: Number(body.processed || 0),
-          docsCount: Number(body.docsCount || 0),
-          timeSavedMinutes: Number(body.timeSavedMinutes || 0),
-          costSavings: Number(body.costSavings || 0),
-          accuracyRate: typeof body.accuracyRate === 'number' ? body.accuracyRate : undefined,
-        }).catch(()=>{});
-      } else {
-        snapshot(kpiStats).catch(()=>{});
-      }
-    } catch(_) { /* ignore persistence errors */ }
+    // Persistence disabled (kpi_stats removed). In-memory only.
     return res.json({ success: true, data: kpiStats });
   } catch (e) {
     return res.status(400).json({ success: false, message: e.message });
