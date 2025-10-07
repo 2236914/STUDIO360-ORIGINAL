@@ -151,6 +151,39 @@ export default function CashDisbursementPage() {
   });
 
   // Horizontal drag-to-scroll support for wide table
+
+  // Helpers for filtering by month (robust against common date formats)
+  const getMonthName = useCallback((dStr) => {
+    if (!dStr) return '';
+    try {
+      const d = new Date(dStr);
+      if (!Number.isNaN(d.getTime())) return d.toLocaleString('en-US', { month: 'long' });
+    } catch (_) {}
+    const s = String(dStr);
+    // Match 'Sep'/'September'
+    const monthWord = (s.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\b/i) || [])[0];
+    if (monthWord) {
+      const map = {
+        jan: 'January', feb: 'February', mar: 'March', apr: 'April', may: 'May', jun: 'June', jul: 'July', aug: 'August',
+        sep: 'September', sept: 'September', oct: 'October', nov: 'November', dec: 'December',
+      };
+      return map[monthWord.slice(0, 4).toLowerCase()] || monthWord;
+    }
+    // Match YYYY-MM-DD
+    const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) {
+      const idx = parseInt(iso[2], 10) - 1;
+      const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+      return names[idx] || '';
+    }
+    return '';
+  }, []);
+
+  // Apply month filter (leave search behavior unchanged for now)
+  const filteredRows = useMemo(() => {
+    if (selectedMonth === 'All') return rows;
+    return (rows || []).filter((e) => getMonthName(e?.date) === selectedMonth);
+  }, [rows, selectedMonth, getMonthName]);
   const scrollRef = useRef(null);
   const isDrag = useRef(false);
   const startX = useRef(0);
@@ -403,11 +436,11 @@ export default function CashDisbursementPage() {
       debitTaxesLicenses: 0,
       debitMiscellaneous: 0,
     };
-    rows.forEach((e) => {
+    (filteredRows || []).forEach((e) => {
       Object.keys(totals).forEach((k) => { totals[k] += Number(e[k] || 0); });
     });
     return totals;
-  }, [rows]);
+  }, [filteredRows]);
 
   return (
     <DashboardContent maxWidth="xl">
@@ -496,7 +529,7 @@ export default function CashDisbursementPage() {
               CASH DISBURSEMENT BOOK 
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
-              {rows.length} transactions • August - September 2024
+              {filteredRows.length} transactions
             </Typography>
           </Box>
           
@@ -577,7 +610,7 @@ export default function CashDisbursementPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {rows.map((entry, index) => (
+                {(filteredRows || []).map((entry, index) => (
                   <TableRow 
                     key={entry.id} 
                     sx={{ 
