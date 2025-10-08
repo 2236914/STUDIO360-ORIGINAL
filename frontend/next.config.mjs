@@ -8,6 +8,14 @@ const nextConfig = {
     // Disable React DevTools to prevent _debugInfo errors
     DISABLE_REACT_DEVTOOLS: process.env.NODE_ENV === 'development' ? 'true' : 'false',
   },
+  // Enable subdomain routing
+  async rewrites() {
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   reactStrictMode: false,
   // Critical: Disable hydration warnings in development for CSS-in-JS
   onDemandEntries: {

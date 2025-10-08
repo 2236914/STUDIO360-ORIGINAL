@@ -4,6 +4,33 @@ class AuthService {
   constructor() {
     this.token = localStorage.getItem('accessToken');
     this.user = JSON.parse(localStorage.getItem('user') || 'null');
+    
+    // Validate token on initialization
+    this.validateStoredToken();
+  }
+
+  /**
+   * Validate stored token and clear if invalid
+   */
+  validateStoredToken() {
+    if (this.token && this.user) {
+      // Check if token is expired (basic check)
+      try {
+        const tokenParts = this.token.split('.');
+        if (tokenParts.length === 3) {
+          const payload = JSON.parse(atob(tokenParts[1]));
+          const currentTime = Math.floor(Date.now() / 1000);
+          
+          if (payload.exp && payload.exp < currentTime) {
+            console.warn('Stored token is expired, clearing session');
+            this.logout();
+          }
+        }
+      } catch (error) {
+        console.warn('Invalid token format, clearing session');
+        this.logout();
+      }
+    }
   }
 
   /**
@@ -120,6 +147,9 @@ class AuthService {
    * @returns {Promise<Response>} Fetch response
    */
   async authenticatedRequest(url, options = {}) {
+    // Refresh token from localStorage in case it was updated elsewhere
+    this.token = localStorage.getItem('accessToken');
+    
     if (!this.token) {
       throw new Error('No authentication token available');
     }
@@ -132,7 +162,16 @@ class AuthService {
       },
     };
 
-    return fetch(url, { ...options, ...defaultOptions });
+    const response = await fetch(url, { ...options, ...defaultOptions });
+    
+    // If we get a 401/403, the token might be invalid
+    if (response.status === 401 || response.status === 403) {
+      console.warn('Authentication failed, clearing session');
+      this.logout();
+      throw new Error('Authentication failed. Please log in again.');
+    }
+
+    return response;
   }
 }
 

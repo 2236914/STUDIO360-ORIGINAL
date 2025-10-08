@@ -31,18 +31,47 @@ export function StoreHeader() {
     console.log('Checkout context not available in header');
   }
 
-  // Extract storeId from current URL
+  // Extract storeId from current URL or subdomain
   if (typeof window !== 'undefined') {
     const pathname = window.location.pathname;
+    const hostname = window.location.hostname;
+    
+    // Check traditional /stores/[storeId] route first
     const storeIdMatch = pathname.match(/\/stores\/([^\/]+)/);
     if (storeIdMatch) {
       storeId = storeIdMatch[1];
+    } 
+    // Check subdomain route /[subdomain]
+    else if (pathname.startsWith('/') && pathname !== '/') {
+      const pathSegments = pathname.split('/').filter(Boolean);
+      if (pathSegments.length > 0) {
+        storeId = pathSegments[0];
+      }
+    }
+    // Check actual subdomain from hostname
+    else if (hostname.includes('.')) {
+      const subdomain = hostname.split('.')[0];
+      if (subdomain && subdomain !== 'www' && subdomain !== 'dashboard' && subdomain !== 'admin') {
+        storeId = subdomain;
+      }
     }
   }
 
   const handleProductsClick = () => {
-    // Navigate to product catalog page
-    router.push(`/stores/${storeId}/products`);
+    // Navigate to product catalog page using subdomain-aware routing
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const hostname = window.location.hostname;
+      
+      // Check if we're on a subdomain or subdomain route
+      if (hostname.includes('.') || pathname.startsWith('/') && pathname !== '/') {
+        // On subdomain or subdomain route, navigate to products page
+        router.push('/products');
+      } else {
+        // On traditional URL, navigate to stores path
+        router.push(`/stores/${storeId}/products`);
+      }
+    }
   };
 
   const handleSearchClick = () => {
@@ -51,13 +80,37 @@ export function StoreHeader() {
   };
 
   const handleCartClick = () => {
-    // Navigate to checkout page
-    router.push(`/stores/${storeId}/checkout`);
+    // Navigate to checkout page using subdomain-aware routing
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const hostname = window.location.hostname;
+      
+      // Check if we're on a subdomain or subdomain route
+      if (hostname.includes('.') || pathname.startsWith('/') && pathname !== '/') {
+        // On subdomain or subdomain route, navigate to checkout page
+        router.push('/checkout');
+      } else {
+        // On traditional URL, navigate to stores path
+        router.push(`/stores/${storeId}/checkout`);
+      }
+    }
   };
 
   const handleFAQClick = () => {
-    // Navigate to FAQ page
-    router.push(`/stores/${storeId}/faq`);
+    // Navigate to FAQ page using subdomain-aware routing
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const hostname = window.location.hostname;
+      
+      // Check if we're on a subdomain or subdomain route
+      if (hostname.includes('.') || pathname.startsWith('/') && pathname !== '/') {
+        // On subdomain or subdomain route, navigate to FAQ page
+        router.push('/faq');
+      } else {
+        // On traditional URL, navigate to stores path
+        router.push(`/stores/${storeId}/faq`);
+      }
+    }
   };
 
   return (

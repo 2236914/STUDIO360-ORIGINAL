@@ -209,7 +209,6 @@ export function AccountCustomerSupport() {
               <Stack spacing={3}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                   Configure your WhatsApp business integration for automated customer support.
-                  This will be connected to n8n automation later.
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -258,7 +257,7 @@ export function AccountCustomerSupport() {
                     disabled
                     sx={{ opacity: 0.5 }}
                   >
-                    Configure n8n Automation (Coming Soon)
+                    Configure Automation (Coming Soon)
                   </Button>
                 </Stack>
               </Stack>
@@ -289,7 +288,6 @@ export function AccountCustomerSupport() {
               <Stack spacing={3}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                   Configure your Gmail business integration for automated email support.
-                  This will be connected to n8n automation later.
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -337,7 +335,7 @@ export function AccountCustomerSupport() {
                     disabled
                     sx={{ opacity: 0.5 }}
                   >
-                    Configure n8n Automation (Coming Soon)
+                    Configure Automation (Coming Soon)
                   </Button>
                 </Stack>
               </Stack>
@@ -533,31 +531,6 @@ export function AccountCustomerSupport() {
           </Box>
         </Card>
 
-        {/* N8N Integration Info */}
-        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'warning.main', bgcolor: 'warning.lighter' }}>
-          <Box sx={{ p: 3 }}>
-            <Stack direction="row" alignItems="flex-start" spacing={2}>
-              <Iconify icon="solar:info-circle-bold" sx={{ color: 'warning.main', mt: 0.5 }} />
-              <Stack>
-                <Typography variant="subtitle2" sx={{ color: 'warning.dark' }}>
-                  n8n Automation Integration
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'warning.dark', mt: 1 }}>
-                  These settings will be used to configure automated workflows in n8n for:
-                </Typography>
-                <Box component="ul" sx={{ mt: 1, pl: 2, color: 'warning.dark' }}>
-                  <li>Automatic WhatsApp responses to customer inquiries</li>
-                  <li>Email ticket creation and management</li>
-                  <li>Customer support escalation workflows</li>
-                  <li>Response time tracking and analytics</li>
-                </Box>
-                <Typography variant="body2" sx={{ color: 'warning.dark', mt: 1 }}>
-                  The n8n integration will be available in a future update.
-                </Typography>
-              </Stack>
-            </Stack>
-          </Box>
-        </Card>
 
         {/* Save Button */}
         <Stack direction="row" justifyContent="flex-end">

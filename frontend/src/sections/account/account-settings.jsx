@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -10,17 +10,25 @@ import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
+import LoadingButton from '@mui/lab/LoadingButton';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
+import { useAuthContext } from 'src/auth/hooks';
+import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
 
 export function AccountSettings() {
+  const { user } = useAuthContext();
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   // Password Change Form
   const passwordMethods = useForm({
@@ -34,12 +42,19 @@ export function AccountSettings() {
   // Email Change Form
   const emailMethods = useForm({
     defaultValues: {
-      currentEmail: 'hello@kitschstudio.com',
+      currentEmail: user?.email || '',
       newEmail: '',
       confirmEmail: '',
       password: '',
     },
   });
+
+  // Update email when user changes
+  useEffect(() => {
+    if (user?.email) {
+      emailMethods.setValue('currentEmail', user.email);
+    }
+  }, [user?.email, emailMethods]);
 
   const handleChangePassword = useCallback(async (data) => {
     try {
@@ -53,12 +68,24 @@ export function AccountSettings() {
         return;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      setPasswordLoading(true);
+
+      // Update password using Supabase
+      const { error } = await supabase.auth.updateUser({
+        password: data.newPassword
+      });
+
+      if (error) {
+        throw error;
+      }
+
       passwordMethods.reset();
       toast.success('Password changed successfully!');
-      console.info('Password Change Data:', { currentPassword: '***', newPassword: '***' });
     } catch (error) {
-      toast.error('Failed to change password');
+      console.error('Password change error:', error);
+      toast.error(error.message || 'Failed to change password');
+    } finally {
+      setPasswordLoading(false);
     }
   }, [passwordMethods]);
 
@@ -74,7 +101,17 @@ export function AccountSettings() {
         return;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      setEmailLoading(true);
+
+      // Update email using Supabase
+      const { error } = await supabase.auth.updateUser({
+        email: data.newEmail
+      });
+
+      if (error) {
+        throw error;
+      }
+
       emailMethods.reset({
         currentEmail: data.newEmail,
         newEmail: '',
@@ -82,35 +119,57 @@ export function AccountSettings() {
         password: '',
       });
       toast.success('Email change request sent! Please check your new email for verification.');
-      console.info('Email Change Data:', data);
     } catch (error) {
-      toast.error('Failed to change email');
+      console.error('Email change error:', error);
+      toast.error(error.message || 'Failed to change email');
+    } finally {
+      setEmailLoading(false);
     }
   }, [emailMethods]);
 
-  const handleSendPasswordReset = useCallback(() => {
-    const currentEmail = emailMethods.getValues('currentEmail');
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 2000)),
-      {
-        loading: 'Sending password reset email...',
-        success: `Password reset link sent to ${currentEmail}`,
-        error: 'Failed to send password reset email',
+  const handleSendPasswordReset = useCallback(async () => {
+    try {
+      const currentEmail = emailMethods.getValues('currentEmail');
+      setResetLoading(true);
+
+      const { error } = await supabase.auth.resetPasswordForEmail(currentEmail, {
+        redirectTo: `${window.location.origin}/auth/jwt/reset-password`,
+      });
+
+      if (error) {
+        throw error;
       }
-    );
+
+      toast.success(`Password reset link sent to ${currentEmail}`);
+    } catch (error) {
+      console.error('Password reset error:', error);
+      toast.error(error.message || 'Failed to send password reset email');
+    } finally {
+      setResetLoading(false);
+    }
   }, [emailMethods]);
 
-  const handleSendEmailVerification = useCallback(() => {
-    const currentEmail = emailMethods.getValues('currentEmail');
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 2000)),
-      {
-        loading: 'Sending verification email...',
-        success: `Verification link sent to ${currentEmail}`,
-        error: 'Failed to send verification email',
+  const handleSendEmailVerification = useCallback(async () => {
+    try {
+      setVerifyLoading(true);
+
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: user?.email || emailMethods.getValues('currentEmail'),
+      });
+
+      if (error) {
+        throw error;
       }
-    );
-  }, [emailMethods]);
+
+      toast.success(`Verification link sent to ${user?.email || emailMethods.getValues('currentEmail')}`);
+    } catch (error) {
+      console.error('Email verification error:', error);
+      toast.error(error.message || 'Failed to send verification email');
+    } finally {
+      setVerifyLoading(false);
+    }
+  }, [emailMethods, user?.email]);
 
   return (
     <Stack spacing={3}>
@@ -197,20 +256,22 @@ export function AccountSettings() {
 
               <Grid item xs={12}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Button
+                  <LoadingButton
                     variant="outlined"
                     onClick={handleSendPasswordReset}
+                    loading={resetLoading}
                     startIcon={<Iconify icon="solar:letter-bold" />}
                   >
                     Send Reset Link
-                  </Button>
-                  <Button
+                  </LoadingButton>
+                  <LoadingButton
                     type="submit"
                     variant="contained"
+                    loading={passwordLoading}
                     startIcon={<Iconify icon="solar:lock-password-bold" />}
                   >
                     Change Password
-                  </Button>
+                  </LoadingButton>
                 </Stack>
               </Grid>
             </Grid>
@@ -296,20 +357,22 @@ export function AccountSettings() {
 
               <Grid item xs={12}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Button
+                  <LoadingButton
                     variant="outlined"
                     onClick={handleSendEmailVerification}
+                    loading={verifyLoading}
                     startIcon={<Iconify icon="solar:verified-check-bold" />}
                   >
                     Verify Current Email
-                  </Button>
-                  <Button
+                  </LoadingButton>
+                  <LoadingButton
                     type="submit"
                     variant="contained"
+                    loading={emailLoading}
                     startIcon={<Iconify icon="solar:letter-bold" />}
                   >
                     Change Email
-                  </Button>
+                  </LoadingButton>
                 </Stack>
               </Grid>
             </Grid>

@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
+import { debounce } from 'lodash';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -16,12 +17,14 @@ import DialogActions from '@mui/material/DialogActions';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
+import { ConfirmDialog } from 'src/components/custom-dialog';
 import { fDate, fTime } from 'src/utils/format-time';
 import MenuItem from '@mui/material/MenuItem';
 import ListSubheader from '@mui/material/ListSubheader';
@@ -29,21 +32,71 @@ import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 
 import { CONFIG } from 'src/config-global';
-import { authService } from 'src/services/authService';
+import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
+
+// Helper function to check if user is authenticated using Supabase
+async function isAuthenticated() {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+    return !error && !!session;
+  } catch (error) {
+    console.error('Authentication check error:', error);
+    return false;
+  }
+}
+
+// Helper function for authenticated requests using Supabase
+async function authenticatedRequest(url, options = {}) {
+  try {
+    // Get the current session from Supabase
+    const { data: { session }, error } = await supabase.auth.getSession();
+    
+    console.log('Frontend: Supabase session check:', { 
+      hasSession: !!session, 
+      hasError: !!error, 
+      tokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'no token' 
+    });
+    
+    if (error || !session) {
+      throw new Error('No authentication session available');
+    }
+
+    const defaultOptions = {
+      headers: {
+        'Authorization': `Bearer ${session.access_token}`,
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    };
+
+    console.log('Frontend: Making request to:', url);
+    const response = await fetch(url, { ...options, ...defaultOptions });
+    
+    // If we get a 401/403, the token might be invalid
+    if (response.status === 401 || response.status === 403) {
+      throw new Error('Authentication failed. Please log in again.');
+    }
+
+    return response;
+  } catch (error) {
+    console.error('Authenticated request error:', error);
+    throw error;
+  }
+}
 
 // API Service Functions
 const shopApi = {
   async getCompleteShopData() {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/complete`);
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/complete`);
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
     return data.data;
   },
 
   async updateShopInfo(shopData) {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/info`, {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/info`, {
       method: 'PUT',
       body: JSON.stringify(shopData),
     });
@@ -53,7 +106,7 @@ const shopApi = {
   },
 
   async updateShippingSettings(settingsData) {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/shipping`, {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/shipping`, {
       method: 'PUT',
       body: JSON.stringify(settingsData),
     });
@@ -63,7 +116,7 @@ const shopApi = {
   },
 
   async createCourier(courierData) {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers`, {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers`, {
       method: 'POST',
       body: JSON.stringify(courierData),
     });
@@ -73,7 +126,7 @@ const shopApi = {
   },
 
   async updateCourier(courierId, updateData) {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}`, {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}`, {
       method: 'PUT',
       body: JSON.stringify(updateData),
     });
@@ -83,7 +136,7 @@ const shopApi = {
   },
 
   async deleteCourier(courierId) {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}`, {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}`, {
       method: 'DELETE',
     });
     const data = await response.json();
@@ -92,7 +145,7 @@ const shopApi = {
   },
 
   async updateRegionalRates(courierId, rates) {
-    const response = await authService.authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}/rates`, {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}/rates`, {
       method: 'PUT',
       body: JSON.stringify({ rates }),
     });
@@ -129,7 +182,8 @@ export function AccountShop() {
     couriers: []
   });
   const [selectedCourier, setSelectedCourier] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const courierDialog = useBoolean();
   const deleteCourierDialog = useBoolean();
@@ -139,8 +193,33 @@ export function AccountShop() {
   const [itemToDelete, setItemToDelete] = useState(null);
   const [itemToEdit, setItemToEdit] = useState(null);
   
+  // Confirmation dialog state
+  const confirmDialog = useBoolean();
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [confirmMessage, setConfirmMessage] = useState('');
+  
   // Shipping types state (currently unused - legacy from old implementation)
   const [shippingTypes, setShippingTypes] = useState([]);
+
+  // Helper function to show confirmation dialog
+  const showConfirmation = (message, action) => {
+    setConfirmMessage(message);
+    setConfirmAction(() => action);
+    confirmDialog.onTrue();
+  };
+
+  // Helper function to execute confirmed action
+  const handleConfirmAction = async () => {
+    if (confirmAction) {
+      try {
+        await confirmAction();
+        confirmDialog.onFalse();
+      } catch (error) {
+        console.error('Action failed:', error);
+        // Don't close dialog on error, let user see the error
+      }
+    }
+  };
 
   // Load shop data on component mount
   useEffect(() => {
@@ -148,14 +227,24 @@ export function AccountShop() {
       try {
         setLoading(true);
         
-        // Check if user is authenticated
-        if (!authService.isAuthenticated()) {
-          // Auto-login with a test user for development
-          await authService.login('test@example.com', 'password');
+        // Check if user is authenticated (with timeout to avoid hanging)
+        const authPromise = isAuthenticated();
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Authentication check timeout')), 3000)
+        );
+        
+        const isAuth = await Promise.race([authPromise, timeoutPromise]);
+        
+        if (!isAuth) {
+          console.warn('User not authenticated. Please log in first.');
+          toast.error('Please log in to access your account settings.');
+          return;
         }
         
         const data = await shopApi.getCompleteShopData();
+        console.log('Loaded shop data:', data);
         setShopData(data);
+        setInitialLoad(false);
         
         // Set selected courier to first active courier
         const firstActiveCourier = data.couriers.find(courier => courier.is_active);
@@ -164,7 +253,23 @@ export function AccountShop() {
         }
       } catch (error) {
         console.error('Error loading shop data:', error);
-        toast.error('Failed to load shop data. Please check your authentication.');
+        if (error.message === 'Authentication check timeout') {
+          console.warn('Authentication check timed out, proceeding anyway...');
+          // Continue loading data even if auth check times out
+          try {
+            const data = await shopApi.getCompleteShopData();
+            setShopData(data);
+            setInitialLoad(false);
+            const firstActiveCourier = data.couriers.find(courier => courier.is_active);
+            if (firstActiveCourier) {
+              setSelectedCourier(firstActiveCourier.name);
+            }
+          } catch (dataError) {
+            toast.error('Failed to load shop data. Please check your authentication.');
+          }
+        } else {
+          toast.error('Failed to load shop data. Please check your authentication.');
+        }
       } finally {
         setLoading(false);
       }
@@ -190,11 +295,13 @@ export function AccountShop() {
       freeShippingEnabled: false,
       freeShippingMinAmount: 0,
     },
+    mode: 'onChange',
   });
 
   // Update form values when shop data loads
   useEffect(() => {
     if (shopData.shopInfo) {
+      console.log('Populating form with shop data:', shopData.shopInfo);
       shopMethods.reset({
         shopName: shopData.shopInfo.shop_name || '',
         email: shopData.shopInfo.email || '',
@@ -210,6 +317,8 @@ export function AccountShop() {
         freeShippingEnabled: shopData.shippingSettings?.enable_free_shipping || false,
         freeShippingMinAmount: shopData.shippingSettings?.minimum_order_amount || 0,
       });
+    } else {
+      console.log('No shop info found in data:', shopData);
     }
   }, [shopData, shopMethods]);
 
@@ -238,62 +347,72 @@ export function AccountShop() {
   });
 
   const handleSaveShopInfo = useCallback(async (data) => {
-    try {
-      // Validate free shipping settings
-      if (data.freeShippingEnabled) {
-        const minAmount = parseFloat(data.freeShippingMinAmount);
-        
-        if (isNaN(minAmount) || minAmount < 0) {
-          toast.error('Please enter a valid minimum amount for free shipping');
-          return;
-        }
-        
-        if (minAmount > 100000) {
-          toast.error('Free shipping minimum amount cannot exceed ₱100,000');
-          return;
-        }
-        
-        if (minAmount < 100) {
-          toast.error('Free shipping minimum amount should be at least ₱100');
-          return;
+    // Show confirmation dialog
+    showConfirmation(
+      'Are you sure you want to save these changes to your shop information?',
+      async () => {
+        try {
+          // Validate free shipping settings
+          if (data.freeShippingEnabled) {
+            const minAmount = parseFloat(data.freeShippingMinAmount);
+            
+            if (isNaN(minAmount) || minAmount < 0) {
+              toast.error('Please enter a valid minimum amount for free shipping');
+              return;
+            }
+            
+            if (minAmount > 100000) {
+              toast.error('Free shipping minimum amount cannot exceed ₱100,000');
+              return;
+            }
+            
+            if (minAmount < 100) {
+              toast.error('Free shipping minimum amount should be at least ₱100');
+              return;
+            }
+          }
+          
+          toast.loading('Saving shop information...');
+          
+          // Update shop info
+          const shopInfoData = {
+            shop_name: data.shopName,
+            email: data.email,
+            phone_number: data.phoneNumber,
+            shop_category: data.shopCategory,
+            profile_photo_url: data.profileImage,
+            street_address: data.street,
+            barangay: data.barangay,
+            city: data.city,
+            province: data.province,
+            zip_code: data.zipCode,
+          };
+
+          // Update shipping settings
+          const shippingSettingsData = {
+            enable_free_shipping: data.freeShippingEnabled,
+            minimum_order_amount: parseFloat(data.freeShippingMinAmount) || 0,
+          };
+
+          await Promise.all([
+            shopApi.updateShopInfo(shopInfoData),
+            shopApi.updateShippingSettings(shippingSettingsData)
+          ]);
+          
+          // Reload shop data
+          const updatedData = await shopApi.getCompleteShopData();
+          setShopData(updatedData);
+          
+          toast.dismiss();
+          toast.success('Shop information updated successfully!');
+        } catch (error) {
+          toast.dismiss();
+          toast.error('Failed to update shop information');
+          console.error('Save error:', error);
         }
       }
-      
-      // Update shop info
-      const shopInfoData = {
-        shop_name: data.shopName,
-        email: data.email,
-        phone_number: data.phoneNumber,
-        shop_category: data.shopCategory,
-        profile_photo_url: data.profileImage,
-        street_address: data.street,
-        barangay: data.barangay,
-        city: data.city,
-        province: data.province,
-        zip_code: data.zipCode,
-      };
-
-      // Update shipping settings
-      const shippingSettingsData = {
-        enable_free_shipping: data.freeShippingEnabled,
-        minimum_order_amount: parseFloat(data.freeShippingMinAmount) || 0,
-      };
-
-      await Promise.all([
-        shopApi.updateShopInfo(shopInfoData),
-        shopApi.updateShippingSettings(shippingSettingsData)
-      ]);
-      
-      // Reload shop data
-      const updatedData = await shopApi.getCompleteShopData();
-      setShopData(updatedData);
-      
-      toast.success('Shop information updated successfully!');
-    } catch (error) {
-      toast.error('Failed to update shop information');
-      console.error('Save error:', error);
-    }
-  }, []);
+    );
+  }, [showConfirmation]);
 
   // Helper function to save couriers configuration
   const saveCouriersConfig = useCallback(async (updatedCouriers) => {
@@ -315,127 +434,194 @@ export function AccountShop() {
   }, [shopMethods]);
 
   const handleAddCourier = useCallback(async (data) => {
-    try {
-      // Use custom name if 'custom' was selected
-      const courierName = data.name === 'custom' ? data.customName : data.name;
+    // Use custom name if 'custom' was selected
+    const courierName = data.name === 'custom' ? data.customName : data.name;
 
-      if (!courierName || courierName.trim().length === 0) {
-        toast.error('Please enter a courier name');
-        return;
-      }
-
-      // Validate courier name length
-      if (courierName.trim().length < 2) {
-        toast.error('Courier name must be at least 2 characters long');
-        return;
-      }
-
-      if (courierName.trim().length > 50) {
-        toast.error('Courier name cannot exceed 50 characters');
-        return;
-      }
-
-      // Check if courier already exists (case-insensitive)
-      const existingCourier = shopData.couriers.find(c => c.name.toLowerCase().trim() === courierName.toLowerCase().trim());
-      if (existingCourier) {
-        toast.error(`Courier "${courierName}" already exists`);
-        return;
-      }
-
-      const newCourier = await shopApi.createCourier({
-        name: courierName.trim(),
-        is_active: true
-      });
-
-      // Create default regional rates for the new courier
-      const defaultRates = SHIPPING_REGIONS.map(region => ({
-        region_name: region.key,
-        region_description: region.description,
-        price: 0,
-        is_active: false
-      }));
-
-      await shopApi.updateRegionalRates(newCourier.id, defaultRates);
-      
-      // Reload shop data
-      const updatedData = await shopApi.getCompleteShopData();
-      setShopData(updatedData);
-      
-      courierMethods.reset();
-      courierDialog.onFalse();
-      toast.success('Courier added successfully! Please set shipping fees for each region.');
-    } catch (error) {
-      toast.error('Failed to add courier');
-      console.error('Add courier error:', error);
-    }
-  }, [courierMethods, courierDialog, SHIPPING_REGIONS, shopData.couriers]);
-
-  const handleUpdateRegionFees = useCallback(async (courierId, regionKey, fee, active) => {
-    try {
-    // Handle empty string as 0, allow during typing
-    const numericFee = fee === '' ? 0 : parseFloat(fee) || 0;
-    
-    // Only validate on blur or when user stops typing, not during input
-    // For now, just prevent extremely high values during typing
-    if (numericFee > 10000) {
-      toast.error('Shipping fee cannot exceed ₱10,000');
+    if (!courierName || courierName.trim().length === 0) {
+      toast.error('Please enter a courier name');
       return;
     }
-    
-      // Find the courier and its current rates
-      const courier = shopData.couriers.find(c => c.id === courierId);
-      if (!courier) return;
 
-      // Update the specific rate
-      const updatedRates = courier.rates.map(rate => {
-        if (rate.region_name === regionKey) {
-        return {
-            ...rate,
-            price: numericFee,
-            is_active: active
+    // Validate courier name length
+    if (courierName.trim().length < 2) {
+      toast.error('Courier name must be at least 2 characters long');
+      return;
+    }
+
+    if (courierName.trim().length > 50) {
+      toast.error('Courier name cannot exceed 50 characters');
+      return;
+    }
+
+    // Check if courier already exists (case-insensitive)
+    const existingCourier = shopData.couriers.find(c => c.name.toLowerCase().trim() === courierName.toLowerCase().trim());
+    if (existingCourier) {
+      toast.error(`Courier "${courierName}" already exists`);
+      return;
+    }
+
+    // Show confirmation dialog
+    showConfirmation(
+      `Are you sure you want to add "${courierName}" as a new courier?`,
+      async () => {
+        try {
+          toast.loading('Adding courier...');
+          
+          const newCourier = await shopApi.createCourier({
+            name: courierName.trim(),
+            is_active: true
+          });
+
+          // Create default regional rates for the new courier
+          const defaultRates = SHIPPING_REGIONS.map(region => ({
+            region_name: region.key,
+            region_description: region.description,
+            price: 0,
+            is_active: false
+          }));
+
+          await shopApi.updateRegionalRates(newCourier.id, defaultRates);
+          
+          // Reload shop data
+          const updatedData = await shopApi.getCompleteShopData();
+          setShopData(updatedData);
+          
+          courierMethods.reset();
+          courierDialog.onFalse();
+          
+          toast.dismiss();
+          toast.success('Courier added successfully! Please set shipping fees for each region.');
+        } catch (error) {
+          toast.dismiss();
+          toast.error('Failed to add courier');
+          console.error('Add courier error:', error);
+        }
+      }
+    );
+  }, [courierMethods, courierDialog, SHIPPING_REGIONS, shopData.couriers, showConfirmation]);
+
+  // Debounced update function for shipping fees
+  const debouncedUpdateRegionFees = useCallback(
+    debounce(async (courierId, regionKey, fee, active) => {
+      try {
+        // Handle empty string as 0
+        const numericFee = fee === '' ? 0 : parseFloat(fee) || 0;
+        
+        // Validate fee amount
+        if (numericFee > 10000) {
+          toast.error('Shipping fee cannot exceed ₱10,000');
+          return;
+        }
+        
+        // Find the courier and its current rates
+        const courier = shopData.couriers.find(c => c.id === courierId);
+        if (!courier) return;
+
+        // Update the specific rate
+        const updatedRates = courier.rates.map(rate => {
+          if (rate.region_name === regionKey) {
+            return {
+              ...rate,
+              price: numericFee,
+              is_active: active
+            };
+          }
+          return rate;
+        });
+
+        // Update rates in the database
+        await shopApi.updateRegionalRates(courierId, updatedRates);
+        
+        // Reload shop data
+        const updatedData = await shopApi.getCompleteShopData();
+        setShopData(updatedData);
+      
+        // Only show success message for significant updates
+        if (numericFee > 0) {
+          toast.success('Shipping fee updated successfully!');
+        }
+      } catch (error) {
+        toast.error('Failed to update shipping fee');
+        console.error('Update region fee error:', error);
+      }
+    }, 500), // Reduced to 500ms for better responsiveness
+    [shopData.couriers]
+  );
+
+  const handleUpdateRegionFees = useCallback((courierId, regionKey, fee, active) => {
+    // Immediately update the local state for instant UI feedback
+    setShopData(prevData => ({
+      ...prevData,
+      couriers: prevData.couriers.map(courier => {
+        if (courier.id === courierId) {
+          return {
+            ...courier,
+            rates: courier.rates.map(rate => {
+              if (rate.region_name === regionKey) {
+                return {
+                  ...rate,
+                  price: fee === '' ? 0 : parseFloat(fee) || 0,
+                  is_active: active
+                };
+              }
+              return rate;
+            })
           };
         }
-        return rate;
-      });
+        return courier;
+      })
+    }));
 
-      // Update rates in the database
-      await shopApi.updateRegionalRates(courierId, updatedRates);
-      
-      // Reload shop data
-      const updatedData = await shopApi.getCompleteShopData();
-      setShopData(updatedData);
-    
-    // Only show success message for significant updates (not every keystroke)
-    if (numericFee > 0) {
-      toast.success('Shipping fee updated successfully!');
-    }
-    } catch (error) {
-      toast.error('Failed to update shipping fee');
-      console.error('Update region fee error:', error);
-    }
-  }, [shopData.couriers]);
+    // Then call the debounced function for API update
+    debouncedUpdateRegionFees(courierId, regionKey, fee, active);
+  }, [debouncedUpdateRegionFees]);
 
   const handleToggleRegion = useCallback(async (courierId, regionKey) => {
-    try {
-      // Find the courier and its current rates
-      const courier = shopData.couriers.find(c => c.id === courierId);
-      if (!courier) return;
+    // Find the courier and its current rates
+    const courier = shopData.couriers.find(c => c.id === courierId);
+    if (!courier) return;
 
-      const currentRate = courier.rates.find(r => r.region_name === regionKey);
-      if (!currentRate) return;
-        
-        // Validate that fee is set before activating
-      if (!currentRate.is_active && (!currentRate.price || currentRate.price <= 0)) {
-          toast.error('Please set a shipping fee before activating this region');
-        return;
+    const currentRate = courier.rates.find(r => r.region_name === regionKey);
+    if (!currentRate) return;
+      
+    // Validate that fee is set before activating
+    if (!currentRate.is_active && (!currentRate.price || currentRate.price <= 0)) {
+      toast.error('Please set a shipping fee before activating this region');
+      return;
+    }
+      
+    const newActiveStatus = !currentRate.is_active;
+    
+    // IMMEDIATE UI UPDATE - Update the state instantly
+    setShopData(prevData => ({
+      ...prevData,
+      couriers: prevData.couriers.map(c => {
+        if (c.id === courierId) {
+          return {
+            ...c,
+            rates: c.rates.map(rate => {
+              if (rate.region_name === regionKey) {
+                return {
+                  ...rate,
+                  is_active: newActiveStatus
+                };
+              }
+              return rate;
+            })
+          };
         }
-        
-      const newActiveStatus = !currentRate.is_active;
-        
-      // Update the specific rate
+        return c;
+      })
+    }));
+
+    // Show immediate feedback
+    toast.success('Region availability updated!');
+
+    // Then update the database in the background
+    try {
       const updatedRates = courier.rates.map(rate => {
         if (rate.region_name === regionKey) {
-        return {
+          return {
             ...rate,
             is_active: newActiveStatus
           };
@@ -443,45 +629,86 @@ export function AccountShop() {
         return rate;
       });
 
-      // Update rates in the database
       await shopApi.updateRegionalRates(courierId, updatedRates);
-      
-      // Reload shop data
-      const updatedData = await shopApi.getCompleteShopData();
-      setShopData(updatedData);
-      
-      toast.success('Region availability updated!');
     } catch (error) {
+      // If API call fails, revert the UI change
+      setShopData(prevData => ({
+        ...prevData,
+        couriers: prevData.couriers.map(c => {
+          if (c.id === courierId) {
+            return {
+              ...c,
+              rates: c.rates.map(rate => {
+                if (rate.region_name === regionKey) {
+                  return {
+                    ...rate,
+                    is_active: !newActiveStatus // Revert to original status
+                  };
+                }
+                return rate;
+              })
+            };
+          }
+          return c;
+        })
+      }));
+      
       toast.error('Failed to update region availability');
       console.error('Toggle region error:', error);
     }
   }, [shopData.couriers]);
 
   const handleToggleCourier = useCallback(async (courierId) => {
-    try {
-      const courier = shopData.couriers.find(c => c.id === courierId);
-      if (!courier) return;
+    const courier = shopData.couriers.find(c => c.id === courierId);
+    if (!courier) return;
 
-      const newStatus = !courier.is_active;
+    const newStatus = !courier.is_active;
 
-      await shopApi.updateCourier(courierId, { is_active: newStatus });
-      
-      // If the currently selected courier is deactivated, switch to the first active courier
-      if (courier.name === selectedCourier && !newStatus) {
-        const remainingActiveCourier = shopData.couriers.find(c => c.id !== courierId && c.is_active);
-        if (remainingActiveCourier) {
-          setSelectedCourier(remainingActiveCourier.name);
-        } else {
-          setSelectedCourier('');
+    // IMMEDIATE UI UPDATE - Update the state instantly
+    setShopData(prevData => ({
+      ...prevData,
+      couriers: prevData.couriers.map(c => {
+        if (c.id === courierId) {
+          return {
+            ...c,
+            is_active: newStatus
+          };
         }
+        return c;
+      })
+    }));
+
+    // If the currently selected courier is deactivated, switch to the first active courier
+    if (courier.name === selectedCourier && !newStatus) {
+      const remainingActiveCourier = shopData.couriers.find(c => c.id !== courierId && c.is_active);
+      if (remainingActiveCourier) {
+        setSelectedCourier(remainingActiveCourier.name);
+      } else {
+        setSelectedCourier('');
       }
-      
-      // Reload shop data
-      const updatedData = await shopApi.getCompleteShopData();
-      setShopData(updatedData);
-      
+    }
+
+    // Show immediate feedback
     toast.success('Courier status updated!');
+
+    // Then update the database in the background
+    try {
+      await shopApi.updateCourier(courierId, { is_active: newStatus });
     } catch (error) {
+      // If API call fails, revert the UI change
+      setShopData(prevData => ({
+        ...prevData,
+        couriers: prevData.couriers.map(c => {
+          if (c.id === courierId) {
+            return {
+              ...c,
+              is_active: !newStatus // Revert to original status
+            };
+          }
+          return c;
+        })
+      }));
+      
       toast.error('Failed to update courier status');
       console.error('Toggle courier error:', error);
     }
@@ -517,29 +744,34 @@ export function AccountShop() {
       try {
         const courier = shopData.couriers.find(c => c.id === itemToDelete.id);
         
+        toast.loading('Deleting courier...');
+        
         await shopApi.deleteCourier(itemToDelete.id);
       
-      // If the deleted courier was selected, switch to another active courier
-      if (courier && courier.name === selectedCourier) {
+        // If the deleted courier was selected, switch to another active courier
+        if (courier && courier.name === selectedCourier) {
           const remainingActiveCourier = shopData.couriers.find(c => c.id !== itemToDelete.id && c.is_active);
-        if (remainingActiveCourier) {
-          setSelectedCourier(remainingActiveCourier.name);
-        } else {
-          setSelectedCourier('');
+          if (remainingActiveCourier) {
+            setSelectedCourier(remainingActiveCourier.name);
+          } else {
+            setSelectedCourier('');
+          }
         }
-      }
         
         // Reload shop data
         const updatedData = await shopApi.getCompleteShopData();
         setShopData(updatedData);
       
-      deleteCourierDialog.onFalse();
-      setItemToDelete(null);
-      toast.success('Courier deleted successfully!');
+        deleteCourierDialog.onFalse();
+        setItemToDelete(null);
+        
+        toast.dismiss();
+        toast.success('Courier deleted successfully!');
       } catch (error) {
+        toast.dismiss();
         toast.error('Failed to delete courier');
         console.error('Delete courier error:', error);
-    }
+      }
     }
   }, [itemToDelete, shopData.couriers, selectedCourier, deleteCourierDialog]);
 
@@ -629,28 +861,39 @@ export function AccountShop() {
   }, [editShippingMethods, editShippingDialog]);
 
   const handleUpdateCourier = useCallback(async (data) => {
-    try {
-      if (itemToEdit) {
-        await shopApi.updateCourier(itemToEdit.id, { name: data.name });
-          
-          // Update selected courier if it was the edited one
-          if (selectedCourier === itemToEdit.name) {
-            setSelectedCourier(data.name);
+    if (itemToEdit) {
+      // Show confirmation dialog
+      showConfirmation(
+        `Are you sure you want to update "${itemToEdit.name}" to "${data.name}"?`,
+        async () => {
+          try {
+            toast.loading('Updating courier...');
+            
+            await shopApi.updateCourier(itemToEdit.id, { name: data.name });
+              
+            // Update selected courier if it was the edited one
+            if (selectedCourier === itemToEdit.name) {
+              setSelectedCourier(data.name);
+            }
+            
+            // Reload shop data
+            const updatedData = await shopApi.getCompleteShopData();
+            setShopData(updatedData);
+            
+            editCourierDialog.onFalse();
+            setItemToEdit(null);
+            
+            toast.dismiss();
+            toast.success('Courier updated successfully!');
+          } catch (error) {
+            toast.dismiss();
+            toast.error('Failed to update courier');
+            console.error('Update courier error:', error);
+          }
         }
-        
-        // Reload shop data
-        const updatedData = await shopApi.getCompleteShopData();
-        setShopData(updatedData);
-        
-        editCourierDialog.onFalse();
-        setItemToEdit(null);
-        toast.success('Courier updated successfully!');
-      }
-    } catch (error) {
-      toast.error('Failed to update courier');
-      console.error('Update courier error:', error);
+      );
     }
-  }, [itemToEdit, editCourierDialog, selectedCourier]);
+  }, [itemToEdit, editCourierDialog, selectedCourier, showConfirmation]);
 
   const handleUpdateShippingType = useCallback(async (data) => {
     try {
@@ -711,12 +954,29 @@ export function AccountShop() {
     };
   }, [shopData.couriers, shopMethods]);
 
-  if (loading) {
+  // Only show loading if we're actually loading and don't have any data yet
+  if ((loading || initialLoad) && !shopData.shopInfo) {
     return (
-      <Stack spacing={3} alignItems="center" sx={{ py: 4 }}>
-        <Typography variant="h6" sx={{ color: 'text.secondary' }}>
-          Loading shop data...
-        </Typography>
+      <Stack spacing={3}>
+        {/* Shop Info Card Skeleton */}
+        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ p: 3 }}>
+            <Stack spacing={3}>
+              <Skeleton variant="text" width="30%" height={32} />
+              <Skeleton variant="rectangular" width="100%" height={200} />
+            </Stack>
+          </Box>
+        </Card>
+
+        {/* Shipping Settings Card Skeleton */}
+        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ p: 3 }}>
+            <Stack spacing={3}>
+              <Skeleton variant="text" width="25%" height={32} />
+              <Skeleton variant="rectangular" width="100%" height={150} />
+            </Stack>
+          </Box>
+        </Card>
       </Stack>
     );
   }
@@ -767,13 +1027,33 @@ export function AccountShop() {
                 <Stack spacing={3}>
                   <Grid container spacing={2}>
                     <Grid item xs={12} sm={6}>
-                      <Field.Text name="shopName" label="Shop Name" />
+                      <Field.Text 
+                        name="shopName" 
+                        label="Shop Name" 
+                        rules={{ required: 'Shop name is required' }}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <Field.Text name="email" label="Email" />
+                      <Field.Text 
+                        name="email" 
+                        label="Email" 
+                        type="email"
+                        rules={{ 
+                          required: 'Email is required',
+                          pattern: {
+                            value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                            message: 'Invalid email address'
+                          }
+                        }}
+                      />
                     </Grid>
                     <Grid item xs={12}>
-                      <Field.Text name="phoneNumber" label="Phone Number" placeholder="+63" />
+                      <Field.Text 
+                        name="phoneNumber" 
+                        label="Phone Number" 
+                        placeholder="+63" 
+                        rules={{ required: 'Phone number is required' }}
+                      />
                     </Grid>
                   </Grid>
 
@@ -786,6 +1066,7 @@ export function AccountShop() {
                         name="shopCategory"
                         label="Select Category"
                         placeholder="Choose a category"
+                        rules={{ required: 'Shop category is required' }}
                       >
                         <MenuItem value="">Choose a category</MenuItem>
                         <MenuItem value="fashion">Fashion & Apparel</MenuItem>
@@ -809,6 +1090,7 @@ export function AccountShop() {
                           label="Custom Category"
                           placeholder="Enter your shop category"
                           helperText="Describe what type of products you sell"
+                          rules={{ required: 'Custom category is required' }}
                         />
                       </Grid>
                     )}
@@ -819,19 +1101,39 @@ export function AccountShop() {
                   <Typography variant="subtitle2">Address</Typography>
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
-                      <Field.Text name="street" label="Street Address" />
+                      <Field.Text 
+                        name="street" 
+                        label="Street Address" 
+                        rules={{ required: 'Street address is required' }}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <Field.Text name="barangay" label="Barangay" />
+                      <Field.Text 
+                        name="barangay" 
+                        label="Barangay" 
+                        rules={{ required: 'Barangay is required' }}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <Field.Text name="city" label="City" />
+                      <Field.Text 
+                        name="city" 
+                        label="City" 
+                        rules={{ required: 'City is required' }}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <Field.Text name="province" label="Province" />
+                      <Field.Text 
+                        name="province" 
+                        label="Province" 
+                        rules={{ required: 'Province is required' }}
+                      />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <Field.Text name="zipCode" label="Zip Code" />
+                      <Field.Text 
+                        name="zipCode" 
+                        label="Zip Code" 
+                        rules={{ required: 'Zip code is required' }}
+                      />
                     </Grid>
                   </Grid>
 
@@ -1282,6 +1584,19 @@ export function AccountShop() {
             </DialogActions>
           </Form>
         </Dialog>
+
+        {/* Confirmation Dialog */}
+        <ConfirmDialog
+          open={confirmDialog.value}
+          onClose={confirmDialog.onFalse}
+          title="Confirm Action"
+          content={confirmMessage}
+          action={
+            <Button variant="contained" color="error" onClick={handleConfirmAction}>
+              Confirm
+            </Button>
+          }
+        />
 
       </Stack>
     );

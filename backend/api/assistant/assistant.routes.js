@@ -1,12 +1,11 @@
 /**
  * Assistant Routes (Chatbot-only)
- * Decoupled from OCR/Upload. Keeps simple in-memory sessions and forwards to n8n.
+ * Decoupled from OCR/Upload. Keeps simple in-memory sessions and uses LLM for responses.
  */
 
 const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
-const { postToWebhook } = require('../../services/n8nClient');
 const { chatComplete, getConfig: getLLMConfig } = require('../../services/llmClient');
 
 // --- Simple in-memory chat sessions (ephemeral; swap to Redis/DB later) ---
@@ -38,7 +37,7 @@ function localAssistantReply(input) {
     return 'AI helps read receipts, categorize transactions, and generate summaries. Ask me to categorize or generate a monthly report.';
   }
   if (/^\s*what\s+is\s+.+/i.test(msg)) {
-    return 'I can help with general questions too. For the best answers, enable the LLM fallback (set LLM_API_KEY in backend/.env or use the advanced n8n workflow).';
+    return 'I can help with general questions too. For the best answers, enable the LLM fallback (set LLM_API_KEY in backend/.env).';
   }
   if (/categor/i.test(m)) {
     return 'To categorize, upload receipts or a CSV/XLSX in Upload Process. Then ask “categorize recent transactions”.';
@@ -80,10 +79,9 @@ function localAssistantReply(input) {
  * GET /api/assistant/health
  */
 router.get('/health', (req, res) => {
-  const url = process.env.N8N_WEBHOOK_URL || '';
-  const configured = Boolean(url && (url.startsWith('http') || url.startsWith('mock:')));
-  const masked = url ? url.replace(/:[^@/]+@/, ':***@') : null; // mask basic auth secret
-  res.json({ success: true, data: { configured, url: masked } });
+  const llmCfg = getLLMConfig();
+  const configured = Boolean(llmCfg.apiKey);
+  res.json({ success: true, data: { configured, source: 'llm' } });
 });
 
 /**
@@ -108,11 +106,10 @@ router.post('/message', express.json(), async (req, res) => {
       context: { ...context, app: 'STUDIO360', page: 'ai-bookkeeper' },
     };
 
-    // Routing strategy: if LLM is enabled and user asks a general question, use LLM first; else n8n
+    // Use LLM as primary response method
     const llmCfg = getLLMConfig();
-    const isGeneralQA = /(what|why|how|who|where|explain|compare|summarize|translate|define|write|draft|code|fix|bug|regex|error)/i.test(message);
-
-    if (llmCfg.apiKey && isGeneralQA) {
+    
+    if (llmCfg.apiKey) {
       try {
         const system = 'You are the STUDIO360 AI assistant. Be concise, accurate, and helpful. If the user asks about bookkeeping features, briefly guide them to upload receipts, categorize transactions, or generate reports.';
         const llmReply = await chatComplete({
@@ -127,51 +124,20 @@ router.post('/message', express.json(), async (req, res) => {
         session.history.push({ role: 'assistant', content: llmReply, ts: Date.now() });
         return res.json({ success: true, data: { sessionId: id, reply: llmReply, source: 'llm' } });
       } catch (e) {
-        console.warn('LLM primary error:', e.message || e);
-        // fall through to n8n
+        console.warn('LLM error:', e.message || e);
+        // fall through to local assistant
       }
     }
 
-    const resp = await postToWebhook('assistant', payload);
-    if (!resp.ok) {
-      // If LLM is available, use it as fallback for any request type
-      try {
-        if (llmCfg.apiKey) {
-          const system = 'You are the STUDIO360 AI assistant. Be concise, accurate, and helpful.';
-          const llmReply = await chatComplete({
-            system,
-            messages: [
-              ...session.history.map(h => ({ role: h.role, content: String(h.content || '') })),
-              { role: 'user', content: String(message) },
-            ],
-            temperature: 0.3,
-            maxTokens: 500,
-          });
-          session.history.push({ role: 'assistant', content: llmReply, ts: Date.now() });
-          return res.json({ success: true, data: { sessionId: id, reply: llmReply, source: 'llm' } });
-        }
-      } catch (e) {
-        console.warn('LLM fallback error:', e.message || e);
-      }
-
-      const hint = localAssistantReply(message);
-      if (resp.error) console.warn('n8n webhook error:', resp.error);
-      session.history.push({ role: 'assistant', content: hint, ts: Date.now() });
-      return res.json({ success: true, data: { sessionId: id, reply: hint, source: 'fallback' } });
-    }
-
-    const data = resp.data || {};
-    const reply =
-      (typeof data.reply === 'string' && data.reply) ||
-      (Array.isArray(data.messages) && data.messages.find(m => m.role !== 'user')?.content) ||
-      (typeof data.text === 'string' && data.text) ||
-      'Okay.';
-
-    session.history.push({ role: 'assistant', content: reply, ts: Date.now() });
-    return res.json({ success: true, data: { sessionId: id, reply, raw: data } });
+    // Fallback to local assistant if LLM is not available or fails
+    const hint = localAssistantReply(message);
+    session.history.push({ role: 'assistant', content: hint, ts: Date.now() });
+    return res.json({ success: true, data: { sessionId: id, reply: hint, source: 'fallback' } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }
 });
 
 module.exports = router;
+
+

@@ -8,12 +8,16 @@ class ShopService {
    */
   async getShopInfo(userId) {
     try {
+      console.log('Getting shop info for user ID:', userId);
+      
       const { data, error } = await supabase
         .from('shop_info')
         .select('*')
         .eq('user_id', userId)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .single();
+
+      console.log('Shop info query result:', { data, error });
 
       if (error) {
         console.error('Error fetching shop info:', error);
@@ -125,7 +129,7 @@ class ShopService {
         .from('couriers')
         .select('*')
         .eq('user_id', userId)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -181,7 +185,7 @@ class ShopService {
         .from('couriers')
         .update(updateData)
         .eq('id', courierId)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .select()
         .single();
 
@@ -208,7 +212,7 @@ class ShopService {
         .from('couriers')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', courierId)
-        .eq('deleted_at', null);
+        .is('deleted_at', null);
 
       if (error) {
         console.error('Error deleting courier:', error);
@@ -333,7 +337,7 @@ class ShopService {
             .from('couriers')
             .select('id')
             .eq('user_id', userId)
-            .eq('deleted_at', null)
+            .is('deleted_at', null)
         );
 
       if (error) {

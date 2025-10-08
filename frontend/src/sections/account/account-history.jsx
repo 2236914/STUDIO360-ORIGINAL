@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import Button from '@mui/material/Button';
@@ -15,173 +16,220 @@ import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
+import CircularProgress from '@mui/material/CircularProgress';
+import Pagination from '@mui/material/Pagination';
 
 import { fDate, fTime } from 'src/utils/format-time';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
+import { ConfirmDialog } from 'src/components/custom-dialog';
+import { useAuthContext } from 'src/auth/hooks';
 
-// ----------------------------------------------------------------------
-
-// Mock login history data
-const LOGIN_HISTORY = [
-  {
-    id: '1',
-    date: '2024-01-15T10:30:00Z',
-    device: 'Windows Chrome',
-    location: 'Quezon City, Philippines',
-    ipAddress: '192.168.1.1',
-    status: 'successful',
-    browser: 'Chrome 120.0',
-    os: 'Windows 11',
-  },
-  {
-    id: '2',
-    date: '2024-01-14T15:45:00Z',
-    device: 'iPhone Safari',
-    location: 'Manila, Philippines',
-    ipAddress: '192.168.1.2',
-    status: 'successful',
-    browser: 'Safari 17.0',
-    os: 'iOS 17.2',
-  },
-  {
-    id: '3',
-    date: '2024-01-14T09:15:00Z',
-    device: 'Windows Chrome',
-    location: 'Quezon City, Philippines',
-    ipAddress: '192.168.1.1',
-    status: 'failed',
-    browser: 'Chrome 120.0',
-    os: 'Windows 11',
-  },
-  {
-    id: '4',
-    date: '2024-01-13T18:20:00Z',
-    device: 'Android Chrome',
-    location: 'Makati, Philippines',
-    ipAddress: '192.168.1.3',
-    status: 'successful',
-    browser: 'Chrome Mobile 120.0',
-    os: 'Android 14',
-  },
-  {
-    id: '5',
-    date: '2024-01-13T14:10:00Z',
-    device: 'Windows Firefox',
-    location: 'Quezon City, Philippines',
-    ipAddress: '192.168.1.1',
-    status: 'successful',
-    browser: 'Firefox 121.0',
-    os: 'Windows 11',
-  },
-  {
-    id: '6',
-    date: '2024-01-12T20:30:00Z',
-    device: 'Mac Safari',
-    location: 'Pasig, Philippines',
-    ipAddress: '192.168.1.4',
-    status: 'successful',
-    browser: 'Safari 17.0',
-    os: 'macOS Sonoma',
-  },
-  {
-    id: '7',
-    date: '2024-01-12T11:45:00Z',
-    device: 'Windows Chrome',
-    location: 'Unknown Location',
-    ipAddress: '203.177.89.15',
-    status: 'suspicious',
-    browser: 'Chrome 119.0',
-    os: 'Windows 10',
-  },
-];
+import accountHistoryService from 'src/services/accountHistoryService';
 
 // ----------------------------------------------------------------------
 
 export function AccountHistory() {
+  // Authentication
+  const { user, loading: authLoading } = useAuthContext();
+  
+  // State management
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredHistory, setFilteredHistory] = useState(LOGIN_HISTORY);
+  const [history, setHistory] = useState([]);
+  const [filteredHistory, setFilteredHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [clearing, setClearing] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const itemsPerPage = 20;
+  
+  // Confirmation dialog state
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    content: '',
+    onConfirm: null
+  });
 
-  const handleSearch = useCallback((event) => {
-    const query = event.target.value.toLowerCase();
-    setSearchQuery(query);
+  // Load login history on component mount and when user is authenticated
+  useEffect(() => {
+    console.log('Account History: Auth state changed:', { authLoading, user: user ? { id: user.id, email: user.email } : null });
+    if (!authLoading && user) {
+      loadLoginHistory();
+    }
+  }, [currentPage, user, authLoading]);
 
-    if (query === '') {
-      setFilteredHistory(LOGIN_HISTORY);
+  // Filter history when search query changes
+  useEffect(() => {
+    if (searchQuery.trim() === '') {
+      setFilteredHistory(history);
     } else {
-      const filtered = LOGIN_HISTORY.filter(
-        (item) =>
-          item.device.toLowerCase().includes(query) ||
-          item.location.toLowerCase().includes(query) ||
-          item.ipAddress.toLowerCase().includes(query) ||
-          item.browser.toLowerCase().includes(query) ||
-          item.os.toLowerCase().includes(query) ||
-          item.status.toLowerCase().includes(query)
-      );
+      const filtered = accountHistoryService.searchHistory(history, searchQuery);
       setFilteredHistory(filtered);
     }
+  }, [searchQuery, history]);
+
+  // Load login history from API
+  const loadLoginHistory = useCallback(async () => {
+    try {
+      console.log('Account History: Loading login history with user:', user);
+      setLoading(true);
+      const offset = (currentPage - 1) * itemsPerPage;
+      const response = await accountHistoryService.getLoginHistory({
+        limit: itemsPerPage,
+        offset,
+        search: searchQuery || undefined
+      });
+
+      const formattedData = accountHistoryService.formatHistoryData(response.data);
+      setHistory(formattedData);
+      setFilteredHistory(formattedData);
+      setTotalCount(response.pagination?.total || 0);
+      setTotalPages(Math.ceil((response.pagination?.total || 0) / itemsPerPage));
+    } catch (error) {
+      console.error('Error loading login history:', error);
+      toast.error(error.message || 'Failed to load login history');
+    } finally {
+      setLoading(false);
+    }
+  }, [currentPage, searchQuery]);
+
+  // Handle search input
+  const handleSearch = useCallback((event) => {
+    setSearchQuery(event.target.value);
+    setCurrentPage(1); // Reset to first page when searching
   }, []);
 
+  // Show confirmation dialog
+  const showConfirmDialog = useCallback((title, content, onConfirm) => {
+    setConfirmDialog({
+      open: true,
+      title,
+      content,
+      onConfirm
+    });
+  }, []);
+
+  // Close confirmation dialog
+  const closeConfirmDialog = useCallback(() => {
+    setConfirmDialog({
+      open: false,
+      title: '',
+      content: '',
+      onConfirm: null
+    });
+  }, []);
+
+  // Handle clear history with confirmation
   const handleClearHistory = useCallback(() => {
-    toast.success('Login history cleared successfully!');
-    setFilteredHistory([]);
+    showConfirmDialog(
+      'Clear Login History',
+      'Are you sure you want to clear all your login history? This action cannot be undone.',
+      async () => {
+        try {
+          setClearing(true);
+          await accountHistoryService.clearHistory();
+          toast.success('Login history cleared successfully!');
+          await loadLoginHistory(); // Reload data
+        } catch (error) {
+          console.error('Error clearing history:', error);
+          toast.error(error.message || 'Failed to clear login history');
+        } finally {
+          setClearing(false);
+          closeConfirmDialog();
+        }
+      }
+    );
+  }, [showConfirmDialog, closeConfirmDialog, loadLoginHistory]);
+
+  // Handle export history
+  const handleExportHistory = useCallback(async () => {
+    try {
+      setExporting(true);
+      await accountHistoryService.exportHistory();
+      toast.success('Login history exported successfully!');
+    } catch (error) {
+      console.error('Error exporting history:', error);
+      toast.error(error.message || 'Failed to export login history');
+    } finally {
+      setExporting(false);
+    }
   }, []);
 
-  const handleExportHistory = useCallback(() => {
-    // Create CSV content
-    const headers = ['Date', 'Time', 'Device', 'Browser', 'OS', 'Location', 'IP Address', 'Status'];
-    const csvContent = [
-      headers.join(','),
-      ...filteredHistory.map((item) =>
-        [
-          fDate(item.date),
-          fTime(item.date),
-          item.device,
-          item.browser,
-          item.os,
-          `"${item.location}"`,
-          item.ipAddress,
-          item.status,
-        ].join(',')
-      ),
-    ].join('\n');
+  // Handle delete specific entry
+  const handleDeleteEntry = useCallback((entryId) => {
+    showConfirmDialog(
+      'Delete Entry',
+      'Are you sure you want to delete this login entry? This action cannot be undone.',
+      async () => {
+        try {
+          await accountHistoryService.deleteHistoryEntry(entryId);
+          toast.success('Login entry deleted successfully!');
+          await loadLoginHistory(); // Reload data
+        } catch (error) {
+          console.error('Error deleting entry:', error);
+          toast.error(error.message || 'Failed to delete login entry');
+        } finally {
+          closeConfirmDialog();
+        }
+      }
+    );
+  }, [showConfirmDialog, closeConfirmDialog, loadLoginHistory]);
 
-    // Create and download file
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `login-history-${fDate(new Date(), 'yyyy-MM-dd')}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
-    toast.success('Login history exported successfully!');
-  }, [filteredHistory]);
+  // Handle page change
+  const handlePageChange = useCallback((event, page) => {
+    setCurrentPage(page);
+  }, []);
 
   const getStatusColor = (status) => {
-    switch (status) {
-      case 'successful':
-        return 'success';
-      case 'failed':
-        return 'error';
-      case 'suspicious':
-        return 'warning';
-      default:
-        return 'default';
-    }
+    return accountHistoryService.getStatusColor(status);
   };
 
   const getDeviceIcon = (device) => {
-    if (device.includes('Windows')) return 'logos:microsoft-windows';
-    if (device.includes('iPhone') || device.includes('iOS')) return 'logos:apple';
-    if (device.includes('Android')) return 'logos:android-icon';
-    if (device.includes('Mac')) return 'logos:apple';
-    return 'solar:device-2-bold';
+    return accountHistoryService.getDeviceIcon(device);
   };
+
+  // Show loading state while authentication is loading
+  if (authLoading) {
+    return (
+      <Stack spacing={3}>
+        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+            <Stack spacing={2} alignItems="center">
+              <CircularProgress />
+              <Typography variant="body2" color="text.secondary">
+                Loading account history...
+              </Typography>
+            </Stack>
+          </Box>
+        </Card>
+      </Stack>
+    );
+  }
+
+  // Show message if user is not authenticated
+  if (!user) {
+    return (
+      <Stack spacing={3}>
+        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 200 }}>
+            <Stack spacing={2} alignItems="center">
+              <Iconify icon="mdi:account-alert" width={48} sx={{ color: 'warning.main' }} />
+              <Typography variant="h6" color="text.secondary">
+                Please sign in to view your account history
+              </Typography>
+            </Stack>
+          </Box>
+        </Card>
+      </Stack>
+    );
+  }
 
   return (
     <Stack spacing={3}>
@@ -198,20 +246,20 @@ export function AccountHistory() {
             <Stack direction="row" spacing={1}>
               <Button
                 variant="outlined"
-                startIcon={<Iconify icon="solar:download-bold" />}
+                startIcon={exporting ? <CircularProgress size={16} /> : <Iconify icon="solar:download-bold" />}
                 onClick={handleExportHistory}
-                disabled={filteredHistory.length === 0}
+                disabled={filteredHistory.length === 0 || exporting}
               >
-                Export
+                {exporting ? 'Exporting...' : 'Export'}
               </Button>
               <Button
                 variant="outlined"
                 color="error"
-                startIcon={<Iconify icon="solar:trash-bin-trash-bold" />}
+                startIcon={clearing ? <CircularProgress size={16} /> : <Iconify icon="solar:trash-bin-trash-bold" />}
                 onClick={handleClearHistory}
-                disabled={filteredHistory.length === 0}
+                disabled={filteredHistory.length === 0 || clearing}
               >
-                Clear History
+                {clearing ? 'Clearing...' : 'Clear History'}
               </Button>
             </Stack>
           </Stack>
@@ -236,7 +284,7 @@ export function AccountHistory() {
           <Stack direction="row" spacing={3} sx={{ mb: 2 }}>
             <Stack alignItems="center">
               <Typography variant="h4" sx={{ color: 'success.main' }}>
-                {LOGIN_HISTORY.filter((item) => item.status === 'successful').length}
+                {filteredHistory.filter((item) => item.status === 'successful').length}
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Successful Logins
@@ -244,7 +292,7 @@ export function AccountHistory() {
             </Stack>
             <Stack alignItems="center">
               <Typography variant="h4" sx={{ color: 'error.main' }}>
-                {LOGIN_HISTORY.filter((item) => item.status === 'failed').length}
+                {filteredHistory.filter((item) => item.status === 'failed').length}
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Failed Attempts
@@ -252,7 +300,7 @@ export function AccountHistory() {
             </Stack>
             <Stack alignItems="center">
               <Typography variant="h4" sx={{ color: 'warning.main' }}>
-                {LOGIN_HISTORY.filter((item) => item.status === 'suspicious').length}
+                {filteredHistory.filter((item) => item.status === 'suspicious').length}
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Suspicious Activities
@@ -260,7 +308,7 @@ export function AccountHistory() {
             </Stack>
             <Stack alignItems="center">
               <Typography variant="h4" sx={{ color: 'info.main' }}>
-                {new Set(LOGIN_HISTORY.map((item) => item.ipAddress)).size}
+                {new Set(filteredHistory.map((item) => item.ipAddress)).size}
               </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                 Unique Devices
@@ -302,9 +350,20 @@ export function AccountHistory() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {filteredHistory.length === 0 ? (
+                {loading ? (
                   <TableRow>
-                    <TableCell colSpan={7} align="center" sx={{ py: 6 }}>
+                    <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                      <Stack alignItems="center" spacing={2}>
+                        <CircularProgress />
+                        <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                          Loading login history...
+                        </Typography>
+                      </Stack>
+                    </TableCell>
+                  </TableRow>
+                ) : filteredHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
                       <Stack alignItems="center" spacing={2}>
                         <Iconify icon="solar:history-bold" width={64} sx={{ color: 'text.disabled' }} />
                         <Typography variant="h6" sx={{ color: 'text.disabled' }}>
@@ -315,7 +374,7 @@ export function AccountHistory() {
                             variant="outlined"
                             onClick={() => {
                               setSearchQuery('');
-                              setFilteredHistory(LOGIN_HISTORY);
+                              setCurrentPage(1);
                             }}
                           >
                             Clear Search
@@ -368,14 +427,25 @@ export function AccountHistory() {
                         />
                       </TableCell>
                       <TableCell align="right">
-                        <IconButton
-                          size="small"
-                          onClick={() => {
-                            toast.info(`Login details: ${login.device} from ${login.location}`);
-                          }}
-                        >
-                          <Iconify icon="solar:eye-bold" />
-                        </IconButton>
+                        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              toast.info(`Login details: ${login.device} from ${login.location}`);
+                            }}
+                            title="View Details"
+                          >
+                            <Iconify icon="solar:eye-bold" />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteEntry(login.id)}
+                            title="Delete Entry"
+                          >
+                            <Iconify icon="solar:trash-bin-trash-bold" />
+                          </IconButton>
+                        </Stack>
                       </TableCell>
                     </TableRow>
                   ))
@@ -384,30 +454,171 @@ export function AccountHistory() {
             </Table>
           </TableContainer>
         </Scrollbar>
+        
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <Box sx={{ p: 2, display: 'flex', justifyContent: 'center' }}>
+            <Pagination
+              count={totalPages}
+              page={currentPage}
+              onChange={handlePageChange}
+              color="primary"
+              showFirstButton
+              showLastButton
+            />
+          </Box>
+        )}
       </Card>
 
       {/* Security Tips */}
-      <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'info.main', bgcolor: 'info.lighter' }}>
-        <Box sx={{ p: 3 }}>
-          <Stack direction="row" alignItems="flex-start" spacing={2}>
-            <Iconify icon="solar:shield-check-bold" sx={{ color: 'info.main', mt: 0.5 }} />
-            <Stack>
-              <Typography variant="subtitle2" sx={{ color: 'info.dark' }}>
-                Security Tips
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'info.dark', mt: 1 }}>
-                Keep your account secure by monitoring login activities:
-              </Typography>
-              <Box component="ul" sx={{ mt: 1, pl: 2, color: 'info.dark' }}>
-                <li>Review login history regularly for suspicious activities</li>
-                <li>Log out from unfamiliar devices immediately</li>
-                <li>Use strong, unique passwords and enable 2FA when available</li>
-                <li>Report any suspicious login attempts to support</li>
+      <Card sx={{ 
+        borderRadius: 3, 
+        boxShadow: 'none', 
+        border: '1px solid', 
+        borderColor: 'success.main',
+        background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.04) 100%)',
+        position: 'relative',
+        overflow: 'hidden'
+      }}>
+        {/* Background Pattern */}
+        <Box sx={{
+          position: 'absolute',
+          top: -20,
+          right: -20,
+          width: 80,
+          height: 80,
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, rgba(34, 197, 94, 0.1) 0%, rgba(34, 197, 94, 0.05) 100%)',
+          zIndex: 0
+        }} />
+        
+        <Box sx={{ p: 4, position: 'relative', zIndex: 1 }}>
+          <Stack spacing={3}>
+            {/* Header */}
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Box sx={{
+                p: 1.5,
+                borderRadius: '50%',
+                bgcolor: 'success.main',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(34, 197, 94, 0.3)'
+              }}>
+                <Iconify icon="solar:shield-check-bold" sx={{ color: 'white', fontSize: 20 }} />
               </Box>
+              <Stack>
+                <Typography variant="h6" sx={{ color: 'success.darker', fontWeight: 600 }}>
+                  🔒 Security Tips
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'success.dark', opacity: 0.8 }}>
+                  Keep your account secure with these best practices
+                </Typography>
+              </Stack>
             </Stack>
+
+            {/* Tips Grid */}
+            <Grid container spacing={2}>
+              {[
+                {
+                  icon: 'solar:eye-bold',
+                  title: 'Monitor Regularly',
+                  description: 'Review login history for suspicious activities'
+                },
+                {
+                  icon: 'solar:logout-2-bold',
+                  title: 'Log Out Safely',
+                  description: 'Sign out from unfamiliar devices immediately'
+                },
+                {
+                  icon: 'solar:key-bold',
+                  title: 'Strong Passwords',
+                  description: 'Use unique passwords and enable 2FA'
+                },
+                {
+                  icon: 'solar:bug-bold',
+                  title: 'Report Issues',
+                  description: 'Report suspicious attempts to support'
+                }
+              ].map((tip, index) => (
+                <Grid item xs={12} sm={6} key={index}>
+                  <Box sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'success.light',
+                    bgcolor: 'rgba(255, 255, 255, 0.7)',
+                    transition: 'all 0.2s ease',
+                    '&:hover': {
+                      bgcolor: 'rgba(255, 255, 255, 0.9)',
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 4px 12px rgba(34, 197, 94, 0.15)'
+                    }
+                  }}>
+                    <Stack direction="row" alignItems="flex-start" spacing={2}>
+                      <Box sx={{
+                        p: 1,
+                        borderRadius: 1.5,
+                        bgcolor: 'success.lighter',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Iconify icon={tip.icon} sx={{ color: 'success.main', fontSize: 16 }} />
+                      </Box>
+                      <Stack>
+                        <Typography variant="subtitle2" sx={{ color: 'success.darker', fontWeight: 600 }}>
+                          {tip.title}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: 'success.dark', opacity: 0.8, lineHeight: 1.4 }}>
+                          {tip.description}
+                        </Typography>
+                      </Stack>
+                    </Stack>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+
+            {/* Footer CTA */}
+            <Box sx={{
+              p: 2,
+              borderRadius: 2,
+              bgcolor: 'rgba(34, 197, 94, 0.1)',
+              border: '1px solid',
+              borderColor: 'success.light'
+            }}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Iconify icon="solar:info-circle-bold" sx={{ color: 'success.main', fontSize: 18 }} />
+                <Typography variant="body2" sx={{ color: 'success.dark', fontWeight: 500 }}>
+                  Need help? Contact our security team for immediate assistance with any concerns.
+                </Typography>
+              </Stack>
+            </Box>
           </Stack>
         </Box>
       </Card>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={confirmDialog.open}
+        onClose={closeConfirmDialog}
+        title={confirmDialog.title}
+        content={confirmDialog.content}
+        action={
+          <Button
+            variant="contained"
+            color="error"
+            onClick={() => {
+              if (confirmDialog.onConfirm) {
+                confirmDialog.onConfirm();
+              }
+            }}
+          >
+            Confirm
+          </Button>
+        }
+      />
     </Stack>
   );
 }

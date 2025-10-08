@@ -187,7 +187,7 @@ export default function StoresPage() {
                         variant="outlined"
                         size="small"
                         component="a"
-                        href={`/stores/${store.name.toLowerCase().replace(/\s+/g, '')}`}
+                        href={`/${store.name.toLowerCase().replace(/\s+/g, '')}`}
                         sx={{
                           minWidth: 96,
                           px: 2,

@@ -1,5 +1,33 @@
 import { supabase } from './supabaseClient';
 import { setSession, removeSession } from './utils';
+import accountHistoryService from 'src/services/accountHistoryService';
+
+// Helper function to get client IP (simplified)
+async function getClientIP() {
+  try {
+    // In a real app, you might get this from your backend
+    // For now, return a placeholder
+    return '127.0.0.1';
+  } catch {
+    return 'Unknown';
+  }
+}
+
+// Helper function to get device info
+function getDeviceInfo() {
+  try {
+    const userAgent = navigator.userAgent;
+    if (/Mobile|Android|iPhone|iPad/.test(userAgent)) {
+      return /iPad/.test(userAgent) ? 'iPad' : 'Mobile';
+    }
+    if (/Windows/.test(userAgent)) return 'Windows';
+    if (/Mac/.test(userAgent)) return 'Mac';
+    if (/Linux/.test(userAgent)) return 'Linux';
+    return 'Desktop';
+  } catch {
+    return 'Unknown';
+  }
+}
 
 // Map Supabase/Gotrue auth errors to a stable, user-friendly shape
 function normalizeAuthError(err) {
@@ -28,6 +56,25 @@ export const signInWithPassword = async ({ email, password }) => {
 
     if (error) {
       const friendly = normalizeAuthError(error);
+      
+      // Log failed login attempt to account history
+      try {
+        await accountHistoryService.logActivity({
+          activityType: 'login',
+          status: 'failed',
+          ipAddress: await getClientIP(),
+          userAgent: navigator.userAgent,
+          device: getDeviceInfo(),
+          location: 'Unknown',
+          timestamp: new Date().toISOString(),
+          details: error.message || 'Login failed'
+        });
+        console.log('Failed login activity logged successfully');
+      } catch (historyError) {
+        console.error('Failed to log failed login activity:', historyError);
+        // Don't fail the login flow if history logging fails
+      }
+      
       return { ok: false, ...friendly };
     }
 
@@ -65,6 +112,26 @@ export const signInWithPassword = async ({ email, password }) => {
     if (accessToken) {
       await setSession(accessToken);
     }
+
+    // Log successful login to account history (after session is established)
+    // Use setTimeout to ensure the session is fully propagated
+    setTimeout(async () => {
+      try {
+        await accountHistoryService.logActivity({
+          activityType: 'login',
+          status: 'successful',
+          ipAddress: await getClientIP(),
+          userAgent: navigator.userAgent,
+          device: getDeviceInfo(),
+          location: 'Unknown', // Could be enhanced with IP geolocation
+          timestamp: new Date().toISOString()
+        });
+        console.log('Login activity logged successfully');
+      } catch (error) {
+        console.error('Failed to log login activity:', error);
+        // Don't fail the login if history logging fails
+      }
+    }, 100);
 
     return { ok: true, user, session: data.session, userData };
   } catch (error) {
