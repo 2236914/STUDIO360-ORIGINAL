@@ -1,5 +1,6 @@
 'use client';
 
+import { m } from 'framer-motion';
 import { useCallback } from 'react';
 
 import Box from '@mui/material/Box';
@@ -10,23 +11,21 @@ import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import { useTheme, useColorScheme } from '@mui/material/styles';
 
-import { m } from 'framer-motion';
-
 import COLORS from 'src/theme/core/colors.json';
 import { defaultFont } from 'src/theme/core/typography';
 import PRIMARY_COLOR from 'src/theme/with-settings/primary-color.json';
 
-import { varHover } from 'src/components/animate';
-import { CustomPopover, usePopover } from 'src/components/custom-popover';
-import { Scrollbar } from 'src/components/scrollbar';
 import { Iconify } from 'src/components/iconify';
+import { varHover } from 'src/components/animate';
+import { Scrollbar } from 'src/components/scrollbar';
+import { usePopover, CustomPopover } from 'src/components/custom-popover';
 
+import { useSettingsContext } from '../context';
 import { BaseOption } from '../drawer/base-option';
 import { NavOptions } from '../drawer/nav-options';
 import { FontOptions } from '../drawer/font-options';
-import { useSettingsContext } from '../context';
-import { PresetsOptions } from '../drawer/presets-options';
 import { defaultSettings } from '../config-settings';
+import { PresetsOptions } from '../drawer/presets-options';
 import { FullScreenButton } from '../drawer/fullscreen-button';
 
 // ----------------------------------------------------------------------

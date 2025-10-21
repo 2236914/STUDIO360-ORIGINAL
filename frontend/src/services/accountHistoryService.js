@@ -1,5 +1,7 @@
 import axios from 'axios';
+
 import { CONFIG } from 'src/config-global';
+
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // Helper function for authenticated requests using Supabase (same pattern as account-shop.jsx)
@@ -11,7 +13,7 @@ async function authenticatedRequest(url, options = {}) {
     console.log('Account History: Supabase session check:', { 
       hasSession: !!session, 
       hasError: !!error, 
-      tokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'no token',
+      tokenPreview: session?.access_token ? `${session.access_token.substring(0, 20)  }...` : 'no token',
       fullToken: session?.access_token || 'no token'
     });
     
@@ -69,9 +71,7 @@ apiClient.interceptors.request.use(
       return config;
     }
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error)
 );
 
 // Add response interceptor for error handling

@@ -22,9 +22,9 @@ import { useBoolean } from 'src/hooks/use-boolean';
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
 
-import { signUpWithPassword } from 'src/auth/context/jwt/action';
 import { useAuthContext } from 'src/auth/hooks';
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
+import { signUpWithPassword } from 'src/auth/context/jwt/action';
 
 // ----------------------------------------------------------------------
 

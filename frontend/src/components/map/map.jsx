@@ -1,5 +1,5 @@
-import MapGL from 'react-map-gl';
 import { forwardRef } from 'react';
+import MapGL from 'react-map-gl/mapbox';
 
 import { CONFIG } from 'src/config-global';
 

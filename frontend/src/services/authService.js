@@ -60,9 +60,9 @@ class AuthService {
         localStorage.setItem('user', JSON.stringify(this.user));
         
         return data;
-      } else {
+      } 
         throw new Error(data.message);
-      }
+      
     } catch (error) {
       console.error('Login error:', error);
       throw error;
@@ -97,9 +97,9 @@ class AuthService {
         localStorage.setItem('user', JSON.stringify(this.user));
         
         return data;
-      } else {
+      } 
         throw new Error(data.message);
-      }
+      
     } catch (error) {
       console.error('Registration error:', error);
       throw error;

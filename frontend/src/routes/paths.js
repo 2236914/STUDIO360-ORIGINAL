@@ -3,9 +3,7 @@
 import { 
   buildStoreUrl, 
   buildAdminUrl, 
-  buildDashboardUrl,
-  getCurrentSubdomain,
-  getCurrentStoreId 
+  buildDashboardUrl 
 } from 'src/utils/subdomain';
 
 const ROOTS = {
@@ -95,11 +93,12 @@ export const paths = {
     },
     aiBookkeeper: {
       root: `${ROOTS.DASHBOARD}/ai-bookkeeper`,
-      aiBookkeeper: `${ROOTS.DASHBOARD}/ai-bookkeeper/ai-bookkeeper`,
       aiCategorization: `${ROOTS.DASHBOARD}/ai-bookkeeper/ai-categorization`,
       uploadProcess: `${ROOTS.DASHBOARD}/ai-bookkeeper/upload-process`,
     },
-    taxDecisionTool: `${ROOTS.DASHBOARD}/tax-decision-tool`,
+    forecasting: {
+      root: `${ROOTS.DASHBOARD}/forecasting`,
+    },
     // Shop
     inventory: {
       root: `${ROOTS.DASHBOARD}/inventory`,

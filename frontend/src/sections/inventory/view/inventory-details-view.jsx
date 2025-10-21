@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import dynamic from 'next/dynamic';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Tab from '@mui/material/Tab';
@@ -9,33 +8,31 @@ import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
 import Tabs from '@mui/material/Tabs';
+import Menu from '@mui/material/Menu';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Avatar from '@mui/material/Avatar';
 import Rating from '@mui/material/Rating';
+import Select from '@mui/material/Select';
 import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import FormControl from '@mui/material/FormControl';
-import Select from '@mui/material/Select';
-import InputLabel from '@mui/material/InputLabel';
-import Menu from '@mui/material/Menu';
 import Pagination from '@mui/material/Pagination';
+import FormControl from '@mui/material/FormControl';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
-import { DashboardContent } from 'src/layouts/dashboard';
-
-import { Label } from 'src/components/label';
-import { Iconify } from 'src/components/iconify';
-import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
-// ----------------------------------------------------------------------
+import { DashboardContent } from 'src/layouts/dashboard';
+import { inventoryApi } from 'src/services/inventoryService';
+
+import { toast } from 'src/components/snackbar';
+import { Iconify } from 'src/components/iconify';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // Mock reviews data for product details
 const PRODUCT_REVIEWS = [
@@ -51,134 +48,129 @@ const PRODUCT_REVIEWS = [
   },
   {
     id: 2,
-    customerName: 'J***n D.',
+    customerName: 'Anonymous',
     isAnonymous: true,
-    rating: 5,
+    rating: 4,
     date: '1 week ago',
-    comment: 'Great customer service and fast shipping. The products exceeded my expectations. Highly recommend!',
+    comment: 'Good shoes, comfortable fit. The color matches the description perfectly.',
     product: 'Chic Ballet Flats',
-    images: ['https://images.unsplash.com/photo-1597481499750-3e6b22637e12?w=400&h=300&fit=crop']
+    images: []
   },
   {
     id: 3,
-    customerName: 'M***a L.',
-    isAnonymous: true,
-    rating: 4,
+    customerName: 'Maria L.',
+    isAnonymous: false,
+    rating: 5,
     date: '2 weeks ago',
-    comment: 'Beautiful design and comfortable fit. The only reason I gave 4 stars is because the color was slightly different than expected.',
+    comment: 'Love these flats! They go with everything and are so comfortable for walking.',
     product: 'Chic Ballet Flats',
-    images: ['https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=300&fit=crop']
+    images: ['https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&h=300&fit=crop']
   },
   {
     id: 4,
-    customerName: 'David K.',
-    isAnonymous: false,
-    rating: 5,
+    customerName: 'Anonymous',
+    isAnonymous: true,
+    rating: 4,
     date: '3 weeks ago',
-    comment: 'Outstanding craftsmanship! These flats are perfect for work. The attention to detail is incredible.',
+    comment: 'Nice quality, fast shipping. Would recommend to others.',
     product: 'Chic Ballet Flats',
-    images: ['https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=300&fit=crop']
+    images: []
   },
   {
     id: 5,
-    customerName: 'A***e R.',
-    isAnonymous: true,
+    customerName: 'Jennifer K.',
+    isAnonymous: false,
     rating: 5,
     date: '1 month ago',
-    comment: 'Perfect gift for my friend! She absolutely loved them. Will be back for more colors.',
+    comment: 'Perfect fit and great quality. These are my new favorite shoes!',
     product: 'Chic Ballet Flats',
-    images: ['https://images.unsplash.com/photo-1544966503-7cc5ac882d5f?w=400&h=300&fit=crop']
+    images: []
   }
 ];
-
-// Mock product data - would typically come from API
-const PRODUCT_DATA = {
-  1: {
-    id: '1',
-    name: 'Classic Leather Loafers',
-    category: 'Shoes',
-    manufacturer: 'Nike',
-    serialNumber: '358607726380311',
-    shipsFrom: 'United States',
-    price: 97.14,
-    originalPrice: 120.00,
-    rating: 4.5,
-    reviewCount: 9124,
-    status: 'NEW',
-    stock: 'IN STOCK',
-    description: 'Featuring the original ripple design inspired by Japanese bullet trains, the Nike Air Max 97 lets you push your style full-speed ahead.',
-    images: [
-      '/assets/images/product/product_1.jpg',
-      '/assets/images/product/product_2.jpg',
-      '/assets/images/product/product_3.jpg',
-      '/assets/images/product/product_4.jpg',
-      '/assets/images/product/product_5.jpg',
-    ],
-    colors: ['#2196F3', '#FF4842'],
-    sizes: ['9'],
-    quantity: 1,
-    availableQuantity: 72,
-    specifications: {
-      category: 'Shoes',
-      manufacturer: 'Nike',
-      serialNumber: '358607726380311',
-      shipsFrom: 'United States',
-    },
-    productDetails: [
-      'The foam sockliner feels soft and comfortable',
-      'Pull tab',
-      'Not intended for use as Personal Protective Equipment',
-      'Colour Shown: White/Black/Oxygen Purple/Action Grape',
-      'Style: 921826-109',
-      'Country/Region of Origin: China'
-    ],
-    benefits: [
-      'Mesh and synthetic materials on the upper keep the fluid look of the OG while adding comfortable durability.',
-      'Originally designed for performance running, the full-length Max Air unit adds soft, comfortable cushioning underfoot.',
-      'The foam midsole feels springy and soft.',
-      'The rubber outsole adds traction and durability.'
-    ],
-    deliveryReturns: {
-      freeDelivery: 'Your order of $200 or more gets free standard delivery.',
-      standardDelivery: 'Standard delivered 4-5 Business Days',
-      expressDelivery: 'Express delivered 2-4 Business Days',
-      note: 'Orders are processed and delivered Monday-Friday (excluding public holidays)'
-    }
-  }
-};
 
 // ----------------------------------------------------------------------
 
 export function InventoryDetailsView({ id, additionalProducts = {}, minimal = false }) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [product, setProduct] = useState(null);
   
   const [selectedTab, setSelectedTab] = useState(0);
   const [selectedColor, setSelectedColor] = useState(0);
-  const [selectedSize, setSelectedSize] = useState(() => {
-    // Get product data first to set the initial size
-    const productData = additionalProducts[id] || PRODUCT_DATA[id] || PRODUCT_DATA['1'];
-    return productData.sizes[0] || '9';
-  });
+  const [selectedSize, setSelectedSize] = useState('');
   const [quantity, setQuantity] = useState(1);
   const [publishStatus, setPublishStatus] = useState('Published');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState(null);
   const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
   const [reviewsPage, setReviewsPage] = useState(1);
 
-  // Get product data (in real app, this would be from API)
-  const product = additionalProducts[id] || PRODUCT_DATA[id] || PRODUCT_DATA['1'];
-
-  // Set page title
+  // Load product data from database
   useEffect(() => {
-    document.title = `${product.name} | Inventory - Kitsch Studio`;
-  }, [product.name]);
+    const loadProduct = async () => {
+      try {
+        setLoading(true);
+        const productData = await inventoryApi.getProductById(id);
+        
+        if (!productData) {
+          toast.error('Product not found');
+          return;
+        }
+
+        // Transform database data to match component format
+        const transformedProduct = {
+          id: productData.id,
+          name: productData.name,
+          description: productData.description || '',
+          subDescription: productData.short_description || '',
+          images: productData.images || [],
+          coverUrl: productData.cover_image_url || '/assets/images/product/product-placeholder.png',
+          price: productData.price || 0,
+          priceSale: productData.compare_at_price || 0,
+          quantity: productData.stock_quantity || 0,
+          sku: productData.sku || '',
+          barcode: productData.barcode || '',
+          category: productData.category || 'Uncategorized',
+          status: productData.status,
+          inventoryType: productData.stock_status,
+          // Extract from dimensions JSONB field
+          colors: productData.dimensions?.colors || [],
+          sizes: productData.dimensions?.sizes || [],
+          tags: productData.dimensions?.tags || [],
+          gender: productData.dimensions?.gender || [],
+          theme: productData.dimensions?.theme || '',
+          newLabel: productData.dimensions?.newLabel || { enabled: false, content: '' },
+          saleLabel: productData.dimensions?.saleLabel || { enabled: false, content: '' },
+        };
+
+        setProduct(transformedProduct);
+        
+        // Set initial size if available
+        if (transformedProduct.sizes && transformedProduct.sizes.length > 0) {
+          setSelectedSize(transformedProduct.sizes[0]);
+        }
+        
+        // Set page title
+        document.title = `${transformedProduct.name} | Inventory - STUDIO360`;
+      } catch (error) {
+        console.error('Error loading product:', error);
+        toast.error('Failed to load product');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadProduct();
+    }
+  }, [id]);
 
   // Prevent hydration mismatch
   useEffect(() => {
     setMounted(true);
   }, []);
 
+  // Event handlers
   const handleBack = useCallback(() => {
     router.push(paths.dashboard.inventory.root);
   }, [router]);
@@ -188,8 +180,8 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
   }, []);
 
   const handleQuantityChange = useCallback((delta) => {
-    setQuantity(prev => Math.max(1, Math.min(prev + delta, product.availableQuantity)));
-  }, [product.availableQuantity]);
+    setQuantity(prev => Math.max(1, Math.min(prev + delta, product?.availableQuantity || 1)));
+  }, [product?.availableQuantity]);
 
   const handleStatusMenuOpen = useCallback((event) => {
     setStatusMenuAnchor(event.currentTarget);
@@ -242,13 +234,56 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
     setShareMenuAnchor(null);
   }, []);
 
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardContent>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+          <Typography variant="body1">Loading product...</Typography>
+        </Box>
+      </DashboardContent>
+    );
+  }
+
+  // Show empty state if no product data
+  if (!product) {
+    return (
+      <DashboardContent>
+        <CustomBreadcrumbs
+          heading="Product Details"
+          links={[
+            { name: 'Dashboard', href: paths.dashboard.root },
+            { name: 'Inventory', href: paths.dashboard.inventory.root },
+            { name: 'Details' },
+          ]}
+          sx={{ mb: { xs: 3, md: 5 } }}
+        />
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Product not found
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+            The product you&apos;re looking for doesn&apos;t exist or has been removed.
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<Iconify icon="eva:arrow-back-fill" />}
+            onClick={() => router.push(paths.dashboard.inventory.root)}
+          >
+            Back to Inventory
+          </Button>
+        </Box>
+      </DashboardContent>
+    );
+  }
+
   const renderProductImages = (
     <Grid item xs={12} md={6}>
       <Card sx={{ p: 3, boxShadow: 'none', border: 'none', mt: 4 }}>
         <Box sx={{ position: 'relative', mb: 2 }}>
           <Box
             component="img"
-            src="https://via.placeholder.com/600x600/8B5CF6/FFFFFF?text=Ballet+Shoes"
+            src={product.coverUrl || product.images?.[0] || '/assets/images/product/product-placeholder.png'}
             alt={`${product.name} main image`}
             sx={{
               width: '100%',
@@ -272,7 +307,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
               typography: 'caption'
             }}
           >
-            {1}/{product.images.length || 8}
+            {1}/{product.images.length || 1}
           </Box>
         </Box>
         
@@ -281,7 +316,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
             <Box
               key={index}
               component="img"
-              src="https://via.placeholder.com/600x600/8B5CF6/FFFFFF?text=Ballet+Shoes"
+              src={image || '/assets/images/product/product-placeholder.png'}
               alt={`${product.name} thumbnail ${index + 1}`}
               sx={{ 
                 width: 60, 
@@ -388,7 +423,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
           <Stack direction="row" alignItems="center" spacing={1}>
             <Rating value={product.rating} readOnly size="small" />
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              ({product.reviewCount.toLocaleString()} reviews)
+              ({product.reviewCount?.toLocaleString() || '0'} reviews)
             </Typography>
           </Stack>
         </Stack>
@@ -409,7 +444,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
         <Stack spacing={2}>
           <Typography variant="subtitle1">Color</Typography>
           <Stack direction="row" spacing={1}>
-            {product.colors.map((color, index) => (
+            {(product.colors || []).map((color, index) => (
               <Box
                 key={index}
                 onClick={() => setSelectedColor(index)}
@@ -447,7 +482,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
               value={selectedSize}
               onChange={(e) => setSelectedSize(e.target.value)}
             >
-              {product.sizes.map((size) => (
+              {(product.sizes || []).map((size) => (
                 <MenuItem key={size} value={size}>
                   {size}
                 </MenuItem>
@@ -575,7 +610,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
       <Card>
         <Tabs value={selectedTab} onChange={handleTabChange} sx={{ px: 3 }}>
           <Tab label="Description" />
-          <Tab label={`Reviews (${product.reviewCount.toLocaleString()})`} />
+          <Tab label={`Reviews (${product.reviewCount?.toLocaleString() || '0'})`} />
         </Tabs>
         
         <Divider />
@@ -591,19 +626,19 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       Category
                     </Typography>
-                    <Typography variant="body2">{product.specifications.category}</Typography>
+                    <Typography variant="body2">{product.specifications?.category || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       Manufacturer
                     </Typography>
-                    <Typography variant="body2">{product.specifications.manufacturer}</Typography>
+                    <Typography variant="body2">{product.specifications?.manufacturer || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                       Serial number
                     </Typography>
-                    <Typography variant="body2">{product.specifications.serialNumber}</Typography>
+                    <Typography variant="body2">{product.specifications?.serialNumber || 'N/A'}</Typography>
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -694,7 +729,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
 
                       {/* Review Comment */}
                       <Typography variant="body1" sx={{ color: 'text.primary', lineHeight: 1.6 }}>
-                        "{review.comment}"
+                        &ldquo;{review.comment}&rdquo;
                       </Typography>
 
                       {/* Review Images */}
@@ -723,7 +758,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
                               >
                                 <img
                                   src={image}
-                                  alt={`Review photo ${imgIndex + 1}`}
+                                  alt={`Review ${imgIndex + 1}`}
                                   style={{
                                     width: '100%',
                                     height: '100%',
@@ -813,7 +848,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
         <Stack direction="row" spacing={1} sx={{ position: 'absolute', top: 20, right: 40, zIndex: 10 }}>
           <IconButton
             aria-label="search"
-            onClick={() => (window.location.href = '/search')}
+            onClick={() => { window.location.href = '/search'; }}
             sx={{
               color: 'text.primary',
               border: 'none',
@@ -871,7 +906,7 @@ export function InventoryDetailsView({ id, additionalProducts = {}, minimal = fa
           </IconButton>
           <IconButton
             aria-label="cart"
-            onClick={() => (window.location.href = '/checkout')}
+            onClick={() => { window.location.href = '/checkout'; }}
             sx={{
               color: 'text.primary',
               border: 'none',

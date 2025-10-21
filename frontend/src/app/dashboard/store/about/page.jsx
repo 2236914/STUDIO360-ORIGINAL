@@ -1,64 +1,126 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import {
   Box,
   Card,
-  Stack,
-  Typography,
   Grid,
-  TextField,
+  Chip,
+  Stack,
+  Alert,
   Button,
+  Select,
+  Divider,
+  MenuItem,
+  TextField,
   Accordion,
+  Typography,
+  IconButton,
+  InputLabel,
+  FormControl,
   AccordionSummary,
   AccordionDetails,
-  IconButton,
-  Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Divider,
-  Alert,
-  Link,
 } from '@mui/material';
 
 import { paths } from 'src/routes/paths';
+
+import { useBoolean } from 'src/hooks/use-boolean';
+
 import { DashboardContent } from 'src/layouts/dashboard';
-import { Iconify } from 'src/components/iconify';
+import { aboutPageApi } from 'src/services/storePagesService';
+
 import { Upload } from 'src/components/upload';
+import { toast } from 'src/components/snackbar';
+import { Iconify } from 'src/components/iconify';
+import { ConfirmDialog } from 'src/components/custom-dialog';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
 export default function AboutPage() {
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const confirmDialog = useBoolean();
+  const [deleteItem, setDeleteItem] = useState(null);
+
   useEffect(() => {
     document.title = 'About | STUDIO360';
+    loadAboutData();
   }, []);
+
+  // Load about page data from database
+  const loadAboutData = async () => {
+    try {
+      setLoading(true);
+      const data = await aboutPageApi.getCompleteAboutData();
+      
+      console.log('Loaded about page data:', data);
+      
+      // Populate shop story
+      if (data.shopStory) {
+        setShopStory({
+          image: null, // Image URLs will be handled separately
+          title: data.shopStory.title || '',
+          description: data.shopStory.description || '',
+          email: data.shopStory.email || '',
+          shopHours: data.shopStory.shop_hours || '',
+          location: data.shopStory.location || '',
+        });
+      }
+      
+      // Populate social media
+      if (data.socialMedia) {
+        setSocialMedia(prev => ({
+          ...prev,
+          description: data.socialMedia.description || '',
+        }));
+      }
+      
+      // Populate social platforms
+      if (data.socialPlatforms && Array.isArray(data.socialPlatforms)) {
+        const formattedPlatforms = data.socialPlatforms.map(platform => {
+          const platformData = availablePlatforms.find(p => p.name.toLowerCase() === platform.platform_name.toLowerCase());
+          return {
+            id: platform.id,
+            name: platform.platform_name,
+            icon: platformData?.icon || 'eva:link-2-fill',
+            url: platform.platform_url,
+            color: platformData?.color || '#000000',
+            display_order: platform.display_order,
+          };
+        });
+        setSocialMedia(prev => ({
+          ...prev,
+          platforms: formattedPlatforms,
+        }));
+      }
+      
+      setInitialLoad(false);
+      toast.success('About page data loaded successfully!');
+    } catch (error) {
+      console.error('Error loading about page data:', error);
+      toast.error('Failed to load about page data. Using empty defaults.');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // State for shop story section
   const [shopStory, setShopStory] = useState({
     image: null,
-    title: 'Our journey in artisan craftsmanship',
-    description: `Founded in 2018, Kitsch Studio emerged from a passion for creating meaningful jewelry. We are more than a shop - we are storytellers working with metal and stone.
-
-• Email headquarters studio
-• Open Tuesday to Saturday, 10am - 6pm
-• Located in the creative district of Portland, Oregon`,
-    email: 'hello@kitschstudio.com',
-    shopHours: 'Tuesday to Saturday, 10am - 6pm',
-    location: 'Portland, Oregon, USA',
+    title: '',
+    description: '',
+    email: '',
+    shopHours: '',
+    location: '',
   });
 
   // State for social media section
   const [socialMedia, setSocialMedia] = useState({
-    description: 'Connect with us and join our community of jewelry lovers. Follow us for behind-the-scenes content, new arrivals, and styling inspiration.',
-    platforms: [
-      { id: 1, name: 'Instagram', icon: 'eva:instagram-fill', url: 'https://instagram.com/kitschstudio', color: '#E4405F' },
-      { id: 2, name: 'Facebook', icon: 'eva:facebook-fill', url: 'https://facebook.com/kitschstudio', color: '#1877F2' },
-      { id: 3, name: 'TikTok', icon: 'eva:video-fill', url: 'https://tiktok.com/@kitschstudio', color: '#000000' },
-      { id: 4, name: 'Pinterest', icon: 'eva:pin-fill', url: 'https://pinterest.com/kitschstudio', color: '#BD081C' },
-    ],
+    description: '',
+    platforms: [],
   });
 
   const [expanded, setExpanded] = useState('story');
@@ -80,21 +142,69 @@ export default function AboutPage() {
     setExpanded(isExpanded ? panel : false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    try {
     setSaveStatus('saving');
-    setTimeout(() => {
+      setLoading(true);
+      
+      // Save shop story
+      await aboutPageApi.updateShopStory({
+        title: shopStory.title,
+        description: shopStory.description,
+        email: shopStory.email,
+        shop_hours: shopStory.shopHours,
+        location: shopStory.location,
+      });
+      
+      // Save social media description
+      await aboutPageApi.updateSocialMedia({
+        description: socialMedia.description,
+      });
+      
+      // Save or update each social platform
+      for (const platform of socialMedia.platforms) {
+        if (typeof platform.id === 'string' && platform.id.length > 20) {
+          // Existing platform (UUID from database)
+          await aboutPageApi.updateSocialPlatform(platform.id, {
+            platform_name: platform.name,
+            platform_url: platform.url,
+            icon_name: platform.icon,
+            display_order: platform.display_order || 0,
+          });
+        } else {
+          // New platform (temporary numeric ID)
+          await aboutPageApi.createSocialPlatform({
+            platform_name: platform.name,
+            platform_url: platform.url,
+            icon_name: platform.icon,
+            display_order: platform.display_order || 0,
+          });
+        }
+      }
+      
       setSaveStatus('saved');
+      toast.success('About page saved successfully!');
       setTimeout(() => setSaveStatus(''), 3000);
-    }, 1000);
+      
+      // Reload to get updated IDs from database
+      await loadAboutData();
+    } catch (error) {
+      console.error('Error saving about page:', error);
+      toast.error('Failed to save about page. Please try again.');
+      setSaveStatus('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addSocialPlatform = () => {
     const newPlatform = {
-      id: Date.now(),
+      id: Date.now(), // Temporary ID for new platforms
       name: 'Instagram',
       icon: 'eva:instagram-fill',
       url: '',
       color: '#E4405F',
+      display_order: socialMedia.platforms.length,
     };
     setSocialMedia(prev => ({
       ...prev,
@@ -123,11 +233,36 @@ export default function AboutPage() {
     }));
   };
 
-  const deleteSocialPlatform = (id) => {
+  const confirmDeleteSocialPlatform = (id) => {
+    setDeleteItem(id);
+    confirmDialog.onTrue();
+  };
+
+  const deleteSocialPlatform = async () => {
+    try {
+      const platformId = deleteItem;
+      
+      // If it's a database platform (UUID), delete from database
+      if (typeof platformId === 'string' && platformId.length > 20) {
+        setLoading(true);
+        await aboutPageApi.deleteSocialPlatform(platformId);
+        toast.success('Social platform deleted successfully!');
+      }
+      
+      // Remove from local state
     setSocialMedia(prev => ({
       ...prev,
-      platforms: prev.platforms.filter(platform => platform.id !== id),
-    }));
+        platforms: prev.platforms.filter(platform => platform.id !== platformId),
+      }));
+      
+      confirmDialog.onFalse();
+      setDeleteItem(null);
+    } catch (error) {
+      console.error('Error deleting social platform:', error);
+      toast.error('Failed to delete social platform. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -340,7 +475,7 @@ export default function AboutPage() {
                             <IconButton
                               size="small"
                               color="error"
-                              onClick={() => deleteSocialPlatform(platform.id)}
+                              onClick={() => confirmDeleteSocialPlatform(platform.id)}
                             >
                               <Iconify icon="eva:trash-2-fill" />
                             </IconButton>
@@ -502,6 +637,24 @@ export default function AboutPage() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={confirmDialog.value}
+        onClose={confirmDialog.onFalse}
+        title="Delete Social Platform"
+        content="Are you sure you want to delete this social media platform? This action cannot be undone."
+        action={
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={deleteSocialPlatform}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        }
+      />
     </DashboardContent>
   );
 }

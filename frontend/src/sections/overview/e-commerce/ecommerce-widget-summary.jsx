@@ -2,10 +2,10 @@
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 
-import { fNumber, fPercent } from 'src/utils/format-number';
+import { fNumber } from 'src/utils/format-number';
 
 import { Iconify } from 'src/components/iconify';
 import { Chart, useChart } from 'src/components/chart';

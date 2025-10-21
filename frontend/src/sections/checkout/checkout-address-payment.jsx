@@ -1,35 +1,28 @@
 import { z as zod } from 'zod';
+import { useState, useEffect } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState, useEffect } from 'react';
-import { useIsomorphicLayoutEffect } from 'src/hooks/use-isomorphic-layout-effect';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
-import MenuItem from '@mui/material/MenuItem';
+import Grid from '@mui/material/Unstable_Grid2';
 import Typography from '@mui/material/Typography';
 import CardHeader from '@mui/material/CardHeader';
-import Grid from '@mui/material/Unstable_Grid2';
 import LoadingButton from '@mui/lab/LoadingButton';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
-import FormControl from '@mui/material/FormControl';
-import FormLabel from '@mui/material/FormLabel';
 
-import { Form, RHFTextField, RHFSelect } from 'src/components/hook-form';
+import { getShippingRegion, getRegionDisplayName, calculateShippingOptions, categorizeShippingOptionsByCourier } from 'src/utils/shipping-calculator';
+
+import { PROVINCES, getBarangaysByCity, getCitiesByProvince } from 'src/data/philippines-address';
+
 import { Iconify } from 'src/components/iconify';
 import { ClientOnly } from 'src/components/client-only';
+import { Form, RHFSelect, RHFTextField } from 'src/components/hook-form';
 
 import { useCheckoutContext } from './context';
 import { CheckoutSummary } from './checkout-summary';
 import { CheckoutDelivery } from './checkout-delivery';
 import { CheckoutPaymentMethods } from './checkout-payment-methods';
-import { PROVINCES, getCitiesByProvince, getBarangaysByCity } from 'src/data/philippines-address';
-import { calculateShippingOptions, getRegionDisplayName, getShippingRegion, categorizeShippingOptionsByCourier } from 'src/utils/shipping-calculator';
 
 // ----------------------------------------------------------------------
 
@@ -175,7 +168,7 @@ export function CheckoutAddressPayment() {
       // Get store ID from URL
       let storeId = null;
       if (typeof window !== 'undefined') {
-        const pathname = window.location.pathname;
+        const {pathname} = window.location;
         const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
         storeId = storeIdMatch ? storeIdMatch[1] : null;
       }

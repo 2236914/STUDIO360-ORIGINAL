@@ -20,9 +20,13 @@ import FormControlLabel from '@mui/material/FormControlLabel';
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
+import { fCurrencyPHPSymbol } from 'src/utils/format-number';
+import { addNewTheme, addNewCategory, getSellerThemes, getSellerCategories } from 'src/utils/seller-categories';
+
+import { inventoryApi } from 'src/services/inventoryService';
+
 import { toast } from 'src/components/snackbar';
 import { Form, Field, schemaHelper } from 'src/components/hook-form';
-import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
 import { ContentDiagnosis } from './content-diagnosis';
 import { VariationManager } from './variation-manager';
@@ -30,7 +34,6 @@ import { WholesalePricing } from './wholesale-pricing';
 
 // ----------------------------------------------------------------------
 
-import { getSellerCategories, addNewCategory, getSellerThemes, addNewTheme } from 'src/utils/seller-categories';
 
 const PRODUCT_SIZE_OPTIONS = ['XS', 'S', 'M', 'L', 'XL', 'XXL'];
 
@@ -105,7 +108,7 @@ export const NewInventorySchema = zod.object({
 
 // ----------------------------------------------------------------------
 
-export function InventoryNewEditForm({ currentProduct }) {
+export function InventoryNewEditForm({ currentProduct, onSaved, disabled = false }) {
   const router = useRouter();
 
   const [includeTaxes, setIncludeTaxes] = useState(false);
@@ -176,13 +179,110 @@ export function InventoryNewEditForm({ currentProduct }) {
 
   const onSubmit = handleSubmit(async (data) => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Prepare product data for API
+      const productData = {
+        name: data.name,
+        description: data.description,
+        short_description: data.subDescription,
+        sku: data.sku,
+        barcode: data.code,
+        category: data.category,
+        price: data.price,
+        compare_at_price: data.priceSale || null,
+        stock_quantity: data.quantity,
+        low_stock_threshold: 10, // Default threshold
+        // Convert images to JSON array of URLs (handle strings, file-like objects, and falsy entries)
+        images: (data.images || [])
+          .map((img) => {
+            if (!img) return null;
+            if (typeof img === 'string') return img;
+            return img.preview || img.url || img.path || null;
+          })
+          .filter(Boolean),
+        cover_image_url: (() => {
+          const first = data.images?.[0];
+          if (!first) return null;
+          if (typeof first === 'string') return first;
+          return first.preview || first.url || first.path || null;
+        })(),
+        is_taxable: includeTaxes,
+        status: 'active',
+        // Store additional data in dimensions field (using JSONB)
+        dimensions: {
+          colors: data.colors,
+          sizes: data.sizes,
+          tags: data.tags,
+          gender: data.gender,
+          theme: data.theme,
+          newLabel: data.newLabel,
+          saleLabel: data.saleLabel,
+        },
+      };
+
+      if (currentProduct) {
+        // Update existing product
+        const updated = await inventoryApi.updateProduct(currentProduct.id, productData);
+        // store updated product locally so list can immediately reflect changes
+        try {
+          window.localStorage.setItem('studio360:recentProduct', JSON.stringify(updated));
+        } catch (e) {
+          /* ignore storage errors */
+        }
+        toast.success('Product updated successfully!');
+      } else {
+        // Create new product
+        const newProduct = await inventoryApi.createProduct(productData);
+        // store new product locally so list can immediately reflect changes
+        try {
+          window.localStorage.setItem('studio360:recentProduct', JSON.stringify(newProduct));
+        } catch (e) {
+          /* ignore storage errors */
+        }
+
+        // Handle variations if present
+        if (data.variationCombinations && data.variationCombinations.length > 0) {
+          await Promise.all(data.variationCombinations.map(async (variation) => {
+            await inventoryApi.createVariation({
+              product_id: newProduct.id,
+              name: variation.combination.map(c => `${c.variationName}: ${c.optionValue}`).join(', '),
+              sku: variation.sku,
+              price: variation.price,
+              stock_quantity: variation.stock,
+              attributes: variation.combination.reduce((acc, c) => ({
+                ...acc,
+                [c.variationName]: c.optionValue
+              }), {}),
+              image_url: variation.image ? (typeof variation.image === 'string' ? variation.image : variation.image.preview) : null,
+            });
+          }));
+        }
+
+        // Handle wholesale pricing if present
+        if (data.wholesalePricing && data.wholesalePricing.length > 0) {
+          await Promise.all(data.wholesalePricing.map(async (tier) => {
+            await inventoryApi.createWholesaleTier({
+              product_id: newProduct.id,
+              tier_name: `Tier ${tier.minQuantity}+`,
+              min_quantity: tier.minQuantity,
+              discount_type: 'percentage',
+              discount_value: tier.discount,
+              price_per_unit: tier.price,
+            });
+          }));
+        }
+
+        toast.success('Product created successfully!');
+      }
+
       reset();
-      toast.success(currentProduct ? 'Update success!' : 'Create success!');
-      router.push(paths.dashboard.inventory.root);
-      console.info('DATA', data);
+      if (onSaved) {
+        onSaved();
+      } else {
+        router.push(paths.dashboard.inventory.root);
+      }
     } catch (error) {
-      console.error(error);
+      console.error('Error saving product:', error);
+      toast.error(currentProduct ? 'Failed to update product' : 'Failed to create product');
     }
   });
 
@@ -582,9 +682,9 @@ export function InventoryNewEditForm({ currentProduct }) {
 
         {/* Price Summary */}
         {(watch('price') || watch('priceSale') || watch('taxes')) && (
-          <Box sx={{ 
-            p: 2, 
-            bgcolor: 'background.neutral', 
+          <Box sx={{
+            p: 2,
+            bgcolor: 'background.neutral',
             borderRadius: 1,
             border: '1px solid',
             borderColor: 'divider'
@@ -630,8 +730,8 @@ export function InventoryNewEditForm({ currentProduct }) {
                 </Typography>
                 <Typography variant="body2" fontWeight="bold" fontFamily="monospace" color="primary.main">
                   {fCurrencyPHPSymbol(
-                    (watch('priceSale') || watch('price') || 0) + 
-                    ((watch('taxes') && !includeTaxes) ? (watch('price') || 0) * (watch('taxes') || 0) / 100 : 0), 
+                    (watch('priceSale') || watch('price') || 0) +
+                    ((watch('taxes') && !includeTaxes) ? (watch('price') || 0) * (watch('taxes') || 0) / 100 : 0),
                     '₱', 2, '.', ','
                   )}
                 </Typography>
@@ -651,7 +751,7 @@ export function InventoryNewEditForm({ currentProduct }) {
         sx={{ pl: 3, flexGrow: 1 }}
       />
 
-      <LoadingButton type="submit" variant="contained" size="large" loading={isSubmitting}>
+      <LoadingButton type="submit" variant="contained" size="large" loading={isSubmitting} disabled={disabled}>
         {!currentProduct ? 'Create product' : 'Save changes'}
       </LoadingButton>
     </Stack>

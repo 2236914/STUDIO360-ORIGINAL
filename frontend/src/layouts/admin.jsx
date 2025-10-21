@@ -12,19 +12,19 @@ import { _contacts, _notifications } from 'src/_mock';
 import { varAlpha, stylesMode } from 'src/theme/styles';
 
 import { bulletColor } from 'src/components/nav-section';
+import { WelcomePopup } from 'src/components/welcome-popup';
 import { useSettingsContext } from 'src/components/settings';
 
 import { Main } from './dashboard/main';
-import { NavMobile } from './dashboard/nav-mobile';
 import { layoutClasses } from './classes';
-import { NavVertical } from './dashboard/nav-vertical';
-import { NavHorizontal } from './dashboard/nav-horizontal';
 import { _account } from './config-nav-account';
 import { HeaderBase } from './core/header-base';
+import { NavMobile } from './dashboard/nav-mobile';
 import { _workspaces } from './config-nav-workspace';
 import { LayoutSection } from './core/layout-section';
+import { NavVertical } from './dashboard/nav-vertical';
+import { NavHorizontal } from './dashboard/nav-horizontal';
 import { navData as adminNavData } from './config-nav-admin';
-import { WelcomePopup } from 'src/components/welcome-popup';
 
 // ----------------------------------------------------------------------
 

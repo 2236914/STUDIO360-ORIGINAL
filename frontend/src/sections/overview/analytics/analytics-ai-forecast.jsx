@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 
 import { fNumber } from 'src/utils/format-number';
 
@@ -21,11 +22,12 @@ const MONTHS = [
   'Jan+1', 'Feb+1', 'Mar+1', 'Apr+1', 'May+1', 'Jun+1'
 ];
 
-const ACTUAL_SALES = [62000, 68000, 72000, 80000, 65000, 55000, 40000, 45000, 60000, 75000, 80000, 55000];
-const FORECAST_SALES = [65000, 70000, 75000, 80000, 85000, 90000];
+// Default empty data - will be populated from API
+const ACTUAL_SALES = Array(12).fill(0);
+const FORECAST_SALES = Array(6).fill(0);
 
-const ACTUAL_EXPENSES = [45000, 48000, 52000, 58000, 42000, 38000, 32000, 35000, 48000, 55000, 58000, 42000];
-const FORECAST_EXPENSES = [48000, 52000, 56000, 60000, 64000, 68000];
+const ACTUAL_EXPENSES = Array(12).fill(0);
+const FORECAST_EXPENSES = Array(6).fill(0);
 
 const LEGENDS = [
   { name: 'Actual Sales', color: '#00AB55' },

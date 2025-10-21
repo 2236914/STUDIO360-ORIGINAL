@@ -1,12 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
 
 import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
@@ -16,42 +15,8 @@ import { DashboardContent } from 'src/layouts/dashboard';
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
-// Sample voucher data
-const VOUCHER_DATA = [
-  {
-    id: 1,
-    code: 'WELCOME10',
-    name: 'Welcome Discount',
-    description: '10% off for new customers',
-    type: 'percentage',
-    value: 10,
-    status: 'active',
-    usedCount: 25,
-    usageLimit: 100,
-  },
-  {
-    id: 2,
-    code: 'SAVE20',
-    name: 'Save $20',
-    description: '$20 off orders over $100',
-    type: 'fixed_amount',
-    value: 20,
-    status: 'active',
-    usedCount: 12,
-    usageLimit: 50,
-  },
-  {
-    id: 3,
-    code: 'FREESHIP',
-    name: 'Free Shipping',
-    description: 'Free shipping on all orders',
-    type: 'free_shipping',
-    value: 0,
-    status: 'active',
-    usedCount: 45,
-    usageLimit: null,
-  },
-];
+// Empty voucher data - will be populated from database
+const VOUCHER_DATA = [];
 
 // ----------------------------------------------------------------------
 

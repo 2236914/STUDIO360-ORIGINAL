@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import Avatar from '@mui/material/Avatar';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
-import Alert from '@mui/material/Alert';
 
 import { Iconify } from 'src/components/iconify';
 
@@ -43,7 +44,7 @@ export function AnalyticsTaxableIncome() {
             Taxable Income
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Quarter 1, 2023
+            Current Quarter
           </Typography>
         </Box>
       </Stack>
@@ -55,7 +56,7 @@ export function AnalyticsTaxableIncome() {
             Gross Sales
           </Typography>
           <Typography variant="subtitle1" sx={{ color: 'success.main', fontWeight: 700 }}>
-            ₱87,000
+            ₱0
           </Typography>
         </Stack>
 
@@ -64,7 +65,7 @@ export function AnalyticsTaxableIncome() {
             Exemption
           </Typography>
           <Typography variant="subtitle1" sx={{ color: 'warning.main', fontWeight: 700 }}>
-            -₱250,000
+            -₱0
           </Typography>
         </Stack>
 
@@ -75,7 +76,7 @@ export function AnalyticsTaxableIncome() {
             Taxable Base
           </Typography>
           <Typography variant="subtitle1" sx={{ color: 'error.main', fontWeight: 700 }}>
-            -₱203,000
+            ₱0
           </Typography>
         </Stack>
       </Stack>

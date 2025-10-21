@@ -92,13 +92,19 @@ app.get('/api/health', (req, res) => {
 try { app.use('/api/auth', require('./api/auth/auth.routes')); } catch (_) { console.warn('Auth routes missing'); }
 try { app.use('/api/auth/user', require('./api/auth/user.routes')); } catch (_) { console.warn('User routes missing'); }
 try { app.use('/api/shop', require('./api/shop/shop.routes')); } catch (_) { console.warn('Shop routes missing'); }
+try { app.use('/api/store-pages', require('./api/store-pages/store-pages.routes')); } catch (_) { console.warn('Store pages routes missing'); }
+try { app.use('/api/inventory', require('./api/inventory/inventory.routes')); } catch (_) { console.warn('Inventory routes missing'); }
+try { app.use('/api/orders', require('./api/orders/orders.routes')); } catch (_) { console.warn('Orders routes missing'); }
 try { app.use('/api/assistant', require('./api/assistant/assistant.routes')); } catch (_) { console.warn('Assistant routes missing'); }
 try { app.use('/api/ai', require('./api/ai/ai.routes')); } catch (_) { console.warn('AI routes missing'); }
-try { app.use('/api/invoices', require('./api/invoices/invoice.routes')); } catch (_) { console.warn('Invoice routes missing'); }
+try { app.use('/api/invoices', require('./api/invoices/invoices.routes')); } catch (_) { console.warn('Invoice routes missing'); }
 try { app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes')); } catch (_) { console.warn('Bookkeeping routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/analytics.routes')); } catch (_) { console.warn('Analytics routes missing'); }
-try { app.use('/api/vouchers', require('./api/vouchers/voucher.routes')); } catch (_) { console.warn('Voucher routes missing'); }
+try { app.use('/api/vouchers', require('./api/vouchers/vouchers.routes')); } catch (_) { console.warn('Voucher routes missing'); }
+try { app.use('/api/mail', require('./api/mail/mail.routes')); } catch (_) { console.warn('Mail routes missing'); }
 try { app.use('/api/account', require('./api/account/account-history.routes')); } catch (_) { console.warn('Account history routes missing'); }
+try { app.use('/api/public', require('./api/public/public-storefront.routes')); } catch (_) { console.warn('Public storefront routes missing'); }
+try { app.use('/api/upload', require('./api/upload/upload.routes')); } catch (_) { console.warn('Upload routes missing'); }
 
 // Status endpoint retained
 app.get('/api/status', (req, res) => {

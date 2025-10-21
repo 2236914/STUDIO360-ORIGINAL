@@ -2,8 +2,9 @@
 
 import Box from '@mui/material/Box';
 
-import { PortalWrapper } from '../portal';
 import { AnimateLogo1 } from 'src/components/animate';
+
+import { PortalWrapper } from '../portal';
 
 // ----------------------------------------------------------------------
 

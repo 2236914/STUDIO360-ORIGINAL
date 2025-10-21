@@ -1,25 +1,25 @@
 'use client';
 
 import { useState } from 'react';
+import NProgress from 'nprogress';
 
 import Box from '@mui/material/Box';
+import List from '@mui/material/List';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
+import ListItem from '@mui/material/ListItem';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-import { CustomDrawer } from 'src/components/custom-drawer';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
+import ListItemButton from '@mui/material/ListItemButton';
 import { alpha, useTheme, useColorScheme } from '@mui/material/styles';
 
-import { useRouter } from 'src/routes/hooks';
 import { paths } from 'src/routes/paths';
+import { useRouter } from 'src/routes/hooks';
 
 import { Iconify } from 'src/components/iconify';
-import NProgress from 'nprogress';
+import { CustomDrawer } from 'src/components/custom-drawer';
 
 // ----------------------------------------------------------------------
 

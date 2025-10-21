@@ -1,26 +1,213 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { useFieldArray, useFormContext } from 'react-hook-form';
 
 import Box from '@mui/material/Box';
-import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
-import Tooltip from '@mui/material/Tooltip';
 import Divider from '@mui/material/Divider';
 import TextField from '@mui/material/TextField';
-import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
-import InputAdornment from '@mui/material/InputAdornment';
+import IconButton from '@mui/material/IconButton';
 import FormControlLabel from '@mui/material/FormControlLabel';
-
-import { useFieldArray, useFormContext } from 'react-hook-form';
 
 import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
+
+// VariationBuilder component - moved outside to avoid render-time definition
+const VariationBuilder = ({ variation, variationIndex, onAddOption, onRemoveOption, onRemoveVariation, onUpdateVariationName }) => {
+  const [newOption, setNewOption] = useState('');
+
+  const handleAddNewOption = () => {
+    if (newOption.trim()) {
+      onAddOption(variationIndex, newOption);
+      setNewOption('');
+    }
+  };
+
+  return (
+    <Card sx={{ p: 3, position: 'relative' }}>
+      <Stack spacing={3}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <TextField
+            size="small"
+            label={`Variation ${variationIndex + 1}`}
+            placeholder="e.g., Color, Size, Style..."
+            value={variation.name || ''}
+            onChange={(e) => onUpdateVariationName(variationIndex, e.target.value)}
+            sx={{ flexGrow: 1, mr: 2 }}
+          />
+          <IconButton
+            color="error"
+            onClick={() => onRemoveVariation(variationIndex)}
+            sx={{ 
+              position: 'absolute', 
+              top: 8, 
+              right: 8,
+              bgcolor: 'error.lighter',
+              '&:hover': { bgcolor: 'error.light' }
+            }}
+          >
+            <Iconify icon="eva:close-fill" />
+          </IconButton>
+        </Stack>
+
+        {/* Options List */}
+        <Stack spacing={1}>
+          <Typography variant="subtitle2" sx={{ color: 'text.secondary' }}>
+            Options:
+          </Typography>
+          <Stack direction="row" flexWrap="wrap" spacing={1}>
+            {(variation.options || []).map((option, optionIndex) => (
+              <Chip
+                key={optionIndex}
+                label={option}
+                onDelete={() => onRemoveOption(variationIndex, optionIndex)}
+                color="primary"
+                variant="outlined"
+                size="small"
+              />
+            ))}
+          </Stack>
+        </Stack>
+
+        {/* Add New Option */}
+        <Stack direction="row" spacing={1} alignItems="center">
+          <TextField
+            size="small"
+            placeholder="Add new option..."
+            value={newOption}
+            onChange={(e) => setNewOption(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleAddNewOption()}
+            sx={{ flexGrow: 1 }}
+          />
+          <Button
+            size="small"
+            variant="outlined"
+            onClick={handleAddNewOption}
+            disabled={!newOption.trim()}
+            startIcon={<Iconify icon="eva:plus-fill" />}
+          >
+            Add
+          </Button>
+        </Stack>
+      </Stack>
+    </Card>
+  );
+};
+
+// VariationCombinationsTable component - moved outside to avoid render-time definition
+const VariationCombinationsTable = ({ enableVariations, variationCombinations, onUpdateCombination, onRemoveCombination }) => {
+  if (!enableVariations || variationCombinations.length === 0) {
+    return null;
+  }
+
+  return (
+    <Card sx={{ p: 3 }}>
+      <Typography variant="h6" sx={{ mb: 3 }}>
+        Variation List
+      </Typography>
+
+      <Box sx={{ overflowX: 'auto' }}>
+        {/* Header */}
+        <Box sx={{ 
+          display: 'grid', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+          gap: 2,
+          p: 2,
+          bgcolor: 'grey.50',
+          borderRadius: 1,
+          mb: 2,
+          minWidth: '600px'
+        }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Combination
+          </Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Price
+          </Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Stock
+          </Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            SKU
+          </Typography>
+          <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            Actions
+          </Typography>
+        </Box>
+
+        {/* Rows */}
+        <Stack spacing={1}>
+          {variationCombinations.map((combination, index) => (
+            <Box
+              key={combination.id || index}
+              sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+                gap: 2,
+                p: 2,
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: 1,
+                alignItems: 'center',
+                minWidth: '600px'
+              }}
+            >
+              {/* Combination */}
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                {combination.combination?.map(c => c.optionValue).join(', ') || 'N/A'}
+              </Typography>
+
+              {/* Price */}
+              <TextField
+                size="small"
+                type="number"
+                placeholder="0.00"
+                value={combination.price || ''}
+                onChange={(e) => onUpdateCombination(index, 'price', parseFloat(e.target.value) || 0)}
+                sx={{ width: 100 }}
+              />
+
+              {/* Stock */}
+              <TextField
+                size="small"
+                type="number"
+                placeholder="0"
+                value={combination.stock || ''}
+                onChange={(e) => onUpdateCombination(index, 'stock', parseInt(e.target.value, 10) || 0)}
+                sx={{ width: 80 }}
+              />
+
+              {/* SKU */}
+              <TextField
+                size="small"
+                placeholder="SKU"
+                value={combination.sku || ''}
+                onChange={(e) => onUpdateCombination(index, 'sku', e.target.value)}
+                sx={{ width: 120 }}
+              />
+
+              {/* Actions */}
+              <IconButton
+                color="error"
+                size="small"
+                onClick={() => onRemoveCombination(index)}
+              >
+                <Iconify icon="eva:trash-2-outline" />
+              </IconButton>
+            </Box>
+          ))}
+        </Stack>
+      </Box>
+    </Card>
+  );
+};
 
 export function VariationManager() {
   const { control, watch, setValue } = useFormContext();
@@ -36,7 +223,8 @@ export function VariationManager() {
     name: 'variationCombinations',
   });
 
-  const watchedVariations = watch('variations') || [];
+  const watchedVariationsValue = watch('variations');
+  const watchedVariations = useMemo(() => watchedVariationsValue || [], [watchedVariationsValue]);
 
   // Generate all possible combinations when variations change
   const generateCombinations = useCallback(() => {
@@ -55,61 +243,51 @@ export function VariationManager() {
       return;
     }
 
-    // Generate cartesian product of all variation options
-    const combinations = validVariations.reduce(
-      (acc, variation) => {
-        const newCombinations = [];
-        variation.options.forEach((option) => {
-          if (acc.length === 0) {
-            newCombinations.push([{ variationName: variation.name, optionValue: option }]);
-          } else {
-            acc.forEach((combination) => {
-              newCombinations.push([...combination, { variationName: variation.name, optionValue: option }]);
-            });
-          }
-        });
-        return newCombinations;
-      },
-      []
-    );
+    // Generate all possible combinations
+    const combinations = [];
+    const generateCombinationsRecursive = (currentCombination, remainingVariations) => {
+      if (remainingVariations.length === 0) {
+        combinations.push(currentCombination);
+        return;
+      }
 
-    // Convert to our data structure
-    const combinationData = combinations.map((combination, index) => {
-      // Check if this combination already exists
-      const existing = variationCombinations.find(existing => 
-        existing.combination &&
-        existing.combination.length === combination.length &&
-        existing.combination.every(item => 
-          combination.some(combItem => 
-            combItem.variationName === item.variationName && 
-            combItem.optionValue === item.optionValue
-          )
-        )
-      );
+      const currentVariation = remainingVariations[0];
+      const remaining = remainingVariations.slice(1);
 
-      return {
-        id: existing?.id || `combo-${Date.now()}-${index}`,
-        combination,
-        price: existing?.price || 0,
-        stock: existing?.stock || 0,
-        sku: existing?.sku || '',
-        image: existing?.image || null
-      };
-    });
+      currentVariation.options.forEach((option) => {
+        const newCombination = [
+          ...currentCombination,
+          {
+            variationName: currentVariation.name,
+            optionValue: option,
+          },
+        ];
+        generateCombinationsRecursive(newCombination, remaining);
+      });
+    };
 
-    replaceCombinations(combinationData);
-  }, [enableVariations, watchedVariations, variationCombinations, replaceCombinations]);
+    generateCombinationsRecursive([], validVariations);
+
+    // Convert to the format expected by the form
+    const formattedCombinations = combinations.map((combination, index) => ({
+      id: `combination-${index}`,
+      combination,
+      price: 0,
+      stock: 0,
+      sku: '',
+    }));
+
+    replaceCombinations(formattedCombinations);
+  }, [enableVariations, watchedVariations, replaceCombinations]);
 
   const handleEnableVariations = useCallback((enabled) => {
     setEnableVariations(enabled);
     if (!enabled) {
-      setValue('variations', []);
-      setValue('variationCombinations', []);
+      replaceCombinations([]);
     } else {
-      // Add first empty variation
-      appendVariation({ name: '', options: [] });
+      generateCombinations();
     }
-  }, [setValue, appendVariation]);
+  }, [replaceCombinations, generateCombinations]);
 
   const handleAddVariation = useCallback(() => {
     appendVariation({ name: '', options: [] });
@@ -133,213 +311,20 @@ export function VariationManager() {
   const handleRemoveOption = useCallback((variationIndex, optionIndex) => {
     const currentVariations = watch('variations');
     const variation = currentVariations[variationIndex];
-    if (variation) {
-      const updatedOptions = variation.options.filter((_, idx) => idx !== optionIndex);
+    if (variation && variation.options) {
+      const updatedOptions = variation.options.filter((_, index) => index !== optionIndex);
       setValue(`variations.${variationIndex}.options`, updatedOptions);
       generateCombinations();
     }
   }, [watch, setValue, generateCombinations]);
 
-  const VariationBuilder = ({ variation, variationIndex }) => {
-    const [newOption, setNewOption] = useState('');
+  const handleUpdateVariationName = useCallback((variationIndex, name) => {
+    setValue(`variations.${variationIndex}.name`, name);
+  }, [setValue]);
 
-    const handleAddNewOption = () => {
-      if (newOption.trim()) {
-        handleAddOption(variationIndex, newOption);
-        setNewOption('');
-      }
-    };
-
-    return (
-      <Card sx={{ p: 3, position: 'relative' }}>
-        <Stack spacing={3}>
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <TextField
-              size="small"
-              label={`Variation ${variationIndex + 1}`}
-              placeholder="e.g., Color, Size, Style..."
-              value={variation.name || ''}
-              onChange={(e) => setValue(`variations.${variationIndex}.name`, e.target.value)}
-              sx={{ flexGrow: 1, mr: 2 }}
-            />
-            <IconButton 
-              color="error" 
-              onClick={() => handleRemoveVariation(variationIndex)}
-              size="small"
-            >
-              <Iconify icon="eva:close-fill" />
-            </IconButton>
-          </Stack>
-
-          <Box>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Options
-            </Typography>
-            
-            {/* Existing Options */}
-            <Stack direction="row" flexWrap="wrap" gap={1} sx={{ mb: 2 }}>
-              {variation.options?.map((option, optionIndex) => (
-                <Chip
-                  key={optionIndex}
-                  label={option}
-                  onDelete={() => handleRemoveOption(variationIndex, optionIndex)}
-                  deleteIcon={<Iconify icon="eva:close-fill" width={16} />}
-                  size="small"
-                  variant="outlined"
-                />
-              ))}
-            </Stack>
-
-            {/* Add New Option */}
-            <TextField
-              size="small"
-              placeholder="Add option..."
-              value={newOption}
-              onChange={(e) => setNewOption(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddNewOption();
-                }
-              }}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton 
-                      size="small" 
-                      onClick={handleAddNewOption}
-                      disabled={!newOption.trim()}
-                    >
-                      <Iconify icon="eva:plus-fill" />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ maxWidth: 300 }}
-            />
-          </Box>
-        </Stack>
-      </Card>
-    );
-  };
-
-  const VariationCombinationsTable = () => {
-    if (!enableVariations || variationCombinations.length === 0) {
-      return null;
-    }
-
-    return (
-      <Card sx={{ p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 3 }}>
-          Variation List
-        </Typography>
-
-        <Box sx={{ overflowX: 'auto' }}>
-          {/* Header */}
-          <Box sx={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'auto 1fr auto auto auto',
-            gap: 2,
-            p: 2,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            minWidth: 600
-          }}>
-            <Typography variant="subtitle2">Image</Typography>
-            <Typography variant="subtitle2">Combination</Typography>
-            <Typography variant="subtitle2">Price</Typography>
-            <Typography variant="subtitle2">Stock</Typography>
-            <Typography variant="subtitle2">SKU</Typography>
-          </Box>
-
-          {/* Rows */}
-          {variationCombinations.map((combination, index) => (
-            <Box key={combination.id} sx={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'auto 1fr auto auto auto',
-              gap: 2,
-              p: 2,
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              alignItems: 'center',
-              minWidth: 600
-            }}>
-              {/* Image */}
-              <Box sx={{ 
-                width: 40, 
-                height: 40, 
-                bgcolor: 'grey.100',
-                borderRadius: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Iconify icon="eva:image-outline" width={20} sx={{ color: 'grey.400' }} />
-              </Box>
-
-              {/* Combination */}
-              <Stack spacing={0.5}>
-                {combination.combination?.map((item, itemIndex) => (
-                  <Stack key={itemIndex} direction="row" spacing={1} alignItems="center">
-                    <Chip 
-                      label={item.variationName}
-                      size="small"
-                      color="primary"
-                      variant="outlined"
-                    />
-                    <Typography variant="body2">{item.optionValue}</Typography>
-                  </Stack>
-                ))}
-              </Stack>
-
-              {/* Price */}
-              <TextField
-                size="small"
-                type="number"
-                placeholder="0"
-                value={combination.price || ''}
-                onChange={(e) => setValue(`variationCombinations.${index}.price`, parseFloat(e.target.value) || 0)}
-                InputProps={{
-                  startAdornment: <InputAdornment position="start">₱</InputAdornment>,
-                }}
-                sx={{ width: 120 }}
-              />
-
-              {/* Stock */}
-              <TextField
-                size="small"
-                type="number"
-                placeholder="0"
-                value={combination.stock || ''}
-                onChange={(e) => setValue(`variationCombinations.${index}.stock`, parseInt(e.target.value) || 0)}
-                sx={{ width: 80 }}
-              />
-
-              {/* SKU */}
-              <TextField
-                size="small"
-                placeholder="SKU"
-                value={combination.sku || ''}
-                onChange={(e) => setValue(`variationCombinations.${index}.sku`, e.target.value)}
-                sx={{ width: 120 }}
-              />
-            </Box>
-          ))}
-        </Box>
-
-        {/* Apply to All Button */}
-        <Stack direction="row" justifyContent="flex-end" sx={{ mt: 2 }}>
-          <Button 
-            variant="outlined" 
-            size="small"
-            startIcon={<Iconify icon="eva:copy-fill" />}
-          >
-            Apply to All
-          </Button>
-        </Stack>
-      </Card>
-    );
-  };
+  const handleUpdateCombination = useCallback((index, field, value) => {
+    setValue(`variationCombinations.${index}.${field}`, value);
+  }, [setValue]);
 
   return (
     <Card>
@@ -374,14 +359,18 @@ export function VariationManager() {
                   key={variation.id}
                   variation={variation}
                   variationIndex={index}
+                  onAddOption={handleAddOption}
+                  onRemoveOption={handleRemoveOption}
+                  onRemoveVariation={handleRemoveVariation}
+                  onUpdateVariationName={handleUpdateVariationName}
                 />
               ))}
 
               {/* Add Variation Button */}
               <Button
                 variant="outlined"
-                startIcon={<Iconify icon="eva:plus-fill" />}
                 onClick={handleAddVariation}
+                startIcon={<Iconify icon="eva:plus-fill" />}
                 sx={{ alignSelf: 'flex-start' }}
               >
                 Add Variation
@@ -405,7 +394,12 @@ export function VariationManager() {
       </Stack>
 
       {/* Variation Combinations Table */}
-      <VariationCombinationsTable />
+      <VariationCombinationsTable 
+        enableVariations={enableVariations}
+        variationCombinations={variationCombinations}
+        onUpdateCombination={handleUpdateCombination}
+        onRemoveCombination={removeCombination}
+      />
     </Card>
   );
 }

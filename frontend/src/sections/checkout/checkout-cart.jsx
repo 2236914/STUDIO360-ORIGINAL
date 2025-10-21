@@ -23,10 +23,15 @@ export function CheckoutCart() {
 
   const empty = !checkout.items.length;
 
+  // Log current cart items for debugging
+  if (typeof window !== 'undefined' && checkout.items.length > 0) {
+    console.log('Current cart items:', checkout.items);
+  }
+
   // Get the continue shopping path based on current URL
   const getContinueShoppingPath = () => {
     if (typeof window !== 'undefined') {
-      const pathname = window.location.pathname;
+      const {pathname} = window.location;
       const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
       if (storeIdMatch) {
         return `/stores/${storeIdMatch[1]}`;
@@ -83,11 +88,31 @@ export function CheckoutCart() {
           startIcon={<Iconify icon="eva:arrow-ios-back-fill" />}
           sx={{ 
             fontSize: { xs: '0.875rem', sm: '1rem' },
-            px: { xs: 2, sm: 3 }
+            px: { xs: 2, sm: 3 },
+            mr: 2
           }}
         >
           Continue shopping
         </Button>
+
+        {!empty && (
+          <Button
+            color="error"
+            variant="outlined"
+            onClick={() => {
+              if (window.confirm('Are you sure you want to clear the entire cart?')) {
+                localStorage.removeItem('app-checkout');
+                window.location.reload();
+              }
+            }}
+            sx={{ 
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              px: { xs: 2, sm: 3 }
+            }}
+          >
+            Clear Cart
+          </Button>
+        )}
       </Grid>
 
       <Grid xs={12} md={4}>

@@ -62,7 +62,7 @@ if (typeof window !== 'undefined') {
   };
   
   // Add unhandledrejection handler for Promise-based errors
-  window.addEventListener('unhandledrejection', function(event) {
+  window.addEventListener('unhandledrejection', (event) => {
     if (event.reason && 
         event.reason.message && 
         event.reason.message.includes('Cannot redefine property: _debugInfo')) {

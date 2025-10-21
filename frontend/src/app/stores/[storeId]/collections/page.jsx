@@ -1,26 +1,22 @@
 'use client';
 
-import { useState, use, useEffect } from 'react';
+import { m } from 'framer-motion';
+import { use, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
-import TextField from '@mui/material/TextField';
 import Link from '@mui/material/Link';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import TextField from '@mui/material/TextField';
 import { useTheme } from '@mui/material/styles';
-import { m } from 'framer-motion';
+import Typography from '@mui/material/Typography';
 
 import { varFade } from 'src/components/animate';
-import { Iconify } from 'src/components/iconify';
-import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreHeader } from 'src/components/store-header';
+import { AnnouncementBanner } from 'src/components/announcement-banner';
 
 // ----------------------------------------------------------------------
 
@@ -129,25 +125,17 @@ function ProductGridSection() {
                     <Stack spacing={3}>
                       {/* Product Image */}
                       <Box
+                        component="img"
+                        src={product.coverUrl || product.images?.[0] || '/assets/images/product/product-placeholder.png'}
+                        alt={product.name}
                         sx={{
                           width: '100%',
                           height: 300,
-                          bgcolor: '#E5E5E5',
+                          objectFit: 'cover',
                           borderRadius: 2,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden'
+                          bgcolor: '#E5E5E5'
                         }}
-                      >
-                        <Iconify
-                          icon="solar:gallery-minimalistic-bold"
-                          sx={{
-                            fontSize: 48,
-                            color: '#A0A0A0'
-                          }}
-                        />
-                      </Box>
+                      />
 
                       {/* Product Info */}
                       <Stack spacing={2} alignItems="center" textAlign="center">
@@ -390,7 +378,9 @@ function StoreFooter() {
 
 export default function CollectionsPage({ params }) {
   const theme = useTheme();
-  const { storeId } = use(params);
+  // Handle both Promise and resolved params
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { storeId } = resolvedParams;
 
   // Set page title
   useEffect(() => {

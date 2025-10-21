@@ -1,13 +1,13 @@
+import { RHFSelect } from './rhf-select';
+import { RHFEditor } from './rhf-editor';
+import { RHFSwitch } from './rhf-switch';
 import { RHFTextField } from './rhf-text-field';
 import { RHFRadioGroup } from './rhf-radio-group';
 import { RHFPhoneInput } from './rhf-phone-input';
+import { RHFAutocomplete } from './rhf-autocomplete';
 import { RHFCountrySelect } from './rhf-country-select';
 import { RHFCheckbox, RHFMultiCheckbox } from './rhf-checkbox';
-import { RHFAutocomplete } from './rhf-autocomplete';
-import { RHFSelect } from './rhf-select';
-import { RHFEditor } from './rhf-editor';
-import { RHFUpload, RHFUploadAvatar } from './rhf-upload';
-import { RHFSwitch } from './rhf-switch';
+import { RHFUpload, RHFUploadAvatar } from './rhf-upload-cloudinary';
 
 // ----------------------------------------------------------------------
 

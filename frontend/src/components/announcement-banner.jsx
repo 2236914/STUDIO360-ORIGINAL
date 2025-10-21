@@ -1,10 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+
 import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
@@ -19,29 +21,32 @@ const MOCK_ANNOUNCEMENT = {
 };
 
 export function AnnouncementBanner() {
-  const [announcement, setAnnouncement] = useState(MOCK_ANNOUNCEMENT);
   const [isVisible, setIsVisible] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // In a real app, you would fetch this from your API
+  // Handle client-side mounting to prevent hydration mismatch
   useEffect(() => {
-    // Simulate API call to get announcement banner settings
-    // This would typically be: fetchAnnouncementBanner(storeId)
-    setAnnouncement(MOCK_ANNOUNCEMENT);
+    setIsMounted(true);
   }, []);
 
   const handleClose = () => {
     setIsVisible(false);
   };
 
+  // Don't render if not mounted (prevents hydration mismatch)
+  if (!isMounted) {
+    return null;
+  }
+
   // Don't render if disabled or closed
-  if (!announcement.enabled || !isVisible) {
+  if (!MOCK_ANNOUNCEMENT.enabled || !isVisible) {
     return null;
   }
 
   return (
     <Box
       sx={{
-        bgcolor: announcement.backgroundColor,
+        bgcolor: MOCK_ANNOUNCEMENT.backgroundColor,
         py: 1.5,
         px: { xs: 2, md: 3 },
         display: 'flex',
@@ -61,9 +66,9 @@ export function AnnouncementBanner() {
         sx={{ flex: 1 }}
       >
         <Iconify 
-          icon={announcement.icon} 
+          icon={MOCK_ANNOUNCEMENT.icon} 
           sx={{ 
-            color: announcement.textColor, 
+            color: MOCK_ANNOUNCEMENT.textColor, 
             fontSize: 18,
             flexShrink: 0
           }} 
@@ -71,13 +76,13 @@ export function AnnouncementBanner() {
         <Typography 
           variant="body2" 
           sx={{ 
-            color: announcement.textColor, 
+            color: MOCK_ANNOUNCEMENT.textColor, 
             fontWeight: 600, 
             textAlign: 'center',
             fontSize: { xs: '0.75rem', sm: '0.875rem' }
           }}
         >
-          {announcement.text}
+          {MOCK_ANNOUNCEMENT.text}
         </Typography>
       </Stack>
       
@@ -86,7 +91,7 @@ export function AnnouncementBanner() {
         onClick={handleClose}
         size="small"
         sx={{
-          color: announcement.textColor,
+          color: MOCK_ANNOUNCEMENT.textColor,
           opacity: 0.7,
           '&:hover': {
             opacity: 1,

@@ -7,7 +7,10 @@ import Typography from '@mui/material/Typography';
 import { useBoolean } from 'src/hooks/use-boolean';
 import { useResponsive } from 'src/hooks/use-responsive';
 
+import { mailApi } from 'src/services/mailService';
 import { DashboardContent } from 'src/layouts/dashboard';
+
+import { toast } from 'src/components/snackbar';
 
 import { Layout } from '../layout';
 import { MailNav } from '../mail-nav';
@@ -20,90 +23,19 @@ import { MailDetails } from '../mail-details';
 
 const LABEL_INDEX = 'inbox';
 
-// Support ticket labels for our system
+// Support ticket labels for our system - reset to zero counts
 const SUPPORT_LABELS = [
-  { id: 'inbox', name: 'Inbox', color: '#1877F2', unreadCount: 5 },
+  { id: 'inbox', name: 'Inbox', color: '#1877F2', unreadCount: 0 },
   { id: 'sent', name: 'Sent', color: '#00A76F', unreadCount: 0 },
-  { id: 'pending', name: 'Pending', color: '#FF8C00', unreadCount: 3 },
+  { id: 'pending', name: 'Pending', color: '#FF8C00', unreadCount: 0 },
   { id: 'resolved', name: 'Resolved', color: '#00A76F', unreadCount: 0 },
-  { id: 'spam', name: 'Spam', color: '#FF3030', unreadCount: 1 },
-  { id: 'important', name: 'Important', color: '#FFC107', unreadCount: 2 },
+  { id: 'spam', name: 'Spam', color: '#FF3030', unreadCount: 0 },
+  { id: 'important', name: 'Important', color: '#FFC107', unreadCount: 0 },
 ];
 
-// Mock support tickets data
+// Empty support tickets data - will be populated from database
 const SUPPORT_TICKETS = {
-  inbox: [
-    {
-      id: 'ticket_001',
-      from: 'John Doe',
-      email: 'john.doe@email.com',
-      subject: 'Question about shipping times',
-      message: 'Hi, I ordered a necklace yesterday and I was wondering about the shipping times to Cebu. Can you please provide more information?',
-      timestamp: new Date('2024-01-20 10:30:00'),
-      isRead: false,
-      isStarred: true,
-      labels: ['inbox', 'pending'],
-      storeId: 'kitschstudio',
-      source: 'chatbot',
-      priority: 'normal'
-    },
-    {
-      id: 'ticket_002',
-      from: 'Maria Santos',
-      email: 'maria.santos@gmail.com',
-      subject: 'Custom order inquiry',
-      message: 'Hello! I saw your beautiful earrings and I was wondering if you accept custom orders? I have a specific design in mind.',
-      timestamp: new Date('2024-01-20 09:15:00'),
-      isRead: false,
-      isStarred: false,
-      labels: ['inbox'],
-      storeId: 'kitschstudio',
-      source: 'direct',
-      priority: 'high'
-    },
-    {
-      id: 'ticket_003',
-      from: 'Alex Rivera',
-      email: 'alex.rivera@yahoo.com',
-      subject: 'Payment issue',
-      message: 'I tried to complete my payment using GCash but it keeps showing an error. Can you help me with this?',
-      timestamp: new Date('2024-01-19 16:45:00'),
-      isRead: true,
-      isStarred: false,
-      labels: ['inbox', 'important'],
-      storeId: 'kitschstudio',
-      source: 'chatbot',
-      priority: 'urgent'
-    },
-    {
-      id: 'ticket_004',
-      from: 'Sarah Kim',
-      email: 'sarah.kim@outlook.com',
-      subject: 'Return request',
-      message: 'Hi, I received my order but the size is not right. I would like to return it and get a different size. What should I do?',
-      timestamp: new Date('2024-01-19 14:20:00'),
-      isRead: true,
-      isStarred: true,
-      labels: ['inbox'],
-      storeId: 'kitschstudio',
-      source: 'email',
-      priority: 'normal'
-    },
-    {
-      id: 'ticket_005',
-      from: 'David Chen',
-      email: 'david.chen@gmail.com',
-      subject: 'Product availability',
-      message: 'Is the silver bracelet with pearls still available? I cannot find it on your website anymore.',
-      timestamp: new Date('2024-01-18 11:30:00'),
-      isRead: false,
-      isStarred: false,
-      labels: ['inbox'],
-      storeId: 'kitschstudio',
-      source: 'chatbot',
-      priority: 'low'
-    }
-  ],
+  inbox: [],
   sent: [],
   pending: [],
   resolved: [],
@@ -115,12 +47,86 @@ export function MailView() {
   const [selectedLabelId, setSelectedLabelId] = useState(LABEL_INDEX);
   const [selectedMailId, setSelectedMailId] = useState('');
   const [mails, setMails] = useState(SUPPORT_TICKETS);
+  const [allMails, setAllMails] = useState([]); // Store all mails from DB
+  const [labels, setLabels] = useState(SUPPORT_LABELS);
   const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
 
   const mdUp = useResponsive('up', 'md');
   const openNav = useBoolean();
   const openMail = useBoolean();
   const openCompose = useBoolean();
+
+  // Load mail from database
+  useEffect(() => {
+    loadMail();
+    loadLabelsWithCounts();
+  }, []);
+
+  const loadMail = async () => {
+    try {
+      setLoading(true);
+      const mailData = await mailApi.getMail();
+      
+      // Store all mails
+      setAllMails(mailData);
+      
+      // Group mails by labels
+      const grouped = SUPPORT_LABELS.reduce((acc, label) => {
+        acc[label.id] = [];
+        return acc;
+      }, {});
+
+      mailData.forEach(mail => {
+        if (mail.labels && Array.isArray(mail.labels)) {
+          mail.labels.forEach(labelId => {
+            if (grouped[labelId]) {
+              grouped[labelId].push({
+                id: mail.id,
+                from: mail.from_name,
+                email: mail.from_email,
+                subject: mail.subject,
+                message: mail.message,
+                timestamp: new Date(mail.received_at || mail.created_at),
+                isRead: mail.is_read,
+                isStarred: mail.is_starred,
+                labels: mail.labels,
+                status: mail.status,
+                priority: mail.priority,
+                source: mail.source,
+                attachments: mail.attachments || [],
+              });
+            }
+          });
+        }
+      });
+
+      setMails(grouped);
+      setInitialLoad(false);
+    } catch (error) {
+      console.error('Error loading mail:', error);
+      toast.error('Failed to load mail');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadLabelsWithCounts = async () => {
+    try {
+      const counts = await mailApi.getLabelCounts();
+      
+      // Update label unread counts
+      const updatedLabels = SUPPORT_LABELS.map(label => ({
+        ...label,
+        unreadCount: counts[label.id]?.unread || 0,
+      }));
+      
+      setLabels(updatedLabels);
+    } catch (error) {
+      console.error('Error loading label counts:', error);
+    }
+  };
 
   // Get current mails based on selected label
   const currentMails = mails[selectedLabelId] || [];
@@ -145,22 +151,89 @@ export function MailView() {
   );
 
   const handleClickMail = useCallback(
-    (mailId) => {
+    async (mailId) => {
       if (!mdUp) {
         openMail.onFalse();
       }
       setSelectedMailId(mailId);
       
       // Mark as read when opened
-      setMails(prev => ({
-        ...prev,
-        [selectedLabelId]: prev[selectedLabelId].map(mail => 
-          mail.id === mailId ? { ...mail, isRead: true } : mail
-        )
-      }));
+      try {
+        await mailApi.markAsRead(mailId, true);
+        
+        // Update local state
+        setMails(prev => ({
+          ...prev,
+          [selectedLabelId]: prev[selectedLabelId].map(mail => 
+            mail.id === mailId ? { ...mail, isRead: true } : mail
+          )
+        }));
+        
+        // Reload label counts
+        loadLabelsWithCounts();
+      } catch (error) {
+        console.error('Error marking mail as read:', error);
+      }
     },
     [openMail, selectedLabelId, mdUp]
   );
+
+  const handleToggleStar = async (mailId) => {
+    try {
+      await mailApi.toggleStar(mailId);
+      
+      // Update local state
+      setMails(prev => ({
+        ...prev,
+        [selectedLabelId]: prev[selectedLabelId].map(mail =>
+          mail.id === mailId ? { ...mail, isStarred: !mail.isStarred } : mail
+        )
+      }));
+      
+      toast.success('Mail updated');
+    } catch (error) {
+      console.error('Error toggling star:', error);
+      toast.error('Failed to update mail');
+    }
+  };
+
+  const handleDeleteMail = async (mailId) => {
+    try {
+      await mailApi.deleteMail(mailId);
+      
+      // Remove from local state
+      setMails(prev => ({
+        ...prev,
+        [selectedLabelId]: prev[selectedLabelId].filter(mail => mail.id !== mailId)
+      }));
+      
+      // Clear selection if deleted mail was selected
+      if (selectedMailId === mailId) {
+        setSelectedMailId('');
+      }
+      
+      toast.success('Mail deleted successfully');
+      loadLabelsWithCounts();
+    } catch (error) {
+      console.error('Error deleting mail:', error);
+      toast.error('Failed to delete mail');
+    }
+  };
+
+  const handleSendMail = async (mailData) => {
+    try {
+      await mailApi.createMail(mailData);
+      toast.success('Mail sent successfully!');
+      openCompose.onFalse();
+      
+      // Reload mails
+      loadMail();
+      loadLabelsWithCounts();
+    } catch (error) {
+      console.error('Error sending mail:', error);
+      toast.error('Failed to send mail');
+    }
+  };
 
   // Auto-select first mail when changing labels
   useEffect(() => {
@@ -235,7 +308,7 @@ export function MailView() {
             ),
             nav: (
               <MailNav
-                labels={SUPPORT_LABELS}
+                labels={labels}
                 loading={loading}
                 openNav={openNav.value}
                 onCloseNav={openNav.onFalse}
@@ -267,7 +340,12 @@ export function MailView() {
         />
       </DashboardContent>
 
-      {openCompose.value && <MailCompose onCloseCompose={openCompose.onFalse} />}
+      {openCompose.value && (
+        <MailCompose 
+          onCloseCompose={openCompose.onFalse} 
+          onSendMail={handleSendMail}
+        />
+      )}
     </>
   );
 }

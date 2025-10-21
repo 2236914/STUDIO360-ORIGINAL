@@ -1,6 +1,7 @@
+import accountHistoryService from 'src/services/accountHistoryService';
+
 import { supabase } from './supabaseClient';
 import { setSession, removeSession } from './utils';
-import accountHistoryService from 'src/services/accountHistoryService';
 
 // Helper function to get client IP (simplified)
 async function getClientIP() {
@@ -16,16 +17,39 @@ async function getClientIP() {
 // Helper function to get device info
 function getDeviceInfo() {
   try {
-    const userAgent = navigator.userAgent;
-    if (/Mobile|Android|iPhone|iPad/.test(userAgent)) {
-      return /iPad/.test(userAgent) ? 'iPad' : 'Mobile';
+    const {userAgent} = navigator;
+    
+    // More comprehensive device detection
+    if (/iPad/.test(userAgent)) {
+      return 'iPad';
     }
-    if (/Windows/.test(userAgent)) return 'Windows';
-    if (/Mac/.test(userAgent)) return 'Mac';
-    if (/Linux/.test(userAgent)) return 'Linux';
-    return 'Desktop';
-  } catch {
-    return 'Unknown';
+    if (/iPhone|iPod/.test(userAgent)) {
+      return 'iPhone';
+    }
+    if (/Android/.test(userAgent)) {
+      return /Mobile/.test(userAgent) ? 'Android Mobile' : 'Android Tablet';
+    }
+    if (/Windows Phone/.test(userAgent)) {
+      return 'Windows Phone';
+    }
+    if (/BlackBerry/.test(userAgent)) {
+      return 'BlackBerry';
+    }
+    if (/Windows/.test(userAgent)) {
+      return 'Windows';
+    }
+    if (/Mac/.test(userAgent)) {
+      return 'Mac';
+    }
+    if (/Linux/.test(userAgent)) {
+      return 'Linux';
+    }
+    
+    // Fallback for unknown devices
+    return 'Unknown Device';
+  } catch (error) {
+    console.warn('Error detecting device info:', error);
+    return 'Unknown Device';
   }
 }
 
@@ -48,7 +72,12 @@ function normalizeAuthError(err) {
 export const signInWithPassword = async ({ email, password }) => {
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console
-    console.log('signInWithPassword()', { email });
+    console.log('signInWithPassword()', { 
+      email,
+      device: getDeviceInfo(),
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString()
+    });
   }
 
   try {
@@ -72,6 +101,12 @@ export const signInWithPassword = async ({ email, password }) => {
         console.log('Failed login activity logged successfully');
       } catch (historyError) {
         console.error('Failed to log failed login activity:', historyError);
+        console.error('History error details:', {
+          message: historyError.message,
+          stack: historyError.stack,
+          device: getDeviceInfo(),
+          userAgent: navigator.userAgent
+        });
         // Don't fail the login flow if history logging fails
       }
       
@@ -152,7 +187,7 @@ export const signUpWithPassword = async ({ email, password, name, role = 'user' 
     // Sign up with Supabase Auth
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
-    const user = data.user;
+    const {user} = data;
     if (!user) throw new Error('No user returned from Supabase Auth');
 
     // Insert extra info into user_model

@@ -1,8 +1,7 @@
 import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 
 import { setFont } from './styles/utils';
-import { overridesTheme } from './overrides-theme';
-import { shadows, typography, components, colorSchemes, customShadows } from './core';
+import { shadows, typography, components, colorSchemes } from './core';
 import { updateCoreWithSettings, updateComponentsWithSettings } from './with-settings/update-theme';
 
 // ----------------------------------------------------------------------
@@ -97,7 +96,7 @@ export function createTheme(localeComponents, settings) {
   // 2. Add colorSchemes (which are static and safe)
   const themeWithColorSchemes = {
     ...baseTheme,
-    colorSchemes: colorSchemes,
+    colorSchemes,
   };
 
   // 3. Add shadows (which depend on colorScheme but are simple)

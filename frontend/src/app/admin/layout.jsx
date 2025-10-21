@@ -1,11 +1,10 @@
 'use client';
 
-import { useAuthContext } from 'src/auth/hooks';
-
 import { CONFIG } from 'src/config-global';
 import { AdminLayout } from 'src/layouts/admin';
 
 import { AuthGuard } from 'src/auth/guard';
+import { useAuthContext } from 'src/auth/hooks';
 import { RoleBasedGuard } from 'src/auth/guard/role-based-guard';
 
 // ----------------------------------------------------------------------

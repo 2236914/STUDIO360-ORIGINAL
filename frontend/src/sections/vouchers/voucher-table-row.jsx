@@ -1,16 +1,15 @@
 'use client';
 
+import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
-import Avatar from '@mui/material/Avatar';
+import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import { fCurrency, fPercent } from 'src/utils/format-number';
 import { fDate } from 'src/utils/format-time';
+import { fPercent, fCurrency } from 'src/utils/format-number';
 
-import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 

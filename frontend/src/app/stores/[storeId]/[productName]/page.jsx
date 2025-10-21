@@ -1,32 +1,39 @@
 'use client';
 
-import { useState, use, useEffect } from 'react';
+import { m } from 'framer-motion';
+import { use, useState, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
-import Divider from '@mui/material/Divider';
-import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
+import Container from '@mui/material/Container';
+import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import { useTheme } from '@mui/material/styles';
-import { useRouter } from 'src/routes/hooks';
-import { m } from 'framer-motion';
+import CircularProgress from '@mui/material/CircularProgress';
 
+import { useRouter } from 'src/routes/hooks';
+
+import { storefrontApi } from 'src/utils/api/storefront';
+
+import { toast } from 'src/components/snackbar';
 import { varFade } from 'src/components/animate';
 import { Iconify } from 'src/components/iconify';
-import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreHeader } from 'src/components/store-header';
+import { StoreFooter } from 'src/components/store-footer';
 import { ChatWidget } from 'src/components/chat-widget/chat-widget';
-import { toast } from 'src/components/snackbar';
-import { useCheckoutContext } from 'src/sections/checkout/context';
-import { CheckoutProvider } from 'src/sections/checkout/context';
+import { AnnouncementBanner } from 'src/components/announcement-banner';
+
+import { CheckoutProvider , useCheckoutContext } from 'src/sections/checkout/context';
+
 
 // ----------------------------------------------------------------------
 
@@ -65,58 +72,44 @@ function ProductImageGallery({ product }) {
     <Stack spacing={2}>
       {/* Main Image */}
       <Box
+        component="img"
+        src={product.images?.[selectedImage]?.src || product.images?.[0] || '/assets/images/product/product-placeholder.png'}
+        alt={product.name}
         sx={{
           width: '100%',
           height: { xs: 300, md: 400 },
-          bgcolor: '#E5E5E5',
+          objectFit: 'cover',
           borderRadius: 2,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-          position: 'relative'
+          bgcolor: '#E5E5E5'
         }}
-      >
-        <Iconify
-          icon="solar:gallery-minimalistic-bold"
-          sx={{
-            fontSize: 64,
-            color: '#A0A0A0'
-          }}
-        />
-      </Box>
+      />
 
       {/* Thumbnail Images */}
       <Stack direction="row" spacing={1} justifyContent="center">
-        {product.images.map((image, index) => (
-          <Box
-            key={image.id}
-            sx={{
-              width: 60,
-              height: 60,
-              bgcolor: '#E5E5E5',
-              borderRadius: 1,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              border: selectedImage === index ? '2px solid' : '1px solid',
-              borderColor: selectedImage === index ? 'primary.main' : 'divider',
-              '&:hover': {
-                borderColor: 'primary.main'
-              }
-            }}
-            onClick={() => setSelectedImage(index)}
-          >
-            <Iconify
-              icon="solar:gallery-minimalistic-bold"
+        {product.images
+          .filter(image => image !== null && image !== undefined) // Filter out null/undefined values
+          .map((image, index) => (
+            <Box
+              key={image?.id || index}
+              component="img"
+              src={typeof image === 'string' ? image : (image?.src || image || '/assets/images/product/product-placeholder.png')}
+              alt={`${product.name} ${index + 1}`}
               sx={{
-                fontSize: 20,
-                color: '#A0A0A0'
+                width: 60,
+                height: 60,
+                objectFit: 'cover',
+                bgcolor: '#E5E5E5',
+                borderRadius: 1,
+                cursor: 'pointer',
+                border: selectedImage === index ? '2px solid' : '1px solid',
+                borderColor: selectedImage === index ? 'primary.main' : 'divider',
+                '&:hover': {
+                  borderColor: 'primary.main'
+                }
               }}
+              onClick={() => setSelectedImage(index)}
             />
-          </Box>
-        ))}
+          ))}
       </Stack>
     </Stack>
   );
@@ -145,7 +138,7 @@ function ProductInfo({ product, storeId, productName }) {
         id: product.id,
         name: product.name,
         price: product.priceValue,
-        quantity: quantity,
+        quantity,
         colors: [product.theme], // Using theme as color for now
         coverUrl: '/placeholder.svg',
         available: 100 // Mock availability
@@ -328,7 +321,21 @@ function ProductInfo({ product, storeId, productName }) {
               Dimensions:
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              {product.dimensions}
+              {product.dimensions && typeof product.dimensions === 'object' 
+                ? Object.entries(product.dimensions)
+                    .filter(([key, value]) => value && value !== null && value !== undefined)
+                    .map(([key, value]) => {
+                      if (Array.isArray(value)) {
+                        return `${key}: ${value.join(', ')}`;
+                      }
+                      if (typeof value === 'object' && value !== null) {
+                        return `${key}: ${JSON.stringify(value)}`;
+                      }
+                      return `${key}: ${value}`;
+                    })
+                    .join(' • ')
+                : product.dimensions || 'Not specified'
+              }
             </Typography>
           </Stack>
           <Stack>
@@ -614,152 +621,111 @@ function RelatedProducts({ storeId }) {
   );
 }
 
-// Footer Component
-function StoreFooter() {
-  const [email, setEmail] = useState('');
-  const [emailError, setEmailError] = useState(false);
-
-  const handleEmailSubmit = (e) => {
-    e.preventDefault();
-    if (!email || !email.includes('@')) {
-      setEmailError(true);
-      return;
-    }
-    // Handle email subscription
-    console.log('Email subscribed:', email);
-    setEmail('');
-    setEmailError(false);
-  };
-
-  return (
-    <Box sx={{ bgcolor: 'background.paper', py: 6, borderTop: '1px solid', borderColor: 'divider' }}>
-      <Container maxWidth="lg">
-        <Grid container spacing={4}>
-          {/* Column 1: Logo */}
-          <Grid item xs={12} md={4}>
-            <Stack spacing={2}>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                Logo
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                Handcrafted jewelry and accessories for the modern individual.
-              </Typography>
-            </Stack>
-          </Grid>
-
-          {/* Column 2: Shop */}
-          <Grid item xs={12} md={4}>
-            <Stack spacing={2}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                Shop
-              </Typography>
-              <Stack spacing={1}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  About Us
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Shipping & Returns
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  FAQ
-                </Typography>
-              </Stack>
-            </Stack>
-          </Grid>
-
-          {/* Column 3: Newsletter */}
-          <Grid item xs={12} md={4}>
-            <Stack spacing={2}>
-              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                Join our newsletter and receive news and information on upcoming events, our brand and partnerships
-              </Typography>
-              <form onSubmit={handleEmailSubmit}>
-                <Stack spacing={2}>
-                  <TextField
-                    type="email"
-                    placeholder="Enter your email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      setEmailError(false);
-                    }}
-                    size="small"
-                    error={emailError}
-                    sx={{
-                      '& .MuiOutlinedInput-root': {
-                        bgcolor: 'background.paper',
-                        '& fieldset': {
-                          borderColor: emailError ? 'error.main' : 'divider',
-                        },
-                      },
-                    }}
-                  />
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    size="medium"
-                    sx={{
-                      bgcolor: 'grey.600',
-                      color: 'white',
-                      textTransform: 'none',
-                      fontWeight: 500,
-                      width: 'fit-content',
-                      px: 3,
-                      '&:hover': {
-                        bgcolor: 'grey.700',
-                      },
-                    }}
-                  >
-                    Subscribe
-                  </Button>
-                </Stack>
-              </form>
-              {emailError && (
-                <Typography variant="caption" sx={{ color: 'error.main' }}>
-                  Something went wrong, check your email and try again.
-                </Typography>
-              )}
-            </Stack>
-          </Grid>
-        </Grid>
-
-        <Box sx={{ mt: 6, pt: 4, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Stack 
-            direction={{ xs: 'column', md: 'row' }} 
-            alignItems="center" 
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Made with STUDIO360
-            </Typography>
-            <Stack direction="row" spacing={2}>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Terms of Service
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Privacy Policy
-              </Typography>
-            </Stack>
-          </Stack>
-        </Box>
-      </Container>
-    </Box>
-  );
-}
-
 // ----------------------------------------------------------------------
 
 // Inner component that uses checkout context
-function ProductDetailContent({ params }) {
+function ProductDetailContent({ storeId, productName }) {
   const theme = useTheme();
   const router = useRouter();
-  const { storeId, productName } = use(params);
+  const [product, setProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch product data from the database
+  useEffect(() => {
+    async function fetchProduct() {
+      try {
+        setLoading(true);
+        const response = await storefrontApi.getProducts(storeId);
+        
+        if (response.success && response.data) {
+          // Find the product by name (convert URL slug back to product name)
+          const productSlug = productName.replace(/-/g, ' ').toLowerCase();
+          const foundProduct = response.data.find(p => 
+            p.name.toLowerCase().replace(/\s+/g, ' ') === productSlug ||
+            p.name.toLowerCase().replace(/\s+/g, '-') === productName.toLowerCase()
+          );
+          
+          if (foundProduct) {
+            // Transform database product to match component's expected format
+            const transformedProduct = {
+              id: foundProduct.id,
+              name: foundProduct.name,
+              price: `P${parseFloat(foundProduct.price).toFixed(2)} PHP`,
+              priceValue: parseFloat(foundProduct.price),
+              originalPrice: foundProduct.compare_at_price ? `P${parseFloat(foundProduct.compare_at_price).toFixed(2)} PHP` : null,
+              category: foundProduct.category || 'Uncategorized',
+              theme: foundProduct.category || 'General',
+              isNew: foundProduct.status === 'active' && new Date(foundProduct.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+              description: foundProduct.description || foundProduct.short_description || 'No description available.',
+              features: [
+                'High-quality materials',
+                'Carefully crafted',
+                'Perfect for everyday use',
+                'Made with attention to detail'
+              ],
+              images: foundProduct.images || [],
+              coverUrl: foundProduct.cover_image_url || foundProduct.images?.[0] || '/assets/images/product/product-placeholder.png',
+              stock: foundProduct.stock_quantity || 0,
+              sku: foundProduct.sku || '',
+              dimensions: foundProduct.dimensions || {},
+            };
+            
+            setProduct(transformedProduct);
+          } else {
+            setError('Product not found');
+          }
+        } else {
+          setError('No products found');
+        }
+      } catch (err) {
+        console.error('Error fetching product:', err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (storeId && productName) {
+      fetchProduct();
+    }
+  }, [storeId, productName]);
 
   // Set page title
   useEffect(() => {
-    document.title = `${MOCK_PRODUCT.name} | Kitsch Studio | STUDIO360`;
-  }, [storeId, productName]);
+    if (product) {
+      document.title = `${product.name} | Kitsch Studio | STUDIO360`;
+    }
+  }, [product]);
+
+  // Show loading state
+  if (loading) {
+    return (
+      <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Show error state
+  if (error || !product) {
+    return (
+      <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+        <StoreHeader storeId={storeId} />
+        <Container maxWidth="lg" sx={{ py: 8 }}>
+          <Typography variant="h4" align="center" color="error">
+            {error || 'Product not found'}
+          </Typography>
+          <Box sx={{ textAlign: 'center', mt: 4 }}>
+            <Button variant="contained" onClick={() => router.push(`/${storeId}/products`)}>
+              Back to Products
+            </Button>
+          </Box>
+        </Container>
+        <StoreFooter storeId={storeId} />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
@@ -767,7 +733,7 @@ function ProductDetailContent({ params }) {
       <AnnouncementBanner />
 
       {/* Header */}
-      <StoreHeader />
+      <StoreHeader storeId={storeId} />
       
       {/* Back to Products */}
       <Box sx={{ bgcolor: 'background.paper', py: 2 }}>
@@ -776,7 +742,7 @@ function ProductDetailContent({ params }) {
             variant="text"
             color="inherit"
             startIcon={<Iconify icon="eva:arrow-back-fill" />}
-            onClick={() => router.push(`/stores/${storeId}/products`)}
+            onClick={() => router.push(`/${storeId}/products`)}
             sx={{ 
               textTransform: 'none',
               fontWeight: 500,
@@ -798,14 +764,14 @@ function ProductDetailContent({ params }) {
             {/* Product Images */}
             <Grid item xs={12} md={6}>
               <m.div {...varFade().inLeft}>
-                <ProductImageGallery product={MOCK_PRODUCT} />
+                <ProductImageGallery product={product} />
               </m.div>
             </Grid>
 
             {/* Product Info */}
             <Grid item xs={12} md={6}>
               <m.div {...varFade().inRight}>
-                <ProductInfo product={MOCK_PRODUCT} storeId={storeId} productName={productName} />
+                <ProductInfo product={product} storeId={storeId} productName={productName} />
               </m.div>
             </Grid>
           </Grid>
@@ -816,7 +782,7 @@ function ProductDetailContent({ params }) {
       <RelatedProducts storeId={storeId} />
       
       {/* Footer */}
-      <StoreFooter />
+      <StoreFooter storeId={storeId} />
 
       {/* Chat Widget */}
       <ChatWidget storeName="Kitsch Studio" />
@@ -826,9 +792,13 @@ function ProductDetailContent({ params }) {
 
 // Main component wrapped with CheckoutProvider
 export default function ProductDetailPage({ params }) {
+  // Handle both Promise and resolved params
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { storeId, productName } = resolvedParams;
+  
   return (
     <CheckoutProvider>
-      <ProductDetailContent params={params} />
+      <ProductDetailContent storeId={storeId} productName={productName} />
     </CheckoutProvider>
   );
 }

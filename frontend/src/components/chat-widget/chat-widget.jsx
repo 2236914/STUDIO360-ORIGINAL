@@ -1,23 +1,22 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
+
 import {
   Box,
-  Typography,
-  TextField,
-  Button,
-  IconButton,
-  Stack,
-  Paper,
-  Collapse,
-  Checkbox,
-  FormControlLabel,
-  Avatar,
   Chip,
-  Divider,
   Fade,
-  Slide
+  Stack,
+  Slide,
+  Button,
+  Avatar,
+  Checkbox,
+  TextField,
+  Typography,
+  IconButton,
+  FormControlLabel
 } from '@mui/material';
+
 import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------

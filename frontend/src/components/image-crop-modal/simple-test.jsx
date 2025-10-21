@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+
+import { useState } from 'react';
+import ReactCrop from 'react-image-crop';
+
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
 
 export function SimpleCropTest() {
   const [imageFile, setImageFile] = useState(null);

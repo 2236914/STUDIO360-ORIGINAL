@@ -24,6 +24,7 @@ export function InvoiceNewEditStatusDate({ methods }) {
         name="invoiceNumber"
         label="Invoice number"
         value={values.invoiceNumber}
+        placeholder="Auto-generated on save"
       />
 
       <TextField
@@ -65,5 +66,7 @@ export function InvoiceNewEditStatusDate({ methods }) {
 }
 
 InvoiceNewEditStatusDate.propTypes = {
-  methods: PropTypes.object,
+  methods: PropTypes.shape({
+    watch: PropTypes.func,
+  }),
 };

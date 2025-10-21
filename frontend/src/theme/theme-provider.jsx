@@ -1,18 +1,18 @@
 'use client';
 
 import { useMemo } from 'react';
-import CssBaseline from '@mui/material/CssBaseline';
-import { AppRouterCacheProvider } from '@mui/material-nextjs/v14-appRouter';
-import { Experimental_CssVarsProvider as CssVarsProvider, experimental_extendTheme as extendTheme } from '@mui/material/styles';
 import { useServerInsertedHTML } from 'next/navigation';
 
-import { useSettingsContext } from 'src/components/settings';
-import { defaultSettings } from 'src/components/settings';
+import CssBaseline from '@mui/material/CssBaseline';
+import { AppRouterCacheProvider } from '@mui/material-nextjs/v14-appRouter';
+import { experimental_extendTheme as extendTheme, Experimental_CssVarsProvider as CssVarsProvider } from '@mui/material/styles';
+
+import { defaultSettings , useSettingsContext } from 'src/components/settings';
 
 import { createTheme } from './create-theme';
-import { createMinimalTheme } from './create-theme-minimal';
 import { RTL } from './with-settings/right-to-left';
 import { schemeConfig } from './color-scheme-script';
+import { createMinimalTheme } from './create-theme-minimal';
 
 // ----------------------------------------------------------------------
 
@@ -233,9 +233,9 @@ export function ThemeProvider({ children }) {
   }, [settings]);
 
   // Fix hydration mismatch by ensuring consistent CSS generation
-  useServerInsertedHTML(() => {
-    return null; // Let AppRouterCacheProvider handle CSS insertion
-  });
+  useServerInsertedHTML(() => 
+     null // Let AppRouterCacheProvider handle CSS insertion
+  );
 
   // No loading state - theme is always available
   return (

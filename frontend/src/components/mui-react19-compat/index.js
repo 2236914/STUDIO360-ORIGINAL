@@ -6,10 +6,10 @@ export { CustomPopoverReact19 as Popover } from '../custom-popover/custom-popove
 
 // For components we haven't replaced yet, use the original
 export { 
-  Dialog,
-  Modal,
-  Tooltip,
   Menu,
+  Modal,
+  Dialog,
+  Tooltip,
   MenuList,
   MenuItem
 } from '@mui/material';

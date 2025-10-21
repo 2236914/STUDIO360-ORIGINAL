@@ -1,5 +1,7 @@
 import 'src/global.css';
 
+import 'src/utils/debug-info-fix';
+
 import { CONFIG } from 'src/config-global';
 import { primary } from 'src/theme/core/palette';
 import { ThemeProvider } from 'src/theme/theme-provider';
@@ -8,12 +10,12 @@ import { getInitColorSchemeScript } from 'src/theme/color-scheme-script';
 import { ProgressBar } from 'src/components/progress-bar';
 import { MotionLazy } from 'src/components/animate/motion-lazy';
 import { detectSettings } from 'src/components/settings/server';
-import { defaultSettings, SettingsProvider } from 'src/components/settings';
 import { React19Compatibility } from 'src/components/react19-compat';
-import 'src/utils/debug-info-fix';
+import { defaultSettings, SettingsProvider } from 'src/components/settings';
+
+import { CheckoutProvider } from 'src/sections/checkout/context';
 
 import { AuthProvider } from 'src/auth/context/jwt';
-import { CheckoutProvider } from 'src/sections/checkout/context';
 
 // ----------------------------------------------------------------------
 

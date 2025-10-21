@@ -6,6 +6,8 @@ import Button from '@mui/material/Button';
 import Grid from '@mui/material/Unstable_Grid2';
 import LoadingButton from '@mui/lab/LoadingButton';
 
+import { addOrder } from 'src/services/ordersLocalService';
+
 import { Form } from 'src/components/hook-form';
 import { Iconify } from 'src/components/iconify';
 
@@ -14,7 +16,6 @@ import { CheckoutSummary } from './checkout-summary';
 import { CheckoutDelivery } from './checkout-delivery';
 import { CheckoutBillingInfo } from './checkout-billing-info';
 import { CheckoutPaymentMethods } from './checkout-payment-methods';
-import { addOrder } from 'src/services/ordersLocalService';
 
 // ----------------------------------------------------------------------
 

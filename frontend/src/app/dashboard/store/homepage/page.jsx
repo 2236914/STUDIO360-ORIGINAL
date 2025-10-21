@@ -1,72 +1,162 @@
 'use client';
 
+import { useForm } from 'react-hook-form';
 import { useState, useEffect } from 'react';
+
 import {
   Box,
   Card,
-  Stack,
-  Typography,
   Grid,
-  TextField,
-  Button,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
-  Switch,
-  FormControlLabel,
-  Divider,
+  Stack,
   Alert,
-  InputAdornment,
-  Pagination,
+  Paper,
+  Button,
+  Select,
+  Switch,
   Dialog,
+  Divider,
+  Tooltip,
+  MenuItem,
+  TextField,
+  Accordion,
+  Typography,
+  InputLabel,
+  Pagination,
+  IconButton,
+  FormControl,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Checkbox,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  List,
-  ListItem,
-  IconButton,
-  Tooltip,
-  Paper,
-  RadioGroup,
-  Radio,
-  FormLabel,
+  InputAdornment,
+  AccordionSummary,
+  AccordionDetails,
+  FormControlLabel,
 } from '@mui/material';
 
-import { useForm } from 'react-hook-form';
-import { toast } from 'src/components/snackbar';
-import { Form, Field } from 'src/components/hook-form';
-
 import { paths } from 'src/routes/paths';
+
+import { useBoolean } from 'src/hooks/use-boolean';
+
 import { DashboardContent } from 'src/layouts/dashboard';
-import { Iconify } from 'src/components/iconify';
+import { homepageApi } from 'src/services/storePagesService';
+
 import { Upload } from 'src/components/upload';
+import { toast } from 'src/components/snackbar';
+import { Iconify } from 'src/components/iconify';
+import { Form, Field } from 'src/components/hook-form';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
 export default function HomepageEditorPage() {
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const confirmDialog = useBoolean();
+  const [deleteItem, setDeleteItem] = useState(null);
+  const [deleteType, setDeleteType] = useState(''); // 'category' or 'platform'
+
   useEffect(() => {
     document.title = 'Homepage | STUDIO360';
+    loadHomepageData();
   }, []);
+
+  // Load homepage data from database
+  const loadHomepageData = async () => {
+    try {
+      setLoading(true);
+      const data = await homepageApi.getCompleteHomepageData();
+      
+      console.log('Loaded homepage data:', data);
+      
+      // Populate hero section
+      if (data.heroSection) {
+        setHeroSection({
+          image: data.heroSection.background_image_url || null,
+          title: data.heroSection.title || '',
+        });
+      }
+      
+      // Populate featured products
+      if (data.featuredProducts) {
+        setFeaturedProducts({
+          title: data.featuredProducts.title || 'Featured Products',
+          description: data.featuredProducts.description || '',
+          selectedProducts: [],
+          maxProducts: 5,
+        });
+      }
+      
+      // Populate categories
+      if (data.categories && Array.isArray(data.categories)) {
+        setCategories(data.categories);
+      }
+      
+      // Populate split feature
+      if (data.splitFeature) {
+        setSplitFeature({
+          title: data.splitFeature.title || '',
+          description: data.splitFeature.description || '',
+          image: data.splitFeature.image_url || null,
+        });
+      }
+      
+      // Populate coupon
+      if (data.coupon) {
+        setCoupon({
+          enabled: data.coupon.enabled || false,
+          headline: data.coupon.headline || '',
+          subtext: data.coupon.subtext || '',
+          buttonText: data.coupon.button_text || '',
+        });
+      }
+      
+      // Populate events block
+      if (data.eventsBlock) {
+        setEventsBlock({
+          title: data.eventsBlock.title || '',
+          seeAllText: data.eventsBlock.see_all_text || '',
+          seeAllLink: data.eventsBlock.see_all_link || '',
+        });
+      }
+      
+      // Populate platforms
+      if (data.platforms && Array.isArray(data.platforms)) {
+        setPlatforms(data.platforms);
+      }
+      
+      // Populate announcement
+      if (data.announcement) {
+        announcementMethods.reset({
+          announcementText: data.announcement.text || '',
+          announcementEnabled: data.announcement.enabled || false,
+          announcementIcon: data.announcement.icon || 'megaphone',
+          backgroundColor: data.announcement.background_color || '#E3F2FD',
+          textColor: data.announcement.text_color || '#1565C0',
+          colorScheme: 'blue',
+        });
+      }
+      
+      setInitialLoad(false);
+      toast.success('Homepage data loaded successfully!');
+    } catch (error) {
+      console.error('Error loading homepage data:', error);
+      toast.error('Failed to load homepage data. Using empty defaults.');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // State for homepage sections
   const [heroSection, setHeroSection] = useState({
     image: null,
-    title: 'Handcrafted jewelry that tells your story',
+    title: '',
   });
 
   const [featuredProducts, setFeaturedProducts] = useState({
     title: 'Featured Products',
-    description: 'Discover our most popular pieces',
+    description: '',
     selectedProducts: [],
     maxProducts: 5,
   });
@@ -74,69 +164,36 @@ export default function HomepageEditorPage() {
   // CTA section removed per requirements
 
   // Categories manager state
-  const [categories, setCategories] = useState([
-    { id: 1, name: 'Vinyl Stickers', image: null, type: 'Physical' },
-    { id: 2, name: 'Art Prints', image: null, type: 'Physical' },
-  ]);
+  const [categories, setCategories] = useState([]);
   const productTypes = ['Physical', 'Digital', 'Service'];
 
   // Split Feature (Text + Image)
   const [splitFeature, setSplitFeature] = useState({
-    title: 'Uplifting stationery that motivates you to love yourself and practice self care!',
+    title: '',
     description: '',
     image: null,
   });
 
   // Coupon/Signup
   const [coupon, setCoupon] = useState({
-    enabled: true,
-    headline: "Get 10% off your 1st order!",
-    subtext: 'Reveal coupon code by entering your email.',
-    buttonText: 'Reveal coupon',
+    enabled: false,
+    headline: '',
+    subtext: '',
+    buttonText: '',
   });
 
   // Events block
   const [eventsBlock, setEventsBlock] = useState({
-    title: 'Upcoming Events & Markets',
-    seeAllText: 'See all events',
-    seeAllLink: '/dashboard/store/events',
+    title: '',
+    seeAllText: '',
+    seeAllLink: '',
   });
 
   // Platforms section
-  const [platforms, setPlatforms] = useState([
-    { id: 1, name: 'Shopee', url: '', icon: 'simple-icons:shopee' },
-    { id: 2, name: 'TikTok Shop', url: '', icon: 'simple-icons:tiktok' },
-  ]);
+  const [platforms, setPlatforms] = useState([]);
 
-  // Mock product data (simulating a large catalog)
-  const generateMockProducts = () => {
-    const categories = ['Necklaces', 'Rings', 'Earrings', 'Bracelets', 'Pendants', 'Watches', 'Chains'];
-    const materials = ['Silver', 'Gold', 'Rose Gold', 'Platinum', 'Crystal', 'Pearl', 'Diamond'];
-    const styles = ['Classic', 'Modern', 'Vintage', 'Minimalist', 'Statement', 'Delicate', 'Bold'];
-    
-    const products = [];
-    for (let i = 1; i <= 150; i++) {
-      const category = categories[Math.floor(Math.random() * categories.length)];
-      const material = materials[Math.floor(Math.random() * materials.length)];
-      const style = styles[Math.floor(Math.random() * styles.length)];
-      
-      products.push({
-        id: i,
-        name: `${material} ${style} ${category.slice(0, -1)}`,
-        price: Math.floor(Math.random() * 500) + 50,
-        category,
-        material,
-        style,
-        inStock: Math.random() > 0.1, // 90% in stock
-        rating: (Math.random() * 2 + 3).toFixed(1), // 3.0-5.0 rating
-        sales: Math.floor(Math.random() * 100),
-        image: '/placeholder.jpg'
-      });
-    }
-    return products;
-  };
-
-  const availableProducts = generateMockProducts();
+  // Empty products array - will be populated from database
+  const availableProducts = [];
 
   const [expanded, setExpanded] = useState('announcement');
   const [saveStatus, setSaveStatus] = useState('');
@@ -181,8 +238,8 @@ export default function HomepageEditorPage() {
   // Announcement Banner Form
   const announcementMethods = useForm({
     defaultValues: {
-      announcementText: 'Spend ₱1,500 and get FREE tracked nationwide shipping!',
-      announcementEnabled: true,
+      announcementText: '',
+      announcementEnabled: false,
       announcementIcon: 'megaphone',
       backgroundColor: '#E3F2FD',
       textColor: '#1565C0',
@@ -194,29 +251,84 @@ export default function HomepageEditorPage() {
     setExpanded(isExpanded ? panel : false);
   };
 
-  const handleSave = () => {
-    setSaveStatus('saving');
-    // Simulate save API call
-    setTimeout(() => {
+  const handleSave = async () => {
+    try {
+      setSaveStatus('saving');
+      setLoading(true);
+      
+      // Save all sections
+      await Promise.all([
+        homepageApi.updateHeroSection({
+          title: heroSection.title,
+          subtitle: '',
+          background_image_url: heroSection.image,
+          cta_text: '',
+          cta_link: '',
+        }),
+        homepageApi.updateFeaturedProducts({
+          title: featuredProducts.title,
+          description: featuredProducts.description,
+          show_section: true,
+        }),
+        homepageApi.updateSplitFeature({
+          title: splitFeature.title,
+          description: splitFeature.description,
+          image_url: splitFeature.image,
+          image_position: 'left',
+          cta_text: '',
+          cta_link: '',
+          show_section: !!splitFeature.title,
+        }),
+        homepageApi.updateCoupon({
+          enabled: coupon.enabled,
+          headline: coupon.headline,
+          subtext: coupon.subtext,
+          button_text: coupon.buttonText,
+          button_link: '',
+        }),
+        homepageApi.updateEventsBlock({
+          title: eventsBlock.title,
+          see_all_text: eventsBlock.seeAllText,
+          see_all_link: eventsBlock.seeAllLink,
+          show_section: !!eventsBlock.title,
+        }),
+      ]);
+      
       setSaveStatus('saved');
+      toast.success('Homepage saved successfully!');
       setTimeout(() => setSaveStatus(''), 3000);
-    }, 1000);
+    } catch (error) {
+      console.error('Error saving homepage:', error);
+      toast.error('Failed to save homepage. Please try again.');
+      setSaveStatus('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSaveAnnouncement = async (data) => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      setLoading(true);
+      await homepageApi.updateAnnouncement({
+        enabled: data.announcementEnabled,
+        text: data.announcementText,
+        icon: data.announcementIcon,
+        background_color: data.backgroundColor,
+        text_color: data.textColor,
+      });
       toast.success('Announcement banner updated successfully!');
       console.info('Announcement Data:', data);
     } catch (error) {
       toast.error('Failed to update announcement banner');
       console.error('Save error:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   // Filter and sort products
   const getFilteredProducts = () => {
-    let filtered = availableProducts.filter(product => {
+    const filtered = availableProducts.filter(product => {
       const matchesSearch = product.name.toLowerCase().includes(productSearch.toLowerCase());
       const matchesCategory = !productCategory || product.category === productCategory;
       const matchesMaterial = !productMaterial || product.material === productMaterial;
@@ -257,13 +369,11 @@ export default function HomepageEditorPage() {
     
     if (isSelected) {
       newSelection = featuredProducts.selectedProducts.filter(id => id !== productId);
-    } else {
-      if (featuredProducts.selectedProducts.length < featuredProducts.maxProducts) {
+    } else if (featuredProducts.selectedProducts.length < featuredProducts.maxProducts) {
         newSelection = [...featuredProducts.selectedProducts, productId];
       } else {
         return; // Don't add if max reached
       }
-    }
     
     setFeaturedProducts(prev => ({ ...prev, selectedProducts: newSelection }));
   };
@@ -276,11 +386,9 @@ export default function HomepageEditorPage() {
     setCurrentPage(1);
   };
 
-  const getSelectedProductsData = () => {
-    return featuredProducts.selectedProducts.map(id => 
+  const getSelectedProductsData = () => featuredProducts.selectedProducts.map(id => 
       availableProducts.find(product => product.id === id)
     ).filter(Boolean);
-  };
 
   // Handle color scheme change
   const handleColorSchemeChange = (schemeName) => {
@@ -375,6 +483,7 @@ export default function HomepageEditorPage() {
                       {announcementIcons.map((iconOption) => (
                         <Grid item key={iconOption.name}>
                           <Tooltip title={iconOption.label}>
+                            <span>
                             <IconButton
                               onClick={() => announcementMethods.setValue('announcementIcon', iconOption.name)}
                               sx={{
@@ -404,6 +513,7 @@ export default function HomepageEditorPage() {
                                 }} 
                               />
                             </IconButton>
+                            </span>
                           </Tooltip>
                         </Grid>
                       ))}

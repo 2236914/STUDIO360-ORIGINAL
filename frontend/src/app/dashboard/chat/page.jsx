@@ -1,36 +1,31 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Stack,
-  Grid,
-  Avatar,
-  Chip,
-  IconButton,
-  TextField,
-  Button,
-  Divider,
-  Badge,
-  Tabs,
   Tab,
-  Paper,
+  Card,
+  Grid,
+  Chip,
+  Tabs,
   List,
+  Stack,
+  Badge,
+  Paper,
+  Avatar,
   ListItem,
-  ListItemAvatar,
+  Container,
+  TextField,
+  Typography,
+  IconButton,
+  CardContent,
   ListItemText,
-  ListItemSecondaryAction,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  InputAdornment
+  ListItemAvatar,
+  ListItemSecondaryAction
 } from '@mui/material';
-import { useTheme } from '@mui/material/styles';
+
 import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
@@ -215,11 +210,11 @@ function ConversationList({ conversations, selectedConversation, onSelectConvers
     
     if (diffInHours < 1) {
       return 'Just now';
-    } else if (diffInHours < 24) {
+    } if (diffInHours < 24) {
       return `${Math.floor(diffInHours)}h ago`;
-    } else {
+    } 
       return date.toLocaleDateString();
-    }
+    
   };
 
   return (
@@ -335,12 +330,10 @@ function ChatConversation({ conversation, messages, onSendMessage, onCloseConver
     }
   };
 
-  const formatTime = (timestamp) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
+  const formatTime = (timestamp) => new Date(timestamp).toLocaleTimeString([], { 
       hour: '2-digit', 
       minute: '2-digit' 
     });
-  };
 
   return (
     <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

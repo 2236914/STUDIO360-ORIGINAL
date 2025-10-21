@@ -1,16 +1,15 @@
 'use client';
 
 import { use } from 'react';
-import { useParams } from 'next/navigation';
+
 import { isStoreSubdomain } from 'src/utils/subdomain';
+
 import StoreCategoryPage from '../../../stores/[storeId]/collections/[category]/page';
 
 // ----------------------------------------------------------------------
 
 export default function SubdomainCategoryPage({ params }) {
-  const resolvedParams = use(params);
-  const subdomain = resolvedParams?.subdomain;
-  const category = resolvedParams?.category;
+  const { subdomain, category } = use(params);
 
   // Check if this is a store subdomain
   if (isStoreSubdomain()) {

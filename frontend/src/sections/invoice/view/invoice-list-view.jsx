@@ -1,28 +1,29 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
+import Menu from '@mui/material/Menu';
 import Table from '@mui/material/Table';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Tooltip from '@mui/material/Tooltip';
-import TableBody from '@mui/material/TableBody';
-import { useTheme } from '@mui/material/styles';
-import IconButton from '@mui/material/IconButton';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import TableBody from '@mui/material/TableBody';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import { useTheme } from '@mui/material/styles';
+import TextField from '@mui/material/TextField';
+import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
+import InputAdornment from '@mui/material/InputAdornment';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
-import { RouterLink } from 'src/routes/components';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 import { useSetState } from 'src/hooks/use-set-state';
@@ -30,10 +31,9 @@ import { useSetState } from 'src/hooks/use-set-state';
 import { sumBy } from 'src/utils/helper';
 import { fIsAfter, fIsBetween } from 'src/utils/format-time';
 
-
 import { DashboardContent } from 'src/layouts/dashboard';
+import { invoicesApi } from 'src/services/invoicesService';
 
-import { Label } from 'src/components/label';
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
@@ -53,337 +53,8 @@ import {
 
 import { InvoiceAnalytic } from '../invoice-analytic';
 import { InvoiceTableRow } from '../invoice-table-row';
-import { InvoiceTableToolbar } from '../invoice-table-toolbar';
-import { InvoiceTableFiltersResult } from '../invoice-table-filters-result';
-
-// Mock data matching the prototype design
-const _invoices = [
-  {
-    id: 'INV-19919',
-    invoiceNumber: 'INV-19919',
-    createDate: new Date('2025-07-30'),
-    dueDate: new Date('2025-09-22'),
-    invoiceTo: {
-      name: 'Amiah Pruitt',
-      email: 'amiah.pruitt@example.com',
-      address: '123 Main St, City, State',
-      phone: '+1 555-0123',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-1',
-        title: 'Web Development',
-        description: 'Website development services',
-        service: 'Development',
-        quantity: 1,
-        price: 2331.63,
-        total: 2331.63,
-      },
-    ],
-    subtotal: 2331.63,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 2331.63,
-    status: 'paid',
-    sent: 9,
-  },
-  {
-    id: 'INV-19918',
-    invoiceNumber: 'INV-19918',
-    createDate: new Date('2025-07-31'),
-    dueDate: new Date('2025-09-21'),
-    invoiceTo: {
-      name: 'Ariana Lang',
-      email: 'ariana.lang@example.com',
-      address: '456 Oak St, City, State',
-      phone: '+1 555-0124',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-2',
-        title: 'Design Services',
-        description: 'UI/UX design work',
-        service: 'Design',
-        quantity: 1,
-        price: 2372.93,
-        total: 2372.93,
-      },
-    ],
-    subtotal: 2372.93,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 2372.93,
-    status: 'overdue',
-    sent: 4,
-  },
-  {
-    id: 'INV-19917',
-    invoiceNumber: 'INV-19917',
-    createDate: new Date('2025-07-20'),
-    dueDate: new Date('2025-09-08'),
-    invoiceTo: {
-      name: 'Lawson Bass',
-      email: 'lawson.bass@example.com',
-      address: '789 Pine St, City, State',
-      phone: '+1 555-0125',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-3',
-        title: 'Consulting',
-        description: 'Business consulting services',
-        service: 'Consulting',
-        quantity: 1,
-        price: 2283.97,
-        total: 2283.97,
-      },
-    ],
-    subtotal: 2283.97,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 2283.97,
-    status: 'paid',
-    sent: 9,
-  },
-  {
-    id: 'INV-19916',
-    invoiceNumber: 'INV-19916',
-    createDate: new Date('2025-07-21'),
-    dueDate: new Date('2025-09-07'),
-    invoiceTo: {
-      name: 'Selina Boyer',
-      email: 'selina.boyer@example.com',
-      address: '321 Elm St, City, State',
-      phone: '+1 555-0126',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-4',
-        title: 'Marketing',
-        description: 'Digital marketing services',
-        service: 'Marketing',
-        quantity: 1,
-        price: 2251.84,
-        total: 2251.84,
-      },
-    ],
-    subtotal: 2251.84,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 2251.84,
-    status: 'pending',
-    sent: 8,
-  },
-  // Add more invoices to match prototype numbers
-  {
-    id: 'INV-19915',
-    invoiceNumber: 'INV-19915',
-    createDate: new Date('2025-07-15'),
-    dueDate: new Date('2025-09-05'),
-    invoiceTo: {
-      name: 'John Smith',
-      email: 'john.smith@example.com',
-      address: '123 Oak Ave, City, State',
-      phone: '+1 555-0128',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-5',
-        title: 'Consulting',
-        description: 'Business consulting services',
-        service: 'Consulting',
-        quantity: 1,
-        price: 3245.12,
-        total: 3245.12,
-      },
-    ],
-    subtotal: 3245.12,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 3245.12,
-    status: 'paid',
-    sent: 12,
-  },
-  {
-    id: 'INV-19914',
-    invoiceNumber: 'INV-19914',
-    createDate: new Date('2025-07-10'),
-    dueDate: new Date('2025-09-01'),
-    invoiceTo: {
-      name: 'Sarah Johnson',
-      email: 'sarah.johnson@example.com',
-      address: '456 Pine St, City, State',
-      phone: '+1 555-0129',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-6',
-        title: 'Marketing Campaign',
-        description: 'Digital marketing services',
-        service: 'Marketing',
-        quantity: 1,
-        price: 4125.45,
-        total: 4125.45,
-      },
-    ],
-    subtotal: 4125.45,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 4125.45,
-    status: 'pending',
-    sent: 5,
-  },
-  {
-    id: 'INV-19913',
-    invoiceNumber: 'INV-19913',
-    createDate: new Date('2025-07-05'),
-    dueDate: new Date('2025-08-25'),
-    invoiceTo: {
-      name: 'Michael Brown',
-      email: 'michael.brown@example.com',
-      address: '789 Cedar St, City, State',
-      phone: '+1 555-0130',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-7',
-        title: 'Website Maintenance',
-        description: 'Monthly website maintenance',
-        service: 'Support',
-        quantity: 1,
-        price: 2890.67,
-        total: 2890.67,
-      },
-    ],
-    subtotal: 2890.67,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 2890.67,
-    status: 'overdue',
-    sent: 8,
-  },
-  {
-    id: 'INV-19912',
-    invoiceNumber: 'INV-19912',
-    createDate: new Date('2025-07-01'),
-    dueDate: new Date('2025-08-20'),
-    invoiceTo: {
-      name: 'Emily Davis',
-      email: 'emily.davis@example.com',
-      address: '321 Birch St, City, State',
-      phone: '+1 555-0131',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-8',
-        title: 'Logo Design',
-        description: 'Brand identity design',
-        service: 'Design',
-        quantity: 1,
-        price: 1875.34,
-        total: 1875.34,
-      },
-    ],
-    subtotal: 1875.34,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 1875.34,
-    status: 'draft',
-    sent: 0,
-  },
-  {
-    id: 'INV-19911',
-    invoiceNumber: 'INV-19911',
-    createDate: new Date('2025-06-28'),
-    dueDate: new Date('2025-08-15'),
-    invoiceTo: {
-      name: 'David Wilson',
-      email: 'david.wilson@example.com',
-      address: '987 Spruce St, City, State',
-      phone: '+1 555-0132',
-    },
-    invoiceFrom: {
-      name: 'Company Name',
-      email: 'contact@company.com',
-      address: '456 Business Ave, City, State',
-      phone: '+1 555-0456',
-    },
-    items: [
-      {
-        id: 'item-9',
-        title: 'Database Setup',
-        description: 'Database design and setup',
-        service: 'Development',
-        quantity: 1,
-        price: 3456.78,
-        total: 3456.78,
-      },
-    ],
-    subtotal: 3456.78,
-    taxes: 0,
-    shipping: 0,
-    discount: 0,
-    totalAmount: 3456.78,
-    status: 'draft',
-    sent: 0,
-  },
-];
+import { InvoiceNewEditForm } from '../invoice-new-edit-form';
+import { InvoiceDetails } from '../invoice-details';
 
 const INVOICE_SERVICE_OPTIONS = [
   { id: 1, name: 'Development' },
@@ -410,10 +81,20 @@ export function InvoiceListView() {
   const router = useRouter();
   const table = useTable({ defaultOrderBy: 'createDate' });
   const confirm = useBoolean();
+  const confirmDelete = useBoolean();
+  const [deleteId, setDeleteId] = useState(null);
 
-  const [tableData, setTableData] = useState(_invoices);
+  const [tableData, setTableData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [printMenuAnchor, setPrintMenuAnchor] = useState(null);
+  
+  // Modal states
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [viewModalOpen, setViewModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState(null);
 
   const filters = useSetState({
     name: '',
@@ -422,6 +103,71 @@ export function InvoiceListView() {
     startDate: null,
     endDate: null,
   });
+
+  // Load invoices from database
+  useEffect(() => {
+    loadInvoices();
+  }, []);
+
+  const loadInvoices = async () => {
+    try {
+      setLoading(true);
+      const invoices = await invoicesApi.getInvoices();
+      
+      // Transform database data to match component format
+      const transformedInvoices = invoices.map(invoice => ({
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        createDate: invoice.invoice_date,
+        dueDate: invoice.due_date,
+        status: invoice.status,
+        sent: invoice.sent || 0,
+        invoiceFrom: {
+          name: invoice.invoice_from_name,
+          address: invoice.invoice_from_address,
+          company: invoice.invoice_from_company,
+          email: invoice.invoice_from_email,
+          phone: invoice.invoice_from_phone,
+        },
+        invoiceTo: {
+          name: invoice.invoice_to_name,
+          address: invoice.invoice_to_address,
+          company: invoice.invoice_to_company,
+          email: invoice.invoice_to_email,
+          phone: invoice.invoice_to_phone,
+        },
+        items: (invoice.invoice_items || []).map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          service: item.service,
+          quantity: item.quantity,
+          price: parseFloat(item.unit_price || 0),
+          total: parseFloat(item.total || 0),
+        })),
+        subtotal: parseFloat(invoice.subtotal || 0),
+        shipping: parseFloat(invoice.shipping || 0),
+        discount: parseFloat(invoice.discount || 0),
+        taxes: parseFloat(invoice.taxes || 0),
+        totalAmount: parseFloat(invoice.total_amount || 0),
+        notes: invoice.notes,
+        supportEmail: invoice.support_email,
+      }));
+      
+      setTableData(transformedInvoices);
+      setInitialLoad(false);
+      
+      if (transformedInvoices.length > 0) {
+        toast.success(`${transformedInvoices.length} invoice(s) loaded successfully!`);
+      }
+    } catch (error) {
+      console.error('Error loading invoices:', error);
+      toast.error('Failed to load invoices');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const dateError = fIsAfter(filters.state.startDate, filters.state.endDate);
 
@@ -488,42 +234,96 @@ export function InvoiceListView() {
 
   const handleDeleteRow = useCallback(
     (id) => {
-      const deleteRow = tableData.filter((row) => row.id !== id);
-      toast.success('Delete success!');
-      setTableData(deleteRow);
-      table.onUpdatePageDeleteRow(dataInPage.length);
+      setDeleteId(id);
+      confirmDelete.onTrue();
     },
-    [dataInPage.length, table, tableData]
+    [confirmDelete]
   );
 
-  const handleDeleteRows = useCallback(() => {
-    const deleteRows = tableData.filter((row) => !table.selected.includes(row.id));
-    toast.success('Delete success!');
-    setTableData(deleteRows);
-    table.onUpdatePageDeleteRows({
-      totalRowsInPage: dataInPage.length,
-      totalRowsFiltered: dataFiltered.length,
-    });
-  }, [dataFiltered.length, dataInPage.length, table, tableData]);
+  const confirmDeleteRow = async () => {
+    try {
+      setLoading(true);
+      await invoicesApi.deleteInvoice(deleteId);
+      
+      const deleteRow = tableData.filter((row) => row.id !== deleteId);
+      setTableData(deleteRow);
+      table.onUpdatePageDeleteRow(dataInPage.length);
+      
+      toast.success('Invoice deleted successfully!');
+      confirmDelete.onFalse();
+      setDeleteId(null);
+    } catch (error) {
+      console.error('Error deleting invoice:', error);
+      toast.error('Failed to delete invoice');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRows = useCallback(async () => {
+    try {
+      setLoading(true);
+      await invoicesApi.deleteInvoices(table.selected);
+      
+      const deleteRows = tableData.filter((row) => !table.selected.includes(row.id));
+      setTableData(deleteRows);
+      table.onUpdatePageDeleteRows({
+        totalRowsInPage: dataInPage.length,
+        totalRowsFiltered: dataFiltered.length,
+      });
+      
+      toast.success(`${table.selected.length} invoice(s) deleted successfully!`);
+      confirm.onFalse();
+    } catch (error) {
+      console.error('Error deleting invoices:', error);
+      toast.error('Failed to delete invoices');
+    } finally {
+      setLoading(false);
+    }
+  }, [dataFiltered.length, dataInPage.length, table, tableData, confirm]);
 
   const handleEditRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.invoice.edit(id));
+      const invoice = tableData.find(item => item.id === id);
+      setSelectedInvoice(invoice);
+      setEditModalOpen(true);
     },
-    [router]
+    [tableData]
   );
 
   const handleViewRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.invoice.details(id));
+      const invoice = tableData.find(item => item.id === id);
+      setSelectedInvoice(invoice);
+      setViewModalOpen(true);
     },
-    [router]
+    [tableData]
   );
+
+  const handleCreateInvoice = useCallback(() => {
+    setSelectedInvoice(null);
+    setCreateModalOpen(true);
+  }, []);
+
+  const handleCloseCreateModal = useCallback(() => {
+    setCreateModalOpen(false);
+    setSelectedInvoice(null);
+  }, []);
+
+  const handleCloseViewModal = useCallback(() => {
+    setViewModalOpen(false);
+    setSelectedInvoice(null);
+  }, []);
+
+  const handleCloseEditModal = useCallback(() => {
+    setEditModalOpen(false);
+    setSelectedInvoice(null);
+  }, []);
 
   const handleFilterStatus = useCallback(
     (status) => {
       table.onResetPage();
-      filters.setState({ status: status });
+      filters.setState({ status });
     },
     [filters, table]
   );
@@ -565,8 +365,7 @@ export function InvoiceListView() {
           ]}
           action={
             <Button
-              component={RouterLink}
-              href={paths?.dashboard?.invoice?.new || '/dashboard/invoice/new'}
+              onClick={handleCreateInvoice}
               variant="contained"
               startIcon={<Iconify icon="mingcute:add-line" />}
               sx={{
@@ -853,28 +652,135 @@ export function InvoiceListView() {
         </Card>
       </DashboardContent>
 
+      {/* Delete Multiple Invoices Confirmation */}
       <ConfirmDialog
         open={confirm.value}
         onClose={confirm.onFalse}
-        title="Delete"
+        title="Delete Invoices"
         content={
           <>
-            Are you sure want to delete <strong> {table.selected.length} </strong> items?
+            Are you sure you want to delete <strong>{table.selected.length}</strong> invoice(s)? This action cannot be undone.
           </>
         }
         action={
           <Button
             variant="contained"
             color="error"
-            onClick={() => {
-              handleDeleteRows();
-              confirm.onFalse();
-            }}
+            onClick={handleDeleteRows}
+            disabled={loading}
           >
-            Delete
+            {loading ? 'Deleting...' : 'Delete'}
           </Button>
         }
       />
+
+      {/* Delete Single Invoice Confirmation */}
+      <ConfirmDialog
+        open={confirmDelete.value}
+        onClose={confirmDelete.onFalse}
+        title="Delete Invoice"
+        content="Are you sure you want to delete this invoice? This action cannot be undone."
+        action={
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteRow}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        }
+      />
+
+      {/* Create Invoice Modal */}
+      <Dialog
+        open={createModalOpen}
+        onClose={handleCloseCreateModal}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6">Create New Invoice</Typography>
+            <IconButton onClick={handleCloseCreateModal}>
+              <Iconify icon="eva:close-fill" />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          <InvoiceNewEditForm 
+            currentInvoice={null}
+            onClose={handleCloseCreateModal}
+            onSuccess={() => {
+              handleCloseCreateModal();
+              loadInvoices(); // Refresh the list
+            }}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* View Invoice Modal */}
+      <Dialog
+        open={viewModalOpen}
+        onClose={handleCloseViewModal}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Typography variant="h6">Invoice Details</Typography>
+            <IconButton onClick={handleCloseViewModal}>
+              <Iconify icon="eva:close-fill" />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {selectedInvoice && (
+            <InvoiceDetails 
+              invoice={selectedInvoice}
+              open={viewModalOpen}
+              onClose={handleCloseViewModal}
+              onEditSuccess={() => {
+                handleCloseViewModal();
+                loadInvoices(); // Refresh the list
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Invoice Modal */}
+      <Dialog
+        open={editModalOpen}
+        onClose={handleCloseEditModal}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { borderRadius: 2 }
+        }}
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Edit
+        </DialogTitle>
+        <DialogContent sx={{ p: 0 }}>
+          {selectedInvoice && (
+            <InvoiceNewEditForm 
+              currentInvoice={selectedInvoice}
+              onClose={handleCloseEditModal}
+              onSuccess={() => {
+                handleCloseEditModal();
+                loadInvoices(); // Refresh the list
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

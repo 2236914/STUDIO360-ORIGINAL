@@ -1,37 +1,38 @@
-import { useState, useCallback, useEffect } from 'react';
-import { useForm } from 'react-hook-form';
 import { debounce } from 'lodash';
+import { useForm } from 'react-hook-form';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
+import Tab from '@mui/material/Tab';
 import Card from '@mui/material/Card';
 import Grid from '@mui/material/Grid';
+import Tabs from '@mui/material/Tabs';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
 import Divider from '@mui/material/Divider';
+import Skeleton from '@mui/material/Skeleton';
+import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Chip from '@mui/material/Chip';
-import Skeleton from '@mui/material/Skeleton';
+import InputAdornment from '@mui/material/InputAdornment';
 
 import { useBoolean } from 'src/hooks/use-boolean';
+
+import { fDate, fTime } from 'src/utils/format-time';
+
+import { CONFIG } from 'src/config-global';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Form, Field } from 'src/components/hook-form';
 import { ConfirmDialog } from 'src/components/custom-dialog';
-import { fDate, fTime } from 'src/utils/format-time';
-import MenuItem from '@mui/material/MenuItem';
-import ListSubheader from '@mui/material/ListSubheader';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
 
-import { CONFIG } from 'src/config-global';
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
@@ -56,7 +57,7 @@ async function authenticatedRequest(url, options = {}) {
     console.log('Frontend: Supabase session check:', { 
       hasSession: !!session, 
       hasError: !!error, 
-      tokenPreview: session?.access_token ? session.access_token.substring(0, 20) + '...' : 'no token' 
+      tokenPreview: session?.access_token ? `${session.access_token.substring(0, 20)  }...` : 'no token' 
     });
     
     if (error || !session) {
@@ -942,9 +943,7 @@ export function AccountShop() {
   // Helper function to get shipping configuration summary
   const getShippingConfigSummary = useCallback(() => {
     const activeCouriers = shopData.couriers.filter(c => c.is_active);
-    const totalActiveRegions = activeCouriers.reduce((total, courier) => {
-      return total + (courier.rates?.filter(r => r.is_active).length || 0);
-    }, 0);
+    const totalActiveRegions = activeCouriers.reduce((total, courier) => total + (courier.rates?.filter(r => r.is_active).length || 0), 0);
     
     return {
       activeCouriers: activeCouriers.length,
@@ -1001,6 +1000,7 @@ export function AccountShop() {
                     </Typography>
                     <Field.UploadAvatar
                       name="profileImage"
+                      allowUrl
                       maxSize={3145728}
                       helperText={
                         <Typography

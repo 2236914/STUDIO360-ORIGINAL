@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, Suspense, useEffect, useCallback, createContext } from 'react';
+import { useMemo, Suspense, useEffect, useCallback, createContext, useState } from 'react';
 
 import { paths } from 'src/routes/paths';
 import { useRouter, useSearchParams } from 'src/routes/hooks';
@@ -32,11 +32,7 @@ const initialState = {
 // ----------------------------------------------------------------------
 
 export function CheckoutProvider({ children }) {
-  return (
-    <Suspense fallback={<SplashScreen />}>
-      <Container>{children}</Container>
-    </Suspense>
-  );
+  return <Container>{children}</Container>;
 }
 
 // ----------------------------------------------------------------------
@@ -49,9 +45,15 @@ function Container({ children }) {
   const activeStep = Number(searchParams.get('step'));
 
   // Extract storeId from URL if we're in a store context
-  const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
-  const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
-  const storeId = storeIdMatch ? storeIdMatch[1] : null;
+  const [storeId, setStoreId] = useState(null);
+  
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const storeIdMatch = pathname.match(/\/stores\/([^\/]+)\/checkout/);
+      setStoreId(storeIdMatch ? storeIdMatch[1] : null);
+    }
+  }, []);
 
   const { state, setState, setField, canReset, resetState } = useLocalStorage(
     STORAGE_KEY,

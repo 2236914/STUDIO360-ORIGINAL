@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect } from 'react';
-import { styled } from '@mui/material/styles';
 import { createPortal } from 'react-dom';
+
+import { styled } from '@mui/material/styles';
 
 // ----------------------------------------------------------------------
 

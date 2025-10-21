@@ -55,7 +55,7 @@ export function updateComponentsWithSettings(settings) {
   const components = {};
 
   /** [2] */
-  if (settings.contrast === 'hight') {
+  if (settings.contrast === 'high') {
     const MuiCard = {
       styleOverrides: {
         root: {

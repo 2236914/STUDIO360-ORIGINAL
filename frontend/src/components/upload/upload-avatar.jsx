@@ -8,8 +8,8 @@ import { varAlpha } from 'src/theme/styles';
 
 import { Image } from '../image';
 import { Iconify } from '../iconify';
-import { RejectionFiles } from './components/rejection-files';
 import { ImageCropModal } from '../image-crop-modal';
+import { RejectionFiles } from './components/rejection-files';
 
 // ----------------------------------------------------------------------
 

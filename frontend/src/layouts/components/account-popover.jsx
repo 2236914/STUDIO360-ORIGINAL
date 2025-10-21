@@ -3,23 +3,21 @@
 import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Avatar from '@mui/material/Avatar';
 import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
+import { Iconify } from 'src/components/iconify';
+import { LogoutDialog } from 'src/components/logout-dialog';
+import { usePopover, CustomPopover } from 'src/components/custom-popover';
+
 import { useAuthContext } from 'src/auth/hooks';
 
-import { CustomPopover, usePopover } from 'src/components/custom-popover';
-import { Iconify } from 'src/components/iconify';
 import { AccountButton } from './account-button';
-import { LogoutDialog } from 'src/components/logout-dialog';
 
 // ----------------------------------------------------------------------
 

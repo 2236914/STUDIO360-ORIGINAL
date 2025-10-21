@@ -1,16 +1,17 @@
 'use client';
 
+import { m } from 'framer-motion';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
-import Grid from '@mui/material/Grid';
 import { alpha, useTheme } from '@mui/material/styles';
-import { m } from 'framer-motion';
-import { varFade } from 'src/components/animate/variants/fade';
 
 import { Iconify } from 'src/components/iconify';
+import { varFade } from 'src/components/animate/variants/fade';
 
 // ----------------------------------------------------------------------
 

@@ -62,9 +62,9 @@ const useStyles = () =>
 
 // Helper function to safely format currency
 const formatCurrency = (value) => {
-  if (value === null || value === undefined) return '$0.00';
-  const numValue = typeof value === 'string' ? parseFloat(value.replace(/[$,]/g, '')) : value;
-  return `$${numValue.toFixed(2)}`;
+  if (value === null || value === undefined) return '₱0.00';
+  const numValue = typeof value === 'string' ? parseFloat(value.replace(/[₱$,]/g, '')) : value;
+  return `₱${numValue.toFixed(2)}`;
 };
 
 // Helper function to safely format dates
@@ -248,7 +248,7 @@ export const InvoicePDFTemplate = ({ invoice, currentStatus }) => {
 
           {[
             { name: 'Subtotal', value: subtotal },
-            { name: 'Shipping', value: -shipping },
+            { name: 'Shipping', value: shipping },
             { name: 'Discount', value: -discount },
             { name: 'Taxes', value: taxes },
             { name: 'Total', value: totalAmount, styles: styles.h4 },

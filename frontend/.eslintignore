@@ -34,3 +34,6 @@ public/*
 
 # misc
 **/jsconfig.json
+
+# map components - keep linting enabled after fixing imports
+# src/components/map/** (removed) - imports updated to use package subpath exports

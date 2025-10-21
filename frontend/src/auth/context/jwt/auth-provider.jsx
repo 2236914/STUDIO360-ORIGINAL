@@ -1,20 +1,19 @@
 'use client';
 
-import { useMemo, useEffect, useCallback, useState } from 'react';
+import { useMemo, useEffect, useCallback } from 'react';
 
 import { useSetState } from 'src/hooks/use-set-state';
-import { useRouter } from 'src/routes/hooks';
 
-import { _mock } from 'src/_mock';
+import accountHistoryService from 'src/services/accountHistoryService';
 
+import { removeSession } from './utils';
 import { STORAGE_KEY } from './constant';
 import { AuthContext } from '../auth-context';
-import { setSession, isValidToken, removeSession } from './utils';
 
 // ----------------------------------------------------------------------
 
+
 import { supabase } from './supabaseClient';
-import accountHistoryService from 'src/services/accountHistoryService';
 
 export function AuthProvider({ children }) {
   const { state, setState } = useSetState({

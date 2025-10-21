@@ -1,19 +1,20 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import ReactCrop, { centerCrop, makeAspectCrop, Crop, PixelCrop } from 'react-image-crop';
-import { canvasPreview } from './canvas-preview';
 import 'react-image-crop/dist/ReactCrop.css';
 
+import { useRef, useState, useEffect, useCallback } from 'react';
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
+
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import DialogTitle from '@mui/material/DialogTitle';
 import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import Typography from '@mui/material/Typography';
-import Stack from '@mui/material/Stack';
-import IconButton from '@mui/material/IconButton';
 
 import { Iconify } from '../iconify';
+import { canvasPreview } from './canvas-preview';
 
 // ----------------------------------------------------------------------
 
@@ -198,13 +199,11 @@ export function ImageCropModal({
   console.log('Generated imageUrl:', imageUrl);
 
   // Cleanup object URL when component unmounts or imageFile changes
-  useEffect(() => {
-    return () => {
+  useEffect(() => () => {
       if (imageUrl) {
         URL.revokeObjectURL(imageUrl);
       }
-    };
-  }, [imageUrl]);
+    }, [imageUrl]);
 
   // Update canvas preview when crop or settings change
   useEffect(() => {
@@ -274,7 +273,7 @@ export function ImageCropModal({
                       Debug: File={imageFile?.name}, Size={imageFile?.size}, Type={imageFile?.type}
                     </Typography>
                     <Typography variant="caption" display="block">
-                      URL: {imageUrl ? imageUrl.substring(0, 50) + '...' : 'No URL'}
+                      URL: {imageUrl ? `${imageUrl.substring(0, 50)  }...` : 'No URL'}
                     </Typography>
                     <Typography variant="caption" display="block" color={isPanning ? 'primary.main' : 'text.secondary'}>
                       Position: x={imagePosition.x}, y={imagePosition.y} {isPanning && '🎯 Panning...'}

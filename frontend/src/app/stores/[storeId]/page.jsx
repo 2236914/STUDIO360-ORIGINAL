@@ -1,40 +1,41 @@
 'use client';
 
-import { useState, use, useEffect, useRef } from 'react';
+import { m } from 'framer-motion';
+import { use, useRef, useState, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
+import Fab from '@mui/material/Fab';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
-import CardContent from '@mui/material/CardContent';
-import CardMedia from '@mui/material/CardMedia';
-import Fab from '@mui/material/Fab';
-import Modal from '@mui/material/Modal';
-import Backdrop from '@mui/material/Backdrop';
-import IconButton from '@mui/material/IconButton';
 import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
 import Link from '@mui/material/Link';
-import Avatar from '@mui/material/Avatar';
-import { useTheme } from '@mui/material/styles';
-import { styled, keyframes } from '@mui/material/styles';
-import { m } from 'framer-motion';
+import Stack from '@mui/material/Stack';
+import Modal from '@mui/material/Modal';
+import Table from '@mui/material/Table';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
+import Backdrop from '@mui/material/Backdrop';
+import TableRow from '@mui/material/TableRow';
+import Container from '@mui/material/Container';
+import TextField from '@mui/material/TextField';
+import TableHead from '@mui/material/TableHead';
+import TableCell from '@mui/material/TableCell';
+import TableBody from '@mui/material/TableBody';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import { styled , useTheme, keyframes } from '@mui/material/styles';
+
 import { useRouter } from 'src/routes/hooks';
 
 import { varFade } from 'src/components/animate';
 import { Iconify } from 'src/components/iconify';
-import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreHeader } from 'src/components/store-header';
 import { ChatWidget } from 'src/components/chat-widget/chat-widget';
-import { Carousel, useCarousel, CarouselArrowBasicButtons } from 'src/components/carousel';
-import Table from '@mui/material/Table';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import TableCell from '@mui/material/TableCell';
-import TableBody from '@mui/material/TableBody';
-import Divider from '@mui/material/Divider';
+import { HydrationBoundary } from 'src/components/hydration-boundary';
+import { AnnouncementBanner } from 'src/components/announcement-banner';
+import { StoreFooter as ReusableStoreFooter } from 'src/components/store-footer';
+
+import { storefrontApi } from 'src/utils/api/storefront';
 
 // ----------------------------------------------------------------------
 
@@ -116,23 +117,17 @@ function ProductQuickViewModal({ open, onClose, product }) {
             {/* Left Panel - Product Image */}
             <Grid item xs={12} md={6}>
               <Box
+                component="img"
+                src={product.coverUrl || product.images?.[0] || '/assets/images/product/product-placeholder.png'}
+                alt={product.name}
                 sx={{
                   height: { xs: 300, md: 400 },
-                  bgcolor: '#E5E5E5',
+                  width: '100%',
+                  objectFit: 'cover',
                   borderRadius: '8px 0 0 8px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  bgcolor: '#E5E5E5',
                 }}
-              >
-                <Iconify
-                  icon="solar:gallery-minimalistic-bold"
-                  sx={{
-                    fontSize: 64,
-                    color: '#A0A0A0',
-                  }}
-                />
-              </Box>
+              />
             </Grid>
 
             {/* Right Panel - Product Details */}
@@ -212,11 +207,12 @@ function ProductQuickViewModal({ open, onClose, product }) {
 }
 
 // Hero Section Component
-function HeroSection() {
+function HeroSection({ storeId }) {
   const router = useRouter();
 
   const handleShopNow = () => {
-    router.push('/stores/kitschstudio/products');
+    // Will navigate to products page for the current store
+    router.push(`/stores/${storeId}/products`);
   };
 
   return (
@@ -274,7 +270,7 @@ function HeroSection() {
                       textAlign: 'left'
                     }}
                   >
-                    School&apos;s calling, grab our self-care essentials to tackle it with ease!
+                    Welcome to our store!
                   </Typography>
                 </m.div>
 
@@ -346,26 +342,43 @@ function HeroSection() {
 }
 
 // Featured Products Section
-function FeaturedProductsSection() {
+function FeaturedProductsSection({ storeId }) {
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const scrollRef = useRef(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [dragging, setDragging] = useState(false);
   const dragState = useRef({ startX: 0, startLeft: 0 });
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const products = [
-    { id: 1, name: 'Famous Paintings Vinyl Stickers', price: '₱300.00 PHP', isNew: false },
-    { id: 2, name: 'Drink More Water Vinyl Sticker', price: '₱100.00 PHP', isNew: false },
-    { id: 3, name: 'No Pain No Gain Workout Vinyl Sticker', price: '₱100.00 PHP', isNew: true },
-    { id: 4, name: 'Mystery Sticker Bundle Deal', price: '₱300.00 PHP', isNew: false },
-    { id: 5, name: 'Love Yourself Flower Sticker', price: '₱100.00 PHP', isNew: false },
-    { id: 6, name: 'Motivational Quote Sticker', price: '₱150.00 PHP', isNew: false },
-    { id: 7, name: 'Cute Animal Stickers Pack', price: '₱250.00 PHP', isNew: true },
-    { id: 8, name: 'Minimalist Design Sticker', price: '₱120.00 PHP', isNew: false },
-    { id: 9, name: 'Seasonal Collection Sticker', price: '₱180.00 PHP', isNew: false },
-    { id: 10, name: 'Premium Quality Vinyl Set', price: '₱400.00 PHP', isNew: true }
-  ];
+  // Fetch products from database
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        setLoading(true);
+        const response = await storefrontApi.getProducts(storeId);
+        
+        if (response.success) {
+          setProducts(response.data || []);
+        } else {
+          setError('Failed to load products');
+        }
+      } catch (err) {
+        console.error('Error fetching products:', err);
+        if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
+          setError('Backend server is not running. Please start the backend server.');
+        } else {
+          setError('Failed to load products');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchProducts();
+  }, [storeId]);
 
   // Duplicate the products to create seamless infinite scroll
   const duplicatedProducts = [...products, ...products];
@@ -423,7 +436,29 @@ function FeaturedProductsSection() {
 
           {/* Horizontal Scroll Products */}
           <Box sx={{ position: 'relative', width: '100%' }}>
-            <Box
+            {loading ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                  Loading products...
+                </Typography>
+              </Box>
+            ) : error ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="h6" sx={{ color: 'error.main', mb: 2 }}>
+                  {error}
+                </Typography>
+              </Box>
+            ) : products.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                  No featured products available
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Products will be displayed here when added to the store.
+                </Typography>
+              </Box>
+            ) : (
+              <Box
               ref={scrollRef}
               role="region"
               aria-label="Featured products scroller"
@@ -469,7 +504,7 @@ function FeaturedProductsSection() {
                       onClick={() => handleQuickView(product)}
                     >
                       {/* NEW Tag */}
-                      {product.isNew && (
+                      {product.is_new && (
                         <Chip
                           label="NEW"
                           size="small"
@@ -486,28 +521,27 @@ function FeaturedProductsSection() {
                         />
                       )}
 
-                      {/* Product Image Container */
-                      }
+                      {/* Product Image Container */}
                       <Box
                         sx={{
                           width: '100%',
                           aspectRatio: '1', // Square image placeholder
                           bgcolor: '#E5E5E5',
                           borderRadius: 0,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
                           overflow: 'hidden',
                           mb: 1, // More margin for better spacing
                           position: 'relative',
                         }}
                       >
                         {/* Product Image */}
-                        <Iconify
-                          icon="solar:gallery-minimalistic-bold"
+                        <Box
+                          component="img"
+                          src={product.image_url || product.cover_url || '/assets/images/product/product-placeholder.png'}
+                          alt={product.name}
                           sx={{
-                            fontSize: 64, // Reduced by 20% (80 * 0.8)
-                            color: '#A0A0A0'
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
                           }}
                         />
 
@@ -567,27 +601,28 @@ function FeaturedProductsSection() {
                           {product.name}
                         </Typography>
                         <Typography variant="body1" sx={{ fontWeight: 600, color: 'text.primary', fontSize: '1rem' }}>
-                          {product.price}
+                          ₱{parseFloat(product.price || 0).toFixed(2)}
                         </Typography>
                       </Stack>
                     </Card>
                 </Box>
               ))}
+              
+              {/* Optional: Add gradient overlays for better visual effect */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  background: 'linear-gradient(to right, rgba(255,255,255,0.8) 0%, transparent 10%, transparent 90%, rgba(255,255,255,0.8) 100%)',
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}
+              />
             </Box>
-            
-            {/* Optional: Add gradient overlays for better visual effect */}
-            <Box
-              sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'linear-gradient(to right, rgba(255,255,255,0.8) 0%, transparent 10%, transparent 90%, rgba(255,255,255,0.8) 100%)',
-                pointerEvents: 'none',
-                zIndex: 1,
-              }}
-            />
+            )}
           </Box>
         </Stack>
       </Container>
@@ -620,13 +655,13 @@ function PromotionalSection() {
                 mb: 3
               }}
             >
-              Uplifting stationery
+              Discover our collection
               <br />
-              that motivates you to
+              of quality products
               <br />
-              love yourself and
+              crafted with care
               <br />
-              practice self care!
+              for you!
             </Typography>
           </Grid>
 
@@ -799,34 +834,37 @@ function DiscountOfferSection() {
 }
 
 // Shop by Category Section
-function ShopByCategorySection() {
-  const categories = [
-    { 
-      name: 'Vinyl Stickers', 
-      image: '/assets/images/vinyl-stickers.jpg',
-      description: 'Die-cut vinyl stickers with various designs'
-    },
-    { 
-      name: 'Sticker Packs', 
-      image: '/assets/images/sticker-packs.jpg',
-      description: 'Collections of themed sticker sets'
-    },
-    { 
-      name: 'Bundle Deals', 
-      image: '/assets/images/bundle-deals.jpg',
-      description: 'Special packages with multiple items'
-    },
-    { 
-      name: 'Art Prints', 
-      image: '/assets/images/art-prints.jpg',
-      description: 'High-quality printed artwork'
-    },
-    { 
-      name: 'Greeting Cards', 
-      image: '/assets/images/greeting-cards.jpg',
-      description: 'Beautiful cards for every occasion'
+function ShopByCategorySection({ storeId }) {
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch categories from database
+  useEffect(() => {
+    async function fetchCategories() {
+      try {
+        setLoading(true);
+        const response = await storefrontApi.getCategories(storeId);
+        
+        if (response.success) {
+          setCategories(response.data || []);
+        } else {
+          setError('Failed to load categories');
+        }
+      } catch (err) {
+        console.error('Error fetching categories:', err);
+        if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
+          setError('Backend server is not running. Please start the backend server.');
+        } else {
+          setError('Failed to load categories');
+        }
+      } finally {
+        setLoading(false);
+      }
     }
-  ];
+
+    fetchCategories();
+  }, [storeId]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isScrolling, setIsScrolling] = useState(false);
@@ -848,9 +886,7 @@ function ShopByCategorySection() {
     if (isScrolling) return;
     setIsScrolling(true);
     setHasUserInteracted(true);
-    setCurrentIndex((prev) => {
-      return prev > 0 ? prev - 1 : prev;
-    });
+    setCurrentIndex((prev) => prev > 0 ? prev - 1 : prev);
     setTimeout(() => setIsScrolling(false), 500);
   };
 
@@ -953,7 +989,29 @@ function ShopByCategorySection() {
 
           {/* Categories Carousel */}
           <Box sx={{ position: 'relative', overflow: 'hidden', width: '100%' }}>
-            <Box
+            {loading ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                  Loading categories...
+                </Typography>
+              </Box>
+            ) : error ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="h6" sx={{ color: 'error.main', mb: 2 }}>
+                  {error}
+                </Typography>
+              </Box>
+            ) : categories.length === 0 ? (
+              <Box sx={{ textAlign: 'center', py: 8 }}>
+                <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                  No categories available
+                </Typography>
+                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                  Categories will be displayed here when added to the store.
+                </Typography>
+              </Box>
+            ) : (
+              <Box
               sx={{
                 display: 'flex',
                 transition: 'transform 0.5s ease-in-out',
@@ -988,25 +1046,17 @@ function ShopByCategorySection() {
                     <Stack spacing={2}>
                       {/* Category Image */}
                       <Box
+                        component="img"
+                        src={category.image_url || '/assets/images/category/category-placeholder.png'}
+                        alt={category.name}
                         sx={{
                           width: '100%',
                           height: 200,
-                          bgcolor: '#F5F5F5',
+                          objectFit: 'cover',
                           borderRadius: '8px 8px 0 0',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden'
+                          bgcolor: '#F5F5F5',
                         }}
-                      >
-                        <Iconify
-                          icon="eva:image-outline"
-                          sx={{
-                            fontSize: 48,
-                            color: '#A0A0A0'
-                          }}
-                        />
-                      </Box>
+                      />
 
                       {/* Category Name with Arrow */}
                       <Stack 
@@ -1042,7 +1092,8 @@ function ShopByCategorySection() {
                   </Card>
                 </Box>
               ))}
-            </Box>
+              </Box>
+            )}
           </Box>
         </Stack>
       </Container>
@@ -1052,42 +1103,36 @@ function ShopByCategorySection() {
 
 // Upcoming Events Section (replaces Meet the Artist)
 function UpcomingEventsSection({ storeId }) {
-  const events = [
-    {
-      name: 'Sticker Con MNL 2025',
-      date: 'Nov 15-16, 2025',
-      location: 'Megatrade Hall, SM Megamall',
-      description:
-        'Meet us at the biggest sticker convention in Manila! Exclusive event-only bundles and freebies.',
-      cta: 'View details',
-      sellers: [
-        { name: 'The Chubby Bunny Brand', booth: 'A12', productFocus: 'Vinyl Stickers & Packs' },
-        { name: 'Kitsch Studio', booth: 'B07', productFocus: 'Art Prints, Keychains' },
-      ],
-    },
-    {
-      name: 'BGC Art Market',
-      date: 'Dec 7, 2025',
-      location: 'BGC High Street, Taguig',
-      description:
-        'Outdoor weekend market featuring local artists, prints, and stationery.',
-      cta: 'View details',
-      sellers: [
-        { name: 'The Chubby Bunny Brand', booth: 'TBA', productFocus: 'Holiday Bundles' },
-      ],
-    },
-    {
-      name: "Holiday Maker’s Fair",
-      date: 'Dec 14, 2025',
-      location: 'UP Town Center, QC',
-      description:
-        'Grab last-minute gifts! We’re bringing bestselling sticker packs and gift bundles.',
-      cta: 'View details',
-      sellers: [
-        { name: 'The Chubby Bunny Brand', booth: 'K11', productFocus: 'Gift Sets' },
-      ],
-    },
-  ];
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch events from database
+  useEffect(() => {
+    async function fetchEvents() {
+      try {
+        setLoading(true);
+        const response = await storefrontApi.getEvents(storeId);
+        
+        if (response.success) {
+          setEvents(response.data || []);
+        } else {
+          setError('Failed to load events');
+        }
+      } catch (err) {
+        console.error('Error fetching events:', err);
+        if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
+          setError('Backend server is not running. Please start the backend server.');
+        } else {
+          setError('Failed to load events');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchEvents();
+  }, [storeId]);
 
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [showAllOpen, setShowAllOpen] = useState(false);
@@ -1133,7 +1178,35 @@ function UpcomingEventsSection({ storeId }) {
           </Stack>
 
           <Grid container spacing={3}>
-            {events.map((e, i) => (
+            {loading ? (
+              <Grid item xs={12}>
+                <Box sx={{ textAlign: 'center', py: 8 }}>
+                  <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                    Loading events...
+                  </Typography>
+                </Box>
+              </Grid>
+            ) : error ? (
+              <Grid item xs={12}>
+                <Box sx={{ textAlign: 'center', py: 8 }}>
+                  <Typography variant="h6" sx={{ color: 'error.main', mb: 2 }}>
+                    {error}
+                  </Typography>
+                </Box>
+              </Grid>
+            ) : events.length === 0 ? (
+              <Grid item xs={12}>
+                <Box sx={{ textAlign: 'center', py: 8 }}>
+                  <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                    No upcoming events
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                    Events will be displayed here when scheduled.
+                  </Typography>
+                </Box>
+              </Grid>
+            ) : (
+              events.map((e, i) => (
               <Grid item xs={12} md={4} key={`${e.name}-${i}`}>
                 <Card
                   sx={{
@@ -1179,8 +1252,9 @@ function UpcomingEventsSection({ storeId }) {
                     </Stack>
                   </Stack>
                 </Card>
-          </Grid>
-            ))}
+              </Grid>
+              ))
+            )}
           </Grid>
         </Stack>
       </Container>
@@ -1342,8 +1416,37 @@ function UpcomingEventsSection({ storeId }) {
 }
 
 // Retailer Partnerships Section
-function RetailerPartnershipsSection() {
-  const partners = ['Kinokuniya', 'MAI DO', 'Kinokuniya', 'MAI DO', 'Kinokur'];
+function RetailerPartnershipsSection({ storeId }) {
+  const [partners, setPartners] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Fetch partners from database
+  useEffect(() => {
+    async function fetchPartners() {
+      try {
+        setLoading(true);
+        const response = await storefrontApi.getPartners(storeId);
+        
+        if (response.success) {
+          setPartners(response.data || []);
+        } else {
+          setError('Failed to load partners');
+        }
+      } catch (err) {
+        console.error('Error fetching partners:', err);
+        if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
+          setError('Backend server is not running. Please start the backend server.');
+        } else {
+          setError('Failed to load partners');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchPartners();
+  }, [storeId]);
 
   return (
     <Box sx={{ bgcolor: 'background.paper', py: { xs: 8, md: 12 } }}>
@@ -1371,8 +1474,30 @@ function RetailerPartnershipsSection() {
           </Typography>
 
           {/* Platform Logos */}
-          <Grid container spacing={4} justifyContent="center">
-            <Grid item xs={6} sm={4} md={2.4}>
+          {loading ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                Loading partner platforms...
+              </Typography>
+            </Box>
+          ) : error ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" sx={{ color: 'error.main', mb: 2 }}>
+                {error}
+              </Typography>
+            </Box>
+          ) : partners.length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" sx={{ color: 'text.secondary', mb: 2 }}>
+                No partner platforms available
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Partner platforms will be displayed here when added.
+              </Typography>
+            </Box>
+          ) : (
+            <Grid container spacing={4} justifyContent="center">
+              <Grid item xs={6} sm={4} md={2.4}>
               <Link
                 href="https://shopee.ph"
                 target="_blank"
@@ -1431,8 +1556,9 @@ function RetailerPartnershipsSection() {
                   </Typography>
                 </Box>
               </Link>
+              </Grid>
             </Grid>
-          </Grid>
+          )}
         </Stack>
       </Container>
     </Box>
@@ -1440,7 +1566,7 @@ function RetailerPartnershipsSection() {
 }
 
 // Footer Component
-function StoreFooter() {
+function StoreFooter({ storeId }) {
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState(false);
 
@@ -1464,10 +1590,10 @@ function StoreFooter() {
           <Grid item xs={12} md={4}>
             <Stack spacing={2}>
               <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                Logo
+                Store Name
               </Typography>
               <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                Handcrafted jewelry and accessories for the modern individual.
+                Quality products for your needs.
               </Typography>
             </Stack>
           </Grid>
@@ -1649,11 +1775,15 @@ function FloatingActionButtons() {
 
 export default function StorePage({ params }) {
   const theme = useTheme();
-  const { storeId } = use(params);
+  // Handle both Promise and resolved params
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { storeId } = resolvedParams;
 
   // Set page title
   useEffect(() => {
-    document.title = `Kitsch Studio | STUDIO360`;
+    if (typeof window !== 'undefined') {
+      document.title = `${storeId} | STUDIO360`;
+    }
   }, [storeId]);
 
   return (
@@ -1663,13 +1793,13 @@ export default function StorePage({ params }) {
       <AnnouncementBanner />
 
       {/* Header */}
-      <StoreHeader />
+      <StoreHeader storeId={storeId} />
 
       {/* Hero Section */}
-      <HeroSection />
+      <HeroSection storeId={storeId} />
 
       {/* Best Sellers */}
-      <FeaturedProductsSection />
+      <FeaturedProductsSection storeId={storeId} />
 
       {/* Promotional Section */}
       <PromotionalSection />
@@ -1678,22 +1808,24 @@ export default function StorePage({ params }) {
       <DiscountOfferSection />
 
       {/* Shop by Category */}
-      <ShopByCategorySection />
+      <ShopByCategorySection storeId={storeId} />
 
       {/* Upcoming Events */}
       <UpcomingEventsSection storeId={storeId} />
 
       {/* Retailer Partnerships */}
-      <RetailerPartnershipsSection />
+      <RetailerPartnershipsSection storeId={storeId} />
 
       {/* Footer */}
-      <StoreFooter />
+      <ReusableStoreFooter storeId={storeId} />
 
       {/* Floating Action Buttons */}
-      <FloatingActionButtons />
+      <HydrationBoundary>
+        <FloatingActionButtons />
+      </HydrationBoundary>
 
       {/* Chat Widget */}
-      <ChatWidget storeName="Kitsch Studio" />
+      <ChatWidget storeName={storeId} />
     </Box>
   );
 }

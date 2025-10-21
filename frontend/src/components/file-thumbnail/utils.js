@@ -128,6 +128,19 @@ export function fileNameByUrl(fileUrl) {
 // ----------------------------------------------------------------------
 
 export function fileData(file) {
+  // Handle falsy values gracefully
+  if (!file) {
+    return {
+      preview: undefined,
+      name: 'unknown',
+      type: '',
+      size: undefined,
+      path: undefined,
+      lastModified: undefined,
+      lastModifiedDate: undefined,
+    };
+  }
+
   // From url
   if (typeof file === 'string') {
     return {
@@ -141,13 +154,13 @@ export function fileData(file) {
     };
   }
 
-  // From file
+  // From file-like object
   return {
-    name: file.name,
+    name: file.name || file.path || file.url || 'unknown',
     size: file.size,
-    path: file.path,
-    type: file.type,
-    preview: file.preview,
+    path: file.path || file.url,
+    type: file.type || fileTypeByUrl(file.path || file.url || ''),
+    preview: file.preview || file.url || (file.path && file.path.startsWith('http') ? file.path : undefined),
     lastModified: file.lastModified,
     lastModifiedDate: file.lastModifiedDate,
   };

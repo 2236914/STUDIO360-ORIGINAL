@@ -1,8 +1,8 @@
 import { datePickerToolbarClasses } from '@mui/x-date-pickers/DatePicker';
 import {
+  pickersDayClasses,
   pickersYearClasses,
   pickersMonthClasses,
-  pickersDayClasses,
   pickersCalendarHeaderClasses,
 } from '@mui/x-date-pickers';
 

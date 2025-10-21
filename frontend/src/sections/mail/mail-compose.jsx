@@ -6,28 +6,30 @@ import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
+import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import MenuItem from '@mui/material/MenuItem';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 
-import { Iconify } from 'src/components/iconify';
 import { Editor } from 'src/components/editor';
+import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
-export function MailCompose({ onCloseCompose, ...other }) {
+export function MailCompose({ onCloseCompose, onSendMail, ...other }) {
   const [formData, setFormData] = useState({
     to: '',
+    toEmail: '',
     subject: '',
     message: '',
     priority: 'normal'
   });
+  const [sending, setSending] = useState(false);
 
   const fullScreen = useBoolean(false);
 
@@ -38,34 +40,44 @@ export function MailCompose({ onCloseCompose, ...other }) {
     }));
   };
 
-  const handleSend = () => {
-    // Create new support ticket
-    const newTicket = {
-      id: `MANUAL_${Date.now()}`,
-      from: 'Support Team',
-      email: 'support@kitschstudio.com',
-      subject: formData.subject,
-      message: formData.message,
-      timestamp: new Date(),
-      isRead: true,
-      isStarred: false,
-      labels: ['sent'],
-      storeId: 'kitschstudio',
-      source: 'manual',
-      priority: formData.priority,
-      to: formData.to
-    };
+  const handleSend = async () => {
+    if (!formData.subject || !formData.message || !formData.toEmail) {
+      alert('Please fill in all required fields');
+      return;
+    }
 
-    // Add to sent items in localStorage
-    const existingTickets = JSON.parse(localStorage.getItem('support_tickets') || '[]');
-    existingTickets.push(newTicket);
-    localStorage.setItem('support_tickets', JSON.stringify(existingTickets));
+    try {
+      setSending(true);
+      
+      // Prepare mail data for API
+      const mailData = {
+        from_name: 'Support Team',
+        from_email: 'support@studio360.com',
+        to_name: formData.to || formData.toEmail,
+        to_email: formData.toEmail,
+        subject: formData.subject,
+        message: formData.message,
+        type: 'sent',
+        source: 'manual',
+        priority: formData.priority,
+        labels: ['sent'],
+        is_read: true, // Sent messages are marked as read
+        sent_at: new Date().toISOString(),
+      };
 
-    // Close compose dialog
-    onCloseCompose();
-    
-    // Show success message
-    alert('Email sent successfully!');
+      // Call parent handler to save to database
+      if (onSendMail) {
+        await onSendMail(mailData);
+      }
+
+      // Close compose dialog
+      onCloseCompose();
+    } catch (error) {
+      console.error('Error sending mail:', error);
+      alert('Failed to send email. Please try again.');
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -102,10 +114,20 @@ export function MailCompose({ onCloseCompose, ...other }) {
           <Stack spacing={2} sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
             <TextField
               fullWidth
-              label="To"
+              required
+              label="To (Email)"
+              value={formData.toEmail}
+              onChange={handleChange('toEmail')}
+              placeholder="customer@email.com"
+              type="email"
+            />
+            
+            <TextField
+              fullWidth
+              label="To (Name)"
               value={formData.to}
               onChange={handleChange('to')}
-              placeholder="customer@email.com"
+              placeholder="Customer Name"
             />
             
             <Stack direction="row" spacing={2}>
@@ -170,16 +192,16 @@ export function MailCompose({ onCloseCompose, ...other }) {
         </Stack>
 
         <Stack direction="row" spacing={2}>
-          <Button onClick={onCloseCompose}>
+          <Button onClick={onCloseCompose} disabled={sending}>
             Cancel
           </Button>
           <Button
             variant="contained"
             onClick={handleSend}
             startIcon={<Iconify icon="eva:paper-plane-fill" />}
-            disabled={!formData.to || !formData.subject}
+            disabled={!formData.toEmail || !formData.subject || sending}
           >
-            Send
+            {sending ? 'Sending...' : 'Send'}
           </Button>
         </Stack>
       </DialogActions>

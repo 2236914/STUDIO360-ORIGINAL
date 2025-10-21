@@ -1,3 +1,10 @@
+import AIBookkeeperPage from './ai-bookkeeper/page';
+
+export const metadata = { title: `AI Bookkeeper - STUDIO360` };
+
+export default function AIBookkeeperRootPage() {
+  return <AIBookkeeperPage />;
+}
 'use client';
 
 import { useEffect } from 'react';
@@ -21,17 +28,10 @@ export default function AIBookkeeperPage() {
   const aiModules = [
     {
       title: 'AI Bookkeeper',
-      description: 'AI-powered transaction categorization and analysis',
+      description: 'AI-powered transaction categorization and analysis with comprehensive logging',
       icon: 'eva:smartphone-fill',
       color: 'secondary.main',
       path: '/dashboard/ai-bookkeeper/ai-bookkeeper',
-    },
-    {
-      title: 'AI Categorization Log',
-      description: 'Review and manage AI-categorized transactions',
-      icon: 'eva:list-fill',
-      color: 'error.main',
-      path: '/dashboard/ai-bookkeeper/ai-categorization',
     },
   ];
 

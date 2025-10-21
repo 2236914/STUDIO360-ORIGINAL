@@ -1,4 +1,4 @@
-import { Popup } from 'react-map-gl';
+import { Popup } from 'react-map-gl/mapbox';
 
 import Box from '@mui/material/Box';
 

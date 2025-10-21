@@ -1,6 +1,7 @@
 'use client';
 
 import { useSearchParams } from 'next/navigation';
+
 import { JwtResetPasswordView } from 'src/sections/auth/jwt/jwt-reset-password-view';
 
 // ----------------------------------------------------------------------

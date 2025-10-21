@@ -1,8 +1,9 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Grid from '@mui/material/Grid';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import Button from '@mui/material/Button';
@@ -10,24 +11,24 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import TableBody from '@mui/material/TableBody';
 import TableHead from '@mui/material/TableHead';
-import Typography from '@mui/material/Typography';
-import TableContainer from '@mui/material/TableContainer';
-import Chip from '@mui/material/Chip';
-import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import Pagination from '@mui/material/Pagination';
+import TableContainer from '@mui/material/TableContainer';
 import InputAdornment from '@mui/material/InputAdornment';
 import CircularProgress from '@mui/material/CircularProgress';
-import Pagination from '@mui/material/Pagination';
 
 import { fDate, fTime } from 'src/utils/format-time';
+
+import accountHistoryService from 'src/services/accountHistoryService';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
 import { ConfirmDialog } from 'src/components/custom-dialog';
-import { useAuthContext } from 'src/auth/hooks';
 
-import accountHistoryService from 'src/services/accountHistoryService';
+import { useAuthContext } from 'src/auth/hooks';
 
 // ----------------------------------------------------------------------
 
@@ -187,13 +188,9 @@ export function AccountHistory() {
     setCurrentPage(page);
   }, []);
 
-  const getStatusColor = (status) => {
-    return accountHistoryService.getStatusColor(status);
-  };
+  const getStatusColor = (status) => accountHistoryService.getStatusColor(status);
 
-  const getDeviceIcon = (device) => {
-    return accountHistoryService.getDeviceIcon(device);
-  };
+  const getDeviceIcon = (device) => accountHistoryService.getDeviceIcon(device);
 
   // Show loading state while authentication is loading
   if (authLoading) {

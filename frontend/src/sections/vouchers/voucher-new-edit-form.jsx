@@ -1,32 +1,32 @@
 'use client';
 
+import * as z from 'zod';
 import { useState, useEffect } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
+import Select from '@mui/material/Select';
+import Divider from '@mui/material/Divider';
+import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
-import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import Switch from '@mui/material/Switch';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Grid from '@mui/material/Grid';
-import Divider from '@mui/material/Divider';
+import LoadingButton from '@mui/lab/LoadingButton';
+import FormControl from '@mui/material/FormControl';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
+import { vouchersApi } from 'src/services/vouchersService';
+
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
-import LoadingButton from '@mui/lab/LoadingButton';
-import { FormProvider, RHFTextField, RHFSelect } from 'src/components/hook-form';
+import { Form, RHFSelect, RHFTextField } from 'src/components/hook-form';
 
 // ----------------------------------------------------------------------
 
@@ -79,10 +79,10 @@ export function VoucherNewEditForm({ currentVoucher }) {
     type: currentVoucher?.type || 'percentage',
     value: currentVoucher?.value || 0,
     minOrderAmount: currentVoucher?.minOrderAmount || 0,
-    maxDiscount: currentVoucher?.maxDiscount || null,
-    usageLimit: currentVoucher?.usageLimit || null,
+    maxDiscount: currentVoucher?.maxDiscount || '',
+    usageLimit: currentVoucher?.usageLimit || '',
     validFrom: currentVoucher?.validFrom ? new Date(currentVoucher.validFrom) : new Date(),
-    validUntil: currentVoucher?.validUntil ? new Date(currentVoucher.validUntil) : null,
+    validUntil: currentVoucher?.validUntil ? new Date(currentVoucher.validUntil) : undefined,
     applicableTo: currentVoucher?.applicableTo || 'all',
     applicableIds: currentVoucher?.applicableIds || [],
     status: currentVoucher?.status || 'active',
@@ -124,27 +124,44 @@ export function VoucherNewEditForm({ currentVoucher }) {
     try {
       setIsSubmitting(true);
 
+      // Generate voucher code if not provided (for new vouchers)
+      const voucherCode = currentVoucher?.code || 
+        `${data.type.toUpperCase()}-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+
       // Prepare data for API
       const voucherData = {
-        ...data,
-        minOrderAmount: data.minOrderAmount || 0,
-        maxDiscount: data.maxDiscount || null,
-        usageLimit: data.usageLimit || null,
-        validUntil: data.validUntil || null,
-        applicableIds: data.applicableIds || [],
+        name: data.name,
+        code: voucherCode,
+        description: data.description || '',
+        type: data.type,
+        discount_value: data.value,
+        min_purchase_amount: data.minOrderAmount || 0,
+        max_discount_amount: data.maxDiscount || null,
+        usage_limit: data.usageLimit || null,
+        usage_limit_per_user: 1,
+        start_date: data.validFrom.toISOString(),
+        end_date: data.validUntil ? data.validUntil.toISOString() : null,
+        status: data.status,
+        is_active: data.status === 'active',
+        // Store applicable info in JSONB fields
+        applicable_product_ids: data.applicableTo === 'products' ? data.applicableIds : null,
+        applicable_category_ids: data.applicableTo === 'categories' ? data.applicableIds : null,
       };
 
-      // Here you would make the API call
-      console.log('Voucher data:', voucherData);
+      if (currentVoucher) {
+        // Update existing voucher
+        await vouchersApi.updateVoucher(currentVoucher.id, voucherData);
+        toast.success('Voucher updated successfully!');
+      } else {
+        // Create new voucher
+        await vouchersApi.createVoucher(voucherData);
+        toast.success(`Voucher created successfully! Code: ${voucherCode}`);
+      }
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      toast.success(currentVoucher ? 'Voucher updated successfully!' : 'Voucher created successfully!');
       router.push(paths.dashboard.vouchers.root);
     } catch (error) {
       console.error('Error saving voucher:', error);
-      toast.error('Failed to save voucher. Please try again.');
+      toast.error(error.message || 'Failed to save voucher. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -168,9 +185,9 @@ export function VoucherNewEditForm({ currentVoucher }) {
             label="Maximum Discount Amount"
             type="number"
             InputProps={{
-              startAdornment: '$',
+              startAdornment: '₱',
             }}
-            helperText="Maximum discount amount in dollars"
+            helperText="Maximum discount amount in pesos"
           />
         </>
       );
@@ -183,9 +200,9 @@ export function VoucherNewEditForm({ currentVoucher }) {
           label="Discount Amount"
           type="number"
           InputProps={{
-            startAdornment: '$',
+            startAdornment: '₱',
           }}
-          helperText="Fixed discount amount in dollars"
+          helperText="Fixed discount amount in pesos"
         />
       );
     }
@@ -210,7 +227,7 @@ export function VoucherNewEditForm({ currentVoucher }) {
   };
 
   return (
-    <FormProvider methods={methods} onSubmit={onSubmit}>
+    <Form methods={methods} onSubmit={onSubmit}>
       <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
           <Card sx={{ p: 3 }}>
@@ -254,7 +271,7 @@ export function VoucherNewEditForm({ currentVoucher }) {
                 label="Minimum Order Amount"
                 type="number"
                 InputProps={{
-                  startAdornment: '$',
+                  startAdornment: '₱',
                 }}
                 helperText="Minimum order amount required to use this voucher"
               />
@@ -376,12 +393,12 @@ export function VoucherNewEditForm({ currentVoucher }) {
                     {values.type === 'percentage' && (
                       <Typography variant="body2">
                         {values.value}% off
-                        {values.maxDiscount && ` (max $${values.maxDiscount})`}
+                        {values.maxDiscount && ` (max ₱${values.maxDiscount})`}
                       </Typography>
                     )}
                     {values.type === 'fixed_amount' && (
                       <Typography variant="body2">
-                        ${values.value} off
+                        ₱{values.value} off
                       </Typography>
                     )}
                     {values.type === 'free_shipping' && (
@@ -393,7 +410,7 @@ export function VoucherNewEditForm({ currentVoucher }) {
 
                   {values.minOrderAmount > 0 && (
                     <Typography variant="caption" color="text.secondary">
-                      Min order: ${values.minOrderAmount}
+                      Min order: ₱{values.minOrderAmount}
                     </Typography>
                   )}
                 </Box>
@@ -424,6 +441,6 @@ export function VoucherNewEditForm({ currentVoucher }) {
           </Card>
         </Grid>
       </Grid>
-    </FormProvider>
+    </Form>
   );
 }

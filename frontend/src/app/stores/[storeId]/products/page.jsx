@@ -1,29 +1,38 @@
 'use client';
 
-import { useState, use, useEffect } from 'react';
+import { m } from 'framer-motion';
+import { use, useState, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Stack from '@mui/material/Stack';
 import Grid from '@mui/material/Grid';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import IconButton from '@mui/material/IconButton';
+import Container from '@mui/material/Container';
+import TextField from '@mui/material/TextField';
 import { useTheme } from '@mui/material/styles';
-import { useRouter } from 'src/routes/hooks';
-import { m } from 'framer-motion';
+import Typography from '@mui/material/Typography';
+import InputLabel from '@mui/material/InputLabel';
+import IconButton from '@mui/material/IconButton';
+import FormControl from '@mui/material/FormControl';
+import InputAdornment from '@mui/material/InputAdornment';
+import CircularProgress from '@mui/material/CircularProgress';
 
+import { useRouter } from 'src/routes/hooks';
+
+import { storefrontApi } from 'src/utils/api/storefront';
+
+import { toast } from 'src/components/snackbar';
 import { varFade } from 'src/components/animate';
 import { Iconify } from 'src/components/iconify';
-import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreHeader } from 'src/components/store-header';
+import { StoreFooter } from 'src/components/store-footer';
+import { AnnouncementBanner } from 'src/components/announcement-banner';
+
+import { CheckoutProvider, useCheckoutContext } from 'src/sections/checkout/context';
 
 // ----------------------------------------------------------------------
 
@@ -181,14 +190,88 @@ function MainTitleSection() {
 // Product Grid Section
 function ProductGridSection({ storeId }) {
   const router = useRouter();
+  const checkout = useCheckoutContext();
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All Categories');
   const [theme, setTheme] = useState('All Themes');
   const [status, setStatus] = useState('All Items');
   const [sort, setSort] = useState('Featured');
   const [visibleCount, setVisibleCount] = useState(6);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const filtered = MOCK_PRODUCTS.filter((p) => {
+  // Handle add to cart
+  const handleAddToCart = (product) => {
+    try {
+      const cartItem = {
+        id: product.id,
+        name: product.name,
+        price: product.priceValue,
+        image: product.coverUrl,
+        quantity: 1,
+        sku: product.sku || '',
+        category: product.category,
+        colors: product.dimensions?.colors || ['Blue'], // Extract colors from dimensions or default
+        sizes: product.dimensions?.sizes || ['S'], // Extract sizes from dimensions or default
+      };
+      
+      checkout.onAddToCart(cartItem);
+      toast.success(`${product.name} added to cart!`);
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      toast.error('Failed to add item to cart');
+    }
+  };
+
+  // Fetch products from the database
+  useEffect(() => {
+    async function fetchProducts() {
+      try {
+        setLoading(true);
+        
+        // Test backend connection first
+        const connectionTest = await storefrontApi.testConnection();
+        if (!connectionTest.success) {
+          throw new Error(`Backend connection failed: ${connectionTest.error}`);
+        }
+        
+        const response = await storefrontApi.getProducts(storeId);
+        
+        if (response.success) {
+          // Transform database products to match the component's expected format
+          const transformedProducts = response.data.map((product) => ({
+            id: product.id,
+            name: product.name,
+            price: `P${parseFloat(product.price).toFixed(2)} PHP`,
+            priceValue: parseFloat(product.price),
+            category: product.category || 'Uncategorized',
+            theme: product.category || 'General',
+            isNew: product.status === 'active' && new Date(product.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Products created within last 30 days
+            images: product.images || [],
+            coverUrl: product.cover_image_url || product.images?.[0] || '/assets/images/product/product-placeholder.png',
+          }));
+          
+          setProducts(transformedProducts);
+        } else {
+          console.warn('No products found or error in response');
+          setProducts([]);
+        }
+      } catch (err) {
+        console.error('Error fetching products:', err);
+        setError(err.message);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (storeId) {
+      fetchProducts();
+    }
+  }, [storeId]);
+
+  const filtered = products.filter((p) => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = category === 'All Categories' || p.category === category;
     const matchesTheme = theme === 'All Themes' || p.theme === theme;
@@ -215,6 +298,28 @@ function ProductGridSection({ storeId }) {
   const handleViewMore = () => {
     setVisibleCount((c) => c + 6);
   };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <Box sx={{ bgcolor: 'background.paper', py: { xs: 6, md: 8 }, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Show error state (optional, can still show filters/UI)
+  if (error && products.length === 0) {
+    return (
+      <Box sx={{ bgcolor: 'background.paper', py: { xs: 6, md: 8 } }}>
+        <Container maxWidth="lg">
+          <Typography variant="body1" color="error" align="center">
+            Error loading products: {error}
+          </Typography>
+        </Container>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ bgcolor: 'background.paper', py: { xs: 6, md: 8 } }}>
@@ -322,27 +427,32 @@ function ProductGridSection({ storeId }) {
                         height: 280,
                         bgcolor: '#E5E5E5',
                         borderRadius: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
                         overflow: 'hidden',
                         mb: 1,
-                        position: 'relative'
+                        position: 'relative',
+                        cursor: 'pointer'
                       }}
                       onClick={() => {
                         const slug = product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^[-]+|[-]+$/g, '');
                         router.push(`/stores/${storeId}/${slug}`);
                       }}
                     >
-                      <Iconify
-                        icon="solar:gallery-minimalistic-bold"
+                      <Box
+                        component="img"
+                        src={product.coverUrl || product.images?.[0] || '/assets/images/product/product-placeholder.png'}
+                        alt={product.name}
                         sx={{
-                          fontSize: 48,
-                          color: '#A0A0A0'
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover'
                         }}
                       />
                       {/* cart button bottom-right */}
                       <IconButton
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the card click
+                          handleAddToCart(product);
+                        }}
                         sx={{ position: 'absolute', bottom: 12, right: 12, bgcolor: 'primary.main', color: 'white', '&:hover': { bgcolor: 'primary.dark' } }}
                         aria-label="Add to cart"
                       >
@@ -431,162 +541,13 @@ function ProductGridSection({ storeId }) {
   );
 }
 
-// Footer Component (reused from other pages)
-function StoreFooter() {
-  return (
-    <Box sx={{ bgcolor: 'background.paper', py: 6, borderTop: '1px solid', borderColor: 'divider' }}>
-      <Container maxWidth="lg">
-        <Grid container spacing={4}>
-          {/* Company Info */}
-          <Grid item xs={12} md={3}>
-            <Stack spacing={2}>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                Logo
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Handcrafted jewelry and accessories for the modern individual.
-              </Typography>
-            </Stack>
-          </Grid>
-
-          {/* Kitsch Studio */}
-          <Grid item xs={12} md={2}>
-            <Stack spacing={2}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                Kitsch.Studio
-              </Typography>
-              <Stack spacing={1}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Shop
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Collections
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Bestsellers
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  New arrivals
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Company
-                </Typography>
-              </Stack>
-            </Stack>
-          </Grid>
-
-          {/* About us */}
-          <Grid item xs={12} md={2}>
-            <Stack spacing={2}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                About us
-              </Typography>
-              <Stack spacing={1}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Our process
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Contact
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Social Media
-                </Typography>
-              </Stack>
-            </Stack>
-          </Grid>
-
-          {/* Support */}
-          <Grid item xs={12} md={2}>
-            <Stack spacing={2}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                Support
-              </Typography>
-              <Stack spacing={1}>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Shipping
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Returns
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  FAQ
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  Subscribe
-                </Typography>
-              </Stack>
-              <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>
-                Join our newsletter to stay up to date on new collections and artisan stories.
-              </Typography>
-            </Stack>
-          </Grid>
-
-          {/* Newsletter */}
-          <Grid item xs={12} md={3}>
-            <Stack spacing={2}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                Enter your email
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Subscribe
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                By subscribing, you agree to our privacy policy
-              </Typography>
-              <Box
-                sx={{
-                  p: 2,
-                  bgcolor: 'success.lighter',
-                  borderRadius: 1,
-                  border: '1px solid',
-                  borderColor: 'success.main'
-                }}
-              >
-                <Typography variant="body2" sx={{ color: 'success.main' }}>
-                  Thank you for subscribing
-                </Typography>
-              </Box>
-              <Typography variant="caption" sx={{ color: 'error.main' }}>
-                Something went wrong with your subscription
-              </Typography>
-            </Stack>
-          </Grid>
-        </Grid>
-
-        {/* Bottom Section */}
-        <Box sx={{ mt: 6, pt: 4, borderTop: '1px solid', borderColor: 'divider' }}>
-          <Stack 
-            direction={{ xs: 'column', md: 'row' }} 
-            alignItems="center" 
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Made with STUDIO360
-            </Typography>
-            <Stack direction="row" spacing={2}>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Cookies settings
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Terms of Service
-              </Typography>
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                Cookies Settings
-              </Typography>
-            </Stack>
-          </Stack>
-        </Box>
-      </Container>
-    </Box>
-  );
-}
-
 // ----------------------------------------------------------------------
 
 export default function ProductsPage({ params }) {
   const theme = useTheme();
-  const { storeId } = use(params);
+  // Handle both Promise and resolved params
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { storeId } = resolvedParams;
 
   // Set page title
   useEffect(() => {
@@ -594,21 +555,23 @@ export default function ProductsPage({ params }) {
   }, [storeId]);
 
   return (
-    <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
-      {/* Announcement Banner */}
-      <AnnouncementBanner />
+    <CheckoutProvider>
+      <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+        {/* Announcement Banner */}
+        <AnnouncementBanner />
 
-      {/* Header */}
-      <StoreHeader />
-      
-      {/* Main Title */}
-      <MainTitleSection />
-      
-      {/* Product Grid */}
-      <ProductGridSection storeId={storeId} />
-      
-      {/* Footer */}
-      <StoreFooter />
-    </Box>
+        {/* Header */}
+        <StoreHeader storeId={storeId} />
+        
+        {/* Main Title */}
+        <MainTitleSection />
+        
+        {/* Product Grid */}
+        <ProductGridSection storeId={storeId} />
+        
+        {/* Footer */}
+        <StoreFooter storeId={storeId} />
+      </Box>
+    </CheckoutProvider>
   );
 }

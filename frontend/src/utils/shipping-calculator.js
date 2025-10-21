@@ -174,7 +174,7 @@ export function calculateShippingOptions(province, city = null, sellerConfig = n
         availableOptions.push({
           id: `${courier.id}-${region}`,
           courierName: courier.name,
-          region: region,
+          region,
           fee: regionData.fee,
           description: deliveryTimes[region] || '3-5 days delivery',
           deliveryTime: deliveryTimes[region] || '3-5 days delivery',
@@ -200,7 +200,7 @@ export function calculateShippingOptions(province, city = null, sellerConfig = n
     const freeShippingOption = {
       id: 'free',
       courierName: 'Free Shipping',
-      region: region,
+      region,
       fee: 0,
       description: freeShippingDescription,
       deliveryTime: '5-7 days delivery',
@@ -269,7 +269,7 @@ export function categorizeShippingOptionsByCourier(shippingOptions) {
   const categorized = {};
   
   shippingOptions.forEach(option => {
-    const courierName = option.courierName;
+    const {courierName} = option;
     
     if (!categorized[courierName]) {
       categorized[courierName] = {

@@ -1,20 +1,18 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useForm, Controller } from 'react-hook-form';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import InputLabel from '@mui/material/InputLabel';
-import Grid from '@mui/material/Grid';
+import FormControl from '@mui/material/FormControl';
 import InputAdornment from '@mui/material/InputAdornment';
 
 import { paths } from 'src/routes/paths';
@@ -29,19 +27,19 @@ export function InvoiceCreateFormNew() {
   
   // Simple state management without complex watching
   const [formData, setFormData] = useState({
-    invoiceNumber: 'INV-1990',
+    invoiceNumber: '',
     status: 'draft',
-    createDate: '20/08/2025',
+    createDate: '',
     dueDate: '',
     currency: 'USD',
     shipping: 0,
     discount: 0,
     taxes: 0,
     fromCustomer: {
-      name: 'Jayvion Simon',
-      company: 'Gleichner, Mueller and Tromp',
-      address: '19034 Verna Unions Apt. 164 - Honolulu, RI / 87535',
-      phone: '+1 202-555-0143',
+      name: '',
+      company: '',
+      address: '',
+      phone: '',
       isDefault: true
     },
     toCustomer: null,
@@ -53,8 +51,8 @@ export function InvoiceCreateFormNew() {
       price: 0,
       total: 0
     }],
-    notes: 'We appreciate your business. Should you need us to add VAT or extra notes let us know!',
-    supportEmail: 'support@studio360.com'
+    notes: '',
+    supportEmail: ''
   });
 
   // Customer selection modal state
@@ -119,13 +117,9 @@ export function InvoiceCreateFormNew() {
   };
 
   // Calculate totals
-  const calculateSubtotal = () => {
-    return formData.items.reduce((sum, item) => sum + (item.total || 0), 0);
-  };
+  const calculateSubtotal = () => formData.items.reduce((sum, item) => sum + (item.total || 0), 0);
 
-  const calculateTaxAmount = () => {
-    return (calculateSubtotal() * (formData.taxes || 0)) / 100;
-  };
+  const calculateTaxAmount = () => (calculateSubtotal() * (formData.taxes || 0)) / 100;
 
   const calculateGrandTotal = () => {
     const subtotal = calculateSubtotal();
@@ -145,7 +139,7 @@ export function InvoiceCreateFormNew() {
       for (let i = 0; i < keys.length - 1; i++) {
         if (keys[i].includes('[') && keys[i].includes(']')) {
           const [key, indexStr] = keys[i].split('[');
-          const index = parseInt(indexStr.replace(']', ''));
+          const index = parseInt(indexStr.replace(']', ''), 10);
           if (!current[key]) current[key] = [];
           if (!current[key][index]) current[key][index] = {};
           current = current[key][index];
@@ -158,7 +152,7 @@ export function InvoiceCreateFormNew() {
       const lastKey = keys[keys.length - 1];
       if (lastKey.includes('[') && lastKey.includes(']')) {
         const [key, indexStr] = lastKey.split('[');
-        const index = parseInt(indexStr.replace(']', ''));
+        const index = parseInt(indexStr.replace(']', ''), 10);
         if (!current[key]) current[key] = [];
         current[key][index] = value;
       } else {

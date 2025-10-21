@@ -33,7 +33,7 @@ export function NavHorizontal({ data, layoutQuery, sx, ...other }) {
           WebkitBackdropFilter: `blur(var(--layout-header-blur))`,
         }}
       >
-        <NavSectionHorizontal data={data} enabledRootRedirect={true} {...other} />
+        <NavSectionHorizontal data={data} enabledRootRedirect {...other} />
       </Box>
     </Box>
   );

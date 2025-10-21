@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { getCurrentStoreId, isStoreSubdomain } from 'src/utils/subdomain';
+
+import { isStoreSubdomain, getCurrentStoreId } from 'src/utils/subdomain';
 
 // ----------------------------------------------------------------------
 

@@ -1,3 +1,7 @@
+'use client';
+
+import { use, useEffect } from 'react';
+
 import { CONFIG } from 'src/config-global';
 
 import { CheckoutView } from 'src/sections/checkout/view';
@@ -5,12 +9,19 @@ import { CheckoutProvider } from 'src/sections/checkout/context';
 
 // ----------------------------------------------------------------------
 
-export const metadata = { title: `Checkout - ${CONFIG.site.name}` };
+export default function Page({ params }) {
+  // Handle both Promise and resolved params
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { storeId } = resolvedParams;
 
-export default function Page() {
+  // Set page title dynamically
+  useEffect(() => {
+    document.title = `Checkout - ${CONFIG.site.name}`;
+  }, []);
+
   return (
     <CheckoutProvider>
-      <CheckoutView />
+      <CheckoutView storeId={storeId} />
     </CheckoutProvider>
   );
 }

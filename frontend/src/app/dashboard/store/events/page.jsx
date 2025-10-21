@@ -1,25 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+
 import {
   Box,
   Card,
-  Stack,
   Grid,
-  Typography,
-  TextField,
+  Stack,
   Button,
   Dialog,
+  TextField,
+  Typography,
+  IconButton,
   DialogTitle,
   DialogContent,
   DialogActions,
-  IconButton,
 } from '@mui/material';
 
 import { paths } from 'src/routes/paths';
+
 import { DashboardContent } from 'src/layouts/dashboard';
-import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
+
 import { Iconify } from 'src/components/iconify';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 export default function StoreEventsPage() {
   useEffect(() => {

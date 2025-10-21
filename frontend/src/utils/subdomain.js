@@ -9,7 +9,7 @@ export function getCurrentSubdomain() {
     return null;
   }
 
-  const hostname = window.location.hostname;
+  const {hostname} = window.location;
   
   // Handle localhost development
   if (hostname === 'localhost') {
@@ -40,10 +40,10 @@ export function isStoreSubdomain() {
   }
 
   const subdomain = getCurrentSubdomain();
-  const hostname = window.location.hostname;
+  const {hostname} = window.location;
   
   // Check if we're on a subdomain route (like /[subdomain])
-  const pathname = window.location.pathname;
+  const {pathname} = window.location;
   const isSubdomainRoute = pathname.startsWith('/') && pathname.split('/').length >= 2;
   
   // Check if subdomain exists and is not reserved

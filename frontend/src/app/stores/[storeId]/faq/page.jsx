@@ -1,32 +1,37 @@
 'use client';
 
-import { useState, use, useEffect } from 'react';
+import { use, useState, useEffect } from 'react';
+
+import CircularProgress from '@mui/material/CircularProgress';
 import {
   Box,
-  Container,
-  Typography,
   Card,
-  CardContent,
-  Stack,
-  Grid,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  TextField,
-  InputAdornment,
   Chip,
+  Stack,
+  Paper,
   Button,
   Divider,
-  Paper
+  Container,
+  Accordion,
+  TextField,
+  Typography,
+  CardContent,
+  InputAdornment,
+  AccordionSummary,
+  AccordionDetails
 } from '@mui/material';
+
+import { storefrontApi } from 'src/utils/api/storefront';
+
 import { Iconify } from 'src/components/iconify';
-import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreHeader } from 'src/components/store-header';
+import { StoreFooter } from 'src/components/store-footer';
+import { AnnouncementBanner } from 'src/components/announcement-banner';
 
 // ----------------------------------------------------------------------
 
-// Mock FAQ data - in real app this would come from API
-const MOCK_FAQS = [
+// Fallback FAQ data for when no FAQs are available
+const FALLBACK_FAQS = [
   {
     id: '1',
     question: 'What are your shipping options?',
@@ -336,14 +341,55 @@ function ContactSupport() {
 
 // Main FAQ Page Component
 export default function FAQPage({ params }) {
-  const { storeId } = use(params);
-  const [faqs, setFaqs] = useState(MOCK_FAQS);
+  // Handle both Promise and resolved params
+  const resolvedParams = params instanceof Promise ? use(params) : params;
+  const { storeId } = resolvedParams;
+  const [faqs, setFaqs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
+  // Fetch FAQ data from API
+  useEffect(() => {
+    async function fetchFAQs() {
+      try {
+        setLoading(true);
+        const response = await storefrontApi.getFAQs(storeId);
+        if (response.success && response.data && response.data.length > 0) {
+          // Transform API data to match expected format
+          const transformedFaqs = response.data.map(faq => ({
+            id: faq.id,
+            question: faq.question,
+            answer: faq.answer,
+            category: 'General', // API doesn't have category, default to General
+            active: faq.is_active !== false,
+            helpful: 0,
+            notHelpful: 0
+          }));
+          setFaqs(transformedFaqs);
+        } else {
+          // Use fallback FAQs if no data from API
+          setFaqs(FALLBACK_FAQS);
+        }
+      } catch (err) {
+        console.error('Error fetching FAQs:', err);
+        setError(err.message);
+        // Use fallback FAQs on error
+        setFaqs(FALLBACK_FAQS);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    if (storeId) {
+      fetchFAQs();
+    }
+  }, [storeId]);
+
   // Set page title
   useEffect(() => {
-    document.title = `FAQ | Kitsch Studio | STUDIO360`;
+    document.title = `FAQ | ${storeId} | STUDIO360`;
   }, [storeId]);
 
   // Filter FAQs based on search and category
@@ -366,13 +412,21 @@ export default function FAQPage({ params }) {
     ));
   };
 
+  if (loading) {
+    return (
+      <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
   return (
     <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
       {/* Announcement Banner */}
       <AnnouncementBanner />
 
       {/* Header */}
-      <StoreHeader />
+      <StoreHeader storeId={storeId} />
 
       {/* Main Content */}
       <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
@@ -445,6 +499,9 @@ export default function FAQPage({ params }) {
           <ContactSupport />
         </Stack>
       </Container>
+
+      {/* Footer */}
+      <StoreFooter storeId={storeId} />
     </Box>
   );
 }

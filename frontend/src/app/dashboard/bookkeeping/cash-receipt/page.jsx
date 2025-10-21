@@ -1,33 +1,30 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Fragment } from 'react';
-import axios from 'src/utils/axios';
+import { useMemo, useState, Fragment, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
-import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
+import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import { useTheme } from '@mui/material/styles';
 import InputAdornment from '@mui/material/InputAdornment';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
+import { Table, Paper, TableRow, TableBody, TableCell, TableHead, TableContainer } from '@mui/material';
 
+import axios from 'src/utils/axios';
 import { fNumber } from 'src/utils/format-number';
 
 import { DashboardContent } from 'src/layouts/dashboard';
-import { Iconify } from 'src/components/iconify';
+
 import { Label } from 'src/components/label';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper } from '@mui/material';
+import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
@@ -682,7 +679,7 @@ export default function CashReceiptPage() {
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>₱{fNumber(TOTALS.arCredit || 0)}</Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}></Typography>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }} />
                 </TableCell>
               </TableRow>
             </TableBody>

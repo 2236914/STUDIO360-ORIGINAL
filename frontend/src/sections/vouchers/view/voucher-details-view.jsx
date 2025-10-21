@@ -4,26 +4,27 @@ import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
 import Grid from '@mui/material/Grid';
 import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 import { RouterLink } from 'src/routes/components';
 
+import { fDate } from 'src/utils/format-time';
+import { fPercent, fCurrency } from 'src/utils/format-number';
+
 import { DashboardContent } from 'src/layouts/dashboard';
+import { vouchersApi } from 'src/services/vouchersService';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
-
-import { fCurrency, fPercent } from 'src/utils/format-number';
-import { fDate } from 'src/utils/format-time';
 
 // ----------------------------------------------------------------------
 
@@ -37,30 +38,37 @@ export function VoucherDetailsView({ id }) {
       try {
         setLoading(true);
         
-        // Here you would make an API call to fetch the voucher
-        // For now, we'll simulate with sample data
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Fetch voucher from database
+        const voucherData = await vouchersApi.getVoucherById(id);
         
-        const sampleVoucher = {
-          id: parseInt(id),
-          code: 'WELCOME10',
-          name: 'Welcome Discount',
-          description: '10% off for new customers',
-          type: 'percentage',
-          value: 10,
-          minOrderAmount: 50,
-          maxDiscount: 20,
-          usageLimit: 100,
-          usedCount: 25,
-          validFrom: '2024-01-01T00:00:00Z',
-          validUntil: '2024-12-31T23:59:59Z',
-          applicableTo: 'all',
-          status: 'active',
-          createdAt: '2024-01-01T10:00:00Z',
-          updatedAt: '2024-01-01T10:00:00Z',
+        if (!voucherData) {
+          toast.error('Voucher not found');
+          router.push(paths.dashboard.vouchers.root);
+          return;
+        }
+
+        // Transform database data to match component format
+        const transformedVoucher = {
+          id: voucherData.id,
+          name: voucherData.name,
+          code: voucherData.code,
+          description: voucherData.description || '',
+          type: voucherData.type,
+          value: parseFloat(voucherData.discount_value || 0),
+          minOrderAmount: parseFloat(voucherData.min_purchase_amount || 0),
+          maxDiscount: voucherData.max_discount_amount ? parseFloat(voucherData.max_discount_amount) : null,
+          usageLimit: voucherData.usage_limit,
+          usageCount: voucherData.usage_count || 0,
+          usageLimitPerUser: voucherData.usage_limit_per_user || 1,
+          validFrom: voucherData.start_date,
+          validUntil: voucherData.end_date,
+          status: voucherData.status,
+          isActive: voucherData.is_active,
+          createdAt: voucherData.created_at,
+          updatedAt: voucherData.updated_at,
         };
         
-        setVoucher(sampleVoucher);
+        setVoucher(transformedVoucher);
       } catch (error) {
         console.error('Error fetching voucher:', error);
         toast.error('Failed to load voucher details');

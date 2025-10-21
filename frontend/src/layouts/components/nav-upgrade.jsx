@@ -1,5 +1,5 @@
-import { m } from 'framer-motion';
 import { useState } from 'react';
+import { m } from 'framer-motion';
 
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -8,16 +8,13 @@ import Avatar from '@mui/material/Avatar';
 import Typography from '@mui/material/Typography';
 import { alpha as hexAlpha } from '@mui/material/styles';
 
-import { paths } from 'src/routes/paths';
-
 import { CONFIG } from 'src/config-global';
 import { varAlpha, bgGradient } from 'src/theme/styles';
 
-import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
+import { LogoutDialog } from 'src/components/logout-dialog';
 
 import { useAuthContext } from 'src/auth/hooks';
-import { LogoutDialog } from 'src/components/logout-dialog';
 
 // ----------------------------------------------------------------------
 

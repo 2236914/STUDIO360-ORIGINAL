@@ -1,8 +1,8 @@
 'use client';
 
-import { PortalWrapper } from '../portal';
 import { Iconify } from '../iconify';
 import { StyledToaster } from './styles';
+import { PortalWrapper } from '../portal';
 import { toasterClasses } from './classes';
 
 // ----------------------------------------------------------------------

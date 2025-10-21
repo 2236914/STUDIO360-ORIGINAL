@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { styled } from '@mui/material/styles';
 import { createPortal } from 'react-dom';
+import { useRef, useEffect } from 'react';
+
+import { styled } from '@mui/material/styles';
 import { listClasses } from '@mui/material/List';
 import { menuItemClasses } from '@mui/material/MenuItem';
 

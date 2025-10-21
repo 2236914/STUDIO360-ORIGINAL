@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -19,13 +19,14 @@ import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
 import Grid from '@mui/material/Grid';
-import { alpha, useTheme } from '@mui/material/styles';
+import { useTheme } from '@mui/material/styles';
 
 import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 import { fDate } from 'src/utils/format-time';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
+import { invoicesApi } from 'src/services/invoicesService';
 
 // PDF generation imports
 import { pdf, PDFViewer } from '@react-pdf/renderer';
@@ -35,63 +36,35 @@ import { InvoicePDFTemplate } from './invoice-pdf-template';
 
 // ----------------------------------------------------------------------
 
-export function InvoiceDetails({ invoice }) {
+export function InvoiceDetails({ invoice, open, onClose, onEditSuccess }) {
   const theme = useTheme();
 
   const [status, setStatus] = useState(invoice?.status || 'paid');
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [printPreviewOpen, setPrintPreviewOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    invoiceNumber: invoice?.invoiceNumber || 'INV-1991',
-    status: invoice?.status || 'paid',
-    createDate: invoice?.createDate ? new Date(invoice.createDate).toISOString().split('T')[0] : '2025-08-20',
-    dueDate: invoice?.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : '2025-09-06',
+    invoiceNumber: invoice?.invoiceNumber || '',
+    status: invoice?.status || 'draft',
+    createDate: invoice?.createDate ? new Date(invoice.createDate).toISOString().split('T')[0] : '',
+    dueDate: invoice?.dueDate ? new Date(invoice.dueDate).toISOString().split('T')[0] : '',
     invoiceFrom: {
-      name: invoice?.invoiceFrom?.name || 'Lucian Obrien',
-      address: invoice?.invoiceFrom?.address || '1147 Rohan Drive Suite 819 - Burlington, VT / 82021',
-      phone: invoice?.invoiceFrom?.phone || '+1 416-555-0198',
+      name: invoice?.invoiceFrom?.name || '',
+      address: invoice?.invoiceFrom?.address || '',
+      phone: invoice?.invoiceFrom?.phone || '',
     },
     invoiceTo: {
-      name: invoice?.invoiceTo?.name || 'Deja Brady',
-      address: invoice?.invoiceTo?.address || '18605 Thompson Circle Apt. 086 - Idaho Falls, WV / 50337',
-      phone: invoice?.invoiceTo?.phone || '+44 20 7946 0958',
+      name: invoice?.invoiceTo?.name || '',
+      address: invoice?.invoiceTo?.address || '',
+      phone: invoice?.invoiceTo?.phone || '',
     },
-    items: invoice?.items || [
-      {
-        id: 'item-1',
-        title: 'Urban Explorer Sneakers',
-        description: 'The sun slowly set over the horizon, painting the sky in vibrant hues of orange and pi...',
-        service: 'CEO',
-        quantity: 11,
-        price: 83.74,
-        total: 921.14,
-      },
-      {
-        id: 'item-2', 
-        title: 'Classic Leather Loafers',
-        description: 'She eagerly opened the gift, her eyes sparkling with excitement.',
-        service: 'CTO',
-        quantity: 10,
-        price: 97.14,
-        total: 971.4,
-      },
-      {
-        id: 'item-3',
-        title: 'Mountain Trekking Boots',
-        description: 'The old oak tree stood tall and majestic, its branches swaying gently in the breeze.',
-        service: 'Project Coordinator',
-        quantity: 7,
-        price: 68.71,
-        total: 480.97,
-      },
-    ],
-    shipping: invoice?.shipping || 52.17,
-    discount: invoice?.discount || 85.21,
-    taxes: invoice?.taxes || 68.71,
-    subtotal: invoice?.subtotal || 2373.51,
-    totalAmount: invoice?.totalAmount || 2304.84,
-    notes: invoice?.notes || 'We appreciate your business. Should you need us to add VAT or extra notes let us know!',
-    supportEmail: invoice?.supportEmail || 'support@abcapp.com',
+    items: invoice?.items || [],
+    shipping: invoice?.shipping || 0,
+    discount: invoice?.discount || 0,
+    taxes: invoice?.taxes || 0,
+    subtotal: invoice?.subtotal || 0,
+    totalAmount: invoice?.totalAmount || 0,
+    notes: invoice?.notes || '',
+    supportEmail: invoice?.supportEmail || '',
   });
 
   const handleEditModalOpen = () => setEditModalOpen(true);
@@ -123,11 +96,91 @@ export function InvoiceDetails({ invoice }) {
     }));
   };
 
-  const handleSaveChanges = () => {
-    // Here you would typically save the changes to your backend
-    console.log('Saving changes:', editFormData);
-    setEditModalOpen(false);
-    // You could also update the invoice state here if needed
+  const handleSaveAsDraft = async () => {
+    try {
+      // Calculate totals
+      const subtotal = editFormData.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+      const totalAmount = subtotal + editFormData.shipping - editFormData.discount + editFormData.taxes;
+
+      // Prepare update data with draft status
+      const updateData = {
+        invoice_number: editFormData.invoiceNumber,
+        status: 'draft',
+        invoice_date: editFormData.createDate ? new Date(editFormData.createDate).toISOString() : null,
+        due_date: editFormData.dueDate ? new Date(editFormData.dueDate).toISOString() : null,
+        invoice_from_name: editFormData.invoiceFrom.name,
+        invoice_from_address: editFormData.invoiceFrom.address,
+        invoice_from_phone: editFormData.invoiceFrom.phone,
+        invoice_to_name: editFormData.invoiceTo.name,
+        invoice_to_address: editFormData.invoiceTo.address,
+        invoice_to_phone: editFormData.invoiceTo.phone,
+        items: editFormData.items,
+        subtotal,
+        shipping: editFormData.shipping,
+        discount: editFormData.discount,
+        taxes: editFormData.taxes,
+        total_amount: totalAmount,
+        notes: editFormData.notes || '',
+        support_email: editFormData.supportEmail || '',
+      };
+
+      console.log('Updating invoice with ID:', invoice.id);
+      console.log('Update data:', updateData);
+
+      // Update the invoice
+      await invoicesApi.updateInvoice(invoice.id, updateData);
+      
+      // Close modal and notify parent
+      setEditModalOpen(false);
+      if (onEditSuccess) {
+        onEditSuccess();
+      }
+    } catch (error) {
+      console.error('Error saving invoice as draft:', error);
+      // You could add a toast notification here for error handling
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    try {
+      // Calculate totals
+      const subtotal = editFormData.items.reduce((sum, item) => sum + (item.quantity * item.price), 0);
+      const totalAmount = subtotal + editFormData.shipping - editFormData.discount + editFormData.taxes;
+
+      // Prepare update data
+      const updateData = {
+        invoice_number: editFormData.invoiceNumber,
+        status: editFormData.status,
+        invoice_date: editFormData.createDate ? new Date(editFormData.createDate).toISOString() : null,
+        due_date: editFormData.dueDate ? new Date(editFormData.dueDate).toISOString() : null,
+        invoice_from_name: editFormData.invoiceFrom.name,
+        invoice_from_address: editFormData.invoiceFrom.address,
+        invoice_from_phone: editFormData.invoiceFrom.phone,
+        invoice_to_name: editFormData.invoiceTo.name,
+        invoice_to_address: editFormData.invoiceTo.address,
+        invoice_to_phone: editFormData.invoiceTo.phone,
+        items: editFormData.items,
+        subtotal,
+        shipping: editFormData.shipping,
+        discount: editFormData.discount,
+        taxes: editFormData.taxes,
+        total_amount: totalAmount,
+        notes: editFormData.notes || '',
+        support_email: editFormData.supportEmail || '',
+      };
+
+      // Update the invoice
+      await invoicesApi.updateInvoice(invoice.id, updateData);
+      
+      // Close modal and notify parent
+      setEditModalOpen(false);
+      if (onEditSuccess) {
+        onEditSuccess();
+      }
+    } catch (error) {
+      console.error('Error updating invoice:', error);
+      // You could add a toast notification here for error handling
+    }
   };
 
   const handleDownloadPDF = async () => {
@@ -137,18 +190,18 @@ export function InvoiceDetails({ invoice }) {
         ...invoice,
         createDate: invoice?.createDate instanceof Date 
           ? invoice.createDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-          : invoice?.createDate || '28 Aug 2023',
+          : invoice?.createDate || '',
         dueDate: invoice?.dueDate instanceof Date 
           ? invoice.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-          : invoice?.dueDate || '06 Sep 2023',
+          : invoice?.dueDate || '',
         // Ensure all other fields are safe
-        invoiceNumber: String(invoice?.invoiceNumber || 'INV-1991'),
-        status: String(invoice?.status || 'paid'),
-        subtotal: invoice?.subtotal ? String(invoice.subtotal) : '2,373.51',
-        taxes: invoice?.taxes ? String(invoice.taxes) : '68.71',
-        shipping: invoice?.shipping ? String(invoice.shipping) : '52.17',
-        discount: invoice?.discount ? String(invoice.discount) : '85.21',
-        totalAmount: invoice?.totalAmount ? String(invoice.totalAmount) : '2,304.84',
+        invoiceNumber: String(invoice?.invoiceNumber || ''),
+        status: String(invoice?.status || 'draft'),
+        subtotal: invoice?.subtotal ? String(invoice.subtotal) : '0',
+        taxes: invoice?.taxes ? String(invoice.taxes) : '0',
+        shipping: invoice?.shipping ? String(invoice.shipping) : '0',
+        discount: invoice?.discount ? String(invoice.discount) : '0',
+        totalAmount: invoice?.totalAmount ? String(invoice.totalAmount) : '0',
       };
 
       const blob = await pdf(<InvoicePDFTemplate invoice={safeInvoiceData} currentStatus={status} />).toBlob();
@@ -282,7 +335,7 @@ export function InvoiceDetails({ invoice }) {
             Paid
           </Typography>
           <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
-            {invoice?.invoiceNumber || 'INV-1991'}
+            {invoice?.invoiceNumber || ''}
           </Typography>
         </Box>
       </Stack>
@@ -304,15 +357,15 @@ export function InvoiceDetails({ invoice }) {
         </Typography>
 
           <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5, color: 'text.primary' }}>
-            {invoice?.invoiceFrom?.name || 'Lucian Obrien'}
+            {invoice?.invoiceFrom?.name || ''}
         </Typography>
 
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
-            {invoice?.invoiceFrom?.address || '1147 Rohan Drive Suite 819 - Burlington, VT / 82021'}
+            {invoice?.invoiceFrom?.address || ''}
         </Typography>
 
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Phone: {invoice?.invoiceFrom?.phone || '+1 416-555-0198'}
+            Phone: {invoice?.invoiceFrom?.phone || ''}
         </Typography>
         </Box>
 
@@ -323,15 +376,15 @@ export function InvoiceDetails({ invoice }) {
         </Typography>
 
           <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.5, color: 'text.primary' }}>
-            {invoice?.invoiceTo?.name || 'Deja Brady'}
+            {invoice?.invoiceTo?.name || ''}
         </Typography>
 
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 0.5 }}>
-            {invoice?.invoiceTo?.address || '18605 Thompson Circle Apt. 086 - Idaho Falls, WV / 50337'}
+            {invoice?.invoiceTo?.address || ''}
         </Typography>
 
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            Phone: {invoice?.invoiceTo?.phone || '+44 20 7946 0958'}
+            Phone: {invoice?.invoiceTo?.phone || ''}
         </Typography>
         </Box>
       </Stack>
@@ -347,7 +400,7 @@ export function InvoiceDetails({ invoice }) {
             Date create
           </Typography>
           <Typography variant="body1" sx={{ color: 'text.primary' }}>
-            {fDate(invoice?.createDate) || '20 Aug 2025'}
+            {fDate(invoice?.createDate) || ''}
           </Typography>
         </Box>
 
@@ -356,7 +409,7 @@ export function InvoiceDetails({ invoice }) {
             Due date
           </Typography>
           <Typography variant="body1" sx={{ color: 'text.primary' }}>
-            {fDate(invoice?.dueDate) || '06 Sep 2025'}
+            {fDate(invoice?.dueDate) || ''}
           </Typography>
         </Box>
       </Stack>
@@ -402,53 +455,10 @@ export function InvoiceDetails({ invoice }) {
       </Box>
 
       {/* Table Body */}
-      {invoice?.items?.map((item, index) => (
+      {invoice?.items?.length > 0 ? (
+        invoice.items.map((item, index) => (
           <Box
-          key={item.id}
-            sx={{
-              display: 'grid',
-            gridTemplateColumns: { 
-              xs: 'repeat(1, 1fr)', 
-              md: '60px 2fr 80px 120px 120px' 
-            },
-              gap: 2,
-              py: 2,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-            '&:last-child': {
-              borderBottom: 'none',
-            },
-            }}
-          >
-          <Typography variant="body2" sx={{ color: 'text.primary' }}>
-            {index + 1}
-          </Typography>
-
-            <Box>
-            <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
-                {item.title}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                {item.description}
-              </Typography>
-            </Box>
-
-          <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.primary' }}>
-              {item.quantity}
-            </Typography>
-
-          <Typography variant="body2" sx={{ textAlign: 'right', color: 'text.primary' }}>
-              {fCurrencyPHPSymbol(item.price, '₱', 2, '.', ',')}
-            </Typography>
-
-          <Typography variant="body2" sx={{ textAlign: 'right', color: 'text.primary', fontWeight: 600 }}>
-              {fCurrencyPHPSymbol(item.total, '₱', 2, '.', ',')}
-            </Typography>
-          </Box>
-      )) || (
-        // Default empty state with prototype data structure
-        <>
-          <Box
+            key={item.id}
             sx={{
               display: 'grid',
               gridTemplateColumns: { 
@@ -459,22 +469,50 @@ export function InvoiceDetails({ invoice }) {
               py: 2,
               borderBottom: '1px solid',
               borderColor: 'divider',
+              '&:last-child': {
+                borderBottom: 'none',
+              },
             }}
           >
-            <Typography variant="body2" sx={{ color: 'text.primary' }}>1</Typography>
+            <Typography variant="body2" sx={{ color: 'text.primary' }}>
+              {index + 1}
+            </Typography>
+
             <Box>
               <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary', mb: 0.5 }}>
-                Item 1
-            </Typography>
+                {item.title}
+              </Typography>
               <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                Item description
-            </Typography>
+                {item.description}
+              </Typography>
             </Box>
-            <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.primary' }}>1</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'right', color: 'text.primary' }}>$100.00</Typography>
-            <Typography variant="body2" sx={{ textAlign: 'right', color: 'text.primary', fontWeight: 600 }}>$100.00</Typography>
+
+            <Typography variant="body2" sx={{ textAlign: 'center', color: 'text.primary' }}>
+              {item.quantity}
+            </Typography>
+
+            <Typography variant="body2" sx={{ textAlign: 'right', color: 'text.primary' }}>
+              {fCurrencyPHPSymbol(item.price, '₱', 2, '.', ',')}
+            </Typography>
+
+            <Typography variant="body2" sx={{ textAlign: 'right', color: 'text.primary', fontWeight: 600 }}>
+              {fCurrencyPHPSymbol(item.total, '₱', 2, '.', ',')}
+            </Typography>
+          </Box>
+        ))
+      ) : (
+        // Empty state when no items
+        <Box
+          sx={{
+            py: 4,
+            textAlign: 'center',
+            color: 'text.secondary',
+          }}
+        >
+          <Typography variant="body2">
+            No items to display
+          </Typography>
         </Box>
-        </>
       )}
 
       {/* Financial Summary */}
@@ -482,40 +520,40 @@ export function InvoiceDetails({ invoice }) {
         <Box sx={{ minWidth: 300 }}>
           <Stack spacing={1}>
             <Stack direction="row" justifyContent="space-between">
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Subtotal
-            </Typography>
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {fCurrencyPHPSymbol(invoice?.subtotal || 2373.51, '₱', 2, '.', ',')}
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Subtotal
               </Typography>
-          </Stack>
-
-            <Stack direction="row" justifyContent="space-between">
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Shipping
-            </Typography>
-              <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
-                -{fCurrencyPHPSymbol(invoice?.shipping || 52.17, '₱', 2, '.', ',')}
-            </Typography>
-          </Stack>
-
-            <Stack direction="row" justifyContent="space-between">
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Discount
-            </Typography>
-              <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
-                -{fCurrencyPHPSymbol(invoice?.discount || 85.21, '₱', 2, '.', ',')}
-            </Typography>
-          </Stack>
-
-            <Stack direction="row" justifyContent="space-between">
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-              Taxes
-            </Typography>
               <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {fCurrencyPHPSymbol(invoice?.taxes || 68.71, '₱', 2, '.', ',')}
+                {fCurrencyPHPSymbol(invoice?.subtotal || 0, '₱', 2, '.', ',')}
               </Typography>
-          </Stack>
+            </Stack>
+
+            <Stack direction="row" justifyContent="space-between">
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Shipping
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
+                -{fCurrencyPHPSymbol(invoice?.shipping || 0, '₱', 2, '.', ',')}
+              </Typography>
+            </Stack>
+
+            <Stack direction="row" justifyContent="space-between">
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Discount
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 600 }}>
+                -{fCurrencyPHPSymbol(invoice?.discount || 0, '₱', 2, '.', ',')}
+              </Typography>
+            </Stack>
+
+            <Stack direction="row" justifyContent="space-between">
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Taxes
+              </Typography>
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {fCurrencyPHPSymbol(invoice?.taxes || 0, '₱', 2, '.', ',')}
+              </Typography>
+            </Stack>
 
             <Divider sx={{ my: 1 }} />
 
@@ -524,7 +562,7 @@ export function InvoiceDetails({ invoice }) {
                 Total
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                {fCurrencyPHPSymbol(invoice?.totalAmount || 2304.84, '₱', 2, '.', ',')}
+                {fCurrencyPHPSymbol(invoice?.totalAmount || 0, '₱', 2, '.', ',')}
               </Typography>
             </Stack>
           </Stack>
@@ -544,7 +582,7 @@ export function InvoiceDetails({ invoice }) {
           NOTES
         </Typography>
         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-          {invoice?.notes || 'We appreciate your business. Should you need us to add VAT or extra notes let us know!'}
+          {invoice?.notes || ''}
         </Typography>
         </Box>
 
@@ -553,7 +591,7 @@ export function InvoiceDetails({ invoice }) {
           Have a question?
         </Typography>
         <Typography variant="body2" sx={{ color: 'primary.main' }}>
-          {invoice?.supportEmail || 'support@abcapp.com'}
+          {invoice?.supportEmail || ''}
         </Typography>
         </Box>
       </Stack>
@@ -570,10 +608,8 @@ export function InvoiceDetails({ invoice }) {
         sx: { borderRadius: 2 }
       }}
     >
-      <DialogTitle>
-        <Typography variant="h4" sx={{ fontWeight: 700 }}>
-          Edit
-        </Typography>
+      <DialogTitle sx={{ fontWeight: 700 }}>
+        Edit
       </DialogTitle>
       
       <DialogContent sx={{ px: 3 }}>
@@ -588,31 +624,31 @@ export function InvoiceDetails({ invoice }) {
                 </IconButton>
               </Stack>
               
-              <TextField
-                fullWidth
-                label="Name"
-                value={editFormData.invoiceFrom.name}
-                onChange={(e) => handleNestedFormChange('invoiceFrom', 'name', e.target.value)}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-              
-              <TextField
-                fullWidth
-                label="Address"
-                value={editFormData.invoiceFrom.address}
-                onChange={(e) => handleNestedFormChange('invoiceFrom', 'address', e.target.value)}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-              
-              <TextField
-                fullWidth
-                label="Phone"
-                value={editFormData.invoiceFrom.phone}
-                onChange={(e) => handleNestedFormChange('invoiceFrom', 'phone', e.target.value)}
-                size="small"
-              />
+              <Stack spacing={2}>
+                <TextField
+                  fullWidth
+                  label="Name"
+                  value={editFormData.invoiceFrom.name}
+                  onChange={(e) => handleNestedFormChange('invoiceFrom', 'name', e.target.value)}
+                  size="small"
+                />
+                
+                <TextField
+                  fullWidth
+                  label="Address"
+                  value={editFormData.invoiceFrom.address}
+                  onChange={(e) => handleNestedFormChange('invoiceFrom', 'address', e.target.value)}
+                  size="small"
+                />
+                
+                <TextField
+                  fullWidth
+                  label="Phone"
+                  value={editFormData.invoiceFrom.phone}
+                  onChange={(e) => handleNestedFormChange('invoiceFrom', 'phone', e.target.value)}
+                  size="small"
+                />
+              </Stack>
             </Box>
           </Grid>
           
@@ -623,33 +659,33 @@ export function InvoiceDetails({ invoice }) {
                 <IconButton size="small">
                   <Iconify icon="solar:pen-bold" width={16} />
                 </IconButton>
-    </Stack>
+              </Stack>
               
-              <TextField
-                fullWidth
-                label="Name"
-                value={editFormData.invoiceTo.name}
-                onChange={(e) => handleNestedFormChange('invoiceTo', 'name', e.target.value)}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-              
-              <TextField
-                fullWidth
-                label="Address"
-                value={editFormData.invoiceTo.address}
-                onChange={(e) => handleNestedFormChange('invoiceTo', 'address', e.target.value)}
-                sx={{ mb: 2 }}
-                size="small"
-              />
-              
-              <TextField
-                fullWidth
-                label="Phone"
-                value={editFormData.invoiceTo.phone}
-                onChange={(e) => handleNestedFormChange('invoiceTo', 'phone', e.target.value)}
-                size="small"
-              />
+              <Stack spacing={2}>
+                <TextField
+                  fullWidth
+                  label="Name"
+                  value={editFormData.invoiceTo.name}
+                  onChange={(e) => handleNestedFormChange('invoiceTo', 'name', e.target.value)}
+                  size="small"
+                />
+                
+                <TextField
+                  fullWidth
+                  label="Address"
+                  value={editFormData.invoiceTo.address}
+                  onChange={(e) => handleNestedFormChange('invoiceTo', 'address', e.target.value)}
+                  size="small"
+                />
+                
+                <TextField
+                  fullWidth
+                  label="Phone"
+                  value={editFormData.invoiceTo.phone}
+                  onChange={(e) => handleNestedFormChange('invoiceTo', 'phone', e.target.value)}
+                  size="small"
+                />
+              </Stack>
             </Box>
           </Grid>
         </Grid>
@@ -753,8 +789,8 @@ export function InvoiceDetails({ invoice }) {
                   fullWidth
                   label="Quantity"
                   type="number"
-                  value={item.quantity}
-                  onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value))}
+                  value={item.quantity || ''}
+                  onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value, 10) || 0)}
                   size="small"
                 />
               </Grid>
@@ -764,8 +800,8 @@ export function InvoiceDetails({ invoice }) {
                   fullWidth
                   label="Price"
                   type="number"
-                  value={item.price}
-                  onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value))}
+                  value={item.price || ''}
+                  onChange={(e) => handleItemChange(index, 'price', parseFloat(e.target.value) || 0)}
                   size="small"
                   InputProps={{ startAdornment: '$' }}
                 />
@@ -830,8 +866,8 @@ export function InvoiceDetails({ invoice }) {
               fullWidth
               label="Shipping($)"
               type="number"
-              value={editFormData.shipping}
-              onChange={(e) => handleFormChange('shipping', parseFloat(e.target.value))}
+              value={editFormData.shipping || ''}
+              onChange={(e) => handleFormChange('shipping', parseFloat(e.target.value) || 0)}
               size="small"
               sx={{ mb: 2 }}
             />
@@ -840,8 +876,8 @@ export function InvoiceDetails({ invoice }) {
               fullWidth
               label="Discount($)"
               type="number"
-              value={editFormData.discount}
-              onChange={(e) => handleFormChange('discount', parseFloat(e.target.value))}
+              value={editFormData.discount || ''}
+              onChange={(e) => handleFormChange('discount', parseFloat(e.target.value) || 0)}
               size="small"
               sx={{ mb: 2 }}
             />
@@ -850,8 +886,8 @@ export function InvoiceDetails({ invoice }) {
               fullWidth
               label="Taxes(%)"
               type="number"
-              value={editFormData.taxes}
-              onChange={(e) => handleFormChange('taxes', parseFloat(e.target.value))}
+              value={editFormData.taxes || ''}
+              onChange={(e) => handleFormChange('taxes', parseFloat(e.target.value) || 0)}
               size="small"
               sx={{ mb: 2 }}
             />
@@ -889,7 +925,7 @@ export function InvoiceDetails({ invoice }) {
       <DialogActions sx={{ px: 3, pb: 3 }}>
         <Button
           variant="outlined"
-          onClick={handleEditModalClose}
+          onClick={handleSaveAsDraft}
           sx={{ mr: 1 }}
         >
           Save as draft
@@ -936,7 +972,7 @@ export function InvoiceDetails({ invoice }) {
         <DialogTitle>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Typography variant="h4" sx={{ fontWeight: 700 }}>
-              Print Preview - {invoice?.invoiceNumber || 'INV-1991'}
+              Print Preview - {invoice?.invoiceNumber || ''}
             </Typography>
             <Stack direction="row" spacing={1}>
               <Button
@@ -973,10 +1009,10 @@ export function InvoiceDetails({ invoice }) {
                     ...invoice,
                     createDate: invoice?.createDate instanceof Date 
                       ? invoice.createDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-                      : invoice?.createDate || '28 Aug 2023',
+                      : invoice?.createDate || '',
                     dueDate: invoice?.dueDate instanceof Date 
                       ? invoice.dueDate.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-                      : invoice?.dueDate || '06 Sep 2023',
+                      : invoice?.dueDate || '',
                   }} 
                   currentStatus={status} 
                 />
@@ -990,5 +1026,36 @@ export function InvoiceDetails({ invoice }) {
 }
 
 InvoiceDetails.propTypes = {
-  invoice: PropTypes.object,
+  invoice: PropTypes.shape({
+    id: PropTypes.string,
+    invoiceNumber: PropTypes.string,
+    createDate: PropTypes.string,
+    dueDate: PropTypes.string,
+    status: PropTypes.string,
+    invoiceFrom: PropTypes.shape({
+      name: PropTypes.string,
+      address: PropTypes.string,
+      phone: PropTypes.string,
+    }),
+    invoiceTo: PropTypes.shape({
+      name: PropTypes.string,
+      address: PropTypes.string,
+      phone: PropTypes.string,
+    }),
+    items: PropTypes.arrayOf(PropTypes.shape({
+      title: PropTypes.string,
+      description: PropTypes.string,
+      quantity: PropTypes.number,
+      price: PropTypes.number,
+      total: PropTypes.number,
+    })),
+    subtotal: PropTypes.number,
+    shipping: PropTypes.number,
+    discount: PropTypes.number,
+    taxes: PropTypes.number,
+    totalAmount: PropTypes.number,
+  }),
+  open: PropTypes.bool,
+  onClose: PropTypes.func,
+  onEditSuccess: PropTypes.func,
 };
