@@ -31,7 +31,12 @@ export const storefrontApi = {
    */
   async getAboutPage(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/about`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/about`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching about page:', error);
@@ -45,7 +50,12 @@ export const storefrontApi = {
    */
   async getShippingPage(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/shipping`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/shipping`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching shipping page:', error);
@@ -59,7 +69,12 @@ export const storefrontApi = {
    */
   async getFAQs(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/faqs`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/faqs`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching FAQs:', error);
@@ -73,10 +88,36 @@ export const storefrontApi = {
    */
   async getShopInfo(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/info`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/info`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching shop info:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch featured products for a store
+   * @param {string} shopName - The shop name/slug (e.g., 'kitschstudio')
+   */
+  async getFeaturedProducts(shopName) {
+    try {
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/featured-products`, {
+        timeout: 10000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching featured products:', error);
       throw error;
     }
   },
@@ -97,6 +138,8 @@ export const storefrontApi = {
         timeout: 10000, // 10 second timeout
         headers: {
           'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
         }
       });
       console.log('Products response:', response.data);
@@ -124,7 +167,12 @@ export const storefrontApi = {
    */
   async getCategories(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/categories`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/categories`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -138,7 +186,12 @@ export const storefrontApi = {
    */
   async getEvents(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/events`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/events`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -152,10 +205,72 @@ export const storefrontApi = {
    */
   async getPartners(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/partners`);
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/partners`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
       return response.data;
     } catch (error) {
       console.error('Error fetching partners:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch homepage data for a store
+   * @param {string} shopName - The shop name/slug (e.g., 'kitschstudio')
+   */
+  async getHomepage(shopName) {
+    try {
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/homepage`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching homepage data:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch split feature for a store
+   * @param {string} shopName - The shop name/slug (e.g., 'kitschstudio')
+   */
+  async getSplitFeature(shopName) {
+    try {
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/split-feature`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching split feature:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch coupon settings for a store
+   * @param {string} shopName - The shop name/slug (e.g., 'kitschstudio')
+   */
+  async getCoupon(shopName) {
+    try {
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/coupon`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching coupon:', error);
       throw error;
     }
   },

@@ -69,7 +69,7 @@ const voucherSchema = z.object({
 
 // ----------------------------------------------------------------------
 
-export function VoucherNewEditForm({ currentVoucher }) {
+export function VoucherNewEditForm({ currentVoucher, isModal = false, onSuccess, onCancel }) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -158,7 +158,11 @@ export function VoucherNewEditForm({ currentVoucher }) {
         toast.success(`Voucher created successfully! Code: ${voucherCode}`);
       }
 
-      router.push(paths.dashboard.vouchers.root);
+      if (isModal && onSuccess) {
+        onSuccess();
+      } else {
+        router.push(paths.dashboard.vouchers.root);
+      }
     } catch (error) {
       console.error('Error saving voucher:', error);
       toast.error(error.message || 'Failed to save voucher. Please try again.');
@@ -433,7 +437,13 @@ export function VoucherNewEditForm({ currentVoucher }) {
               <Button
                 variant="outlined"
                 size="large"
-                onClick={() => router.push(paths.dashboard.vouchers.root)}
+                onClick={() => {
+                  if (isModal && onCancel) {
+                    onCancel();
+                  } else {
+                    router.push(paths.dashboard.vouchers.root);
+                  }
+                }}
               >
                 Cancel
               </Button>

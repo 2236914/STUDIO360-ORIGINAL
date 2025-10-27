@@ -16,7 +16,7 @@ const crypto = require('crypto');
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3000;
 const BOOT_ID = crypto.randomUUID();
 
 // Security middleware
@@ -100,11 +100,14 @@ try { app.use('/api/ai', require('./api/ai/ai.routes')); } catch (_) { console.w
 try { app.use('/api/invoices', require('./api/invoices/invoices.routes')); } catch (_) { console.warn('Invoice routes missing'); }
 try { app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes')); } catch (_) { console.warn('Bookkeeping routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/analytics.routes')); } catch (_) { console.warn('Analytics routes missing'); }
+try { app.use('/api/analytics', require('./api/analytics/product-forecasting.routes')); } catch (_) { console.warn('Product forecasting routes missing'); }
+try { app.use('/api/analytics', require('./api/analytics/financial-forecasting.routes')); } catch (_) { console.warn('Financial forecasting routes missing'); }
 try { app.use('/api/vouchers', require('./api/vouchers/vouchers.routes')); } catch (_) { console.warn('Voucher routes missing'); }
 try { app.use('/api/mail', require('./api/mail/mail.routes')); } catch (_) { console.warn('Mail routes missing'); }
 try { app.use('/api/account', require('./api/account/account-history.routes')); } catch (_) { console.warn('Account history routes missing'); }
-try { app.use('/api/public', require('./api/public/public-storefront.routes')); } catch (_) { console.warn('Public storefront routes missing'); }
+try { app.use('/api/public/storefront', require('./api/public/public-storefront.routes')); } catch (_) { console.warn('Public storefront routes missing'); }
 try { app.use('/api/upload', require('./api/upload/upload.routes')); } catch (_) { console.warn('Upload routes missing'); }
+try { app.use('/api/payments/xendit', require('./api/payments/xendit.routes')); } catch (_) { console.warn('Xendit payment routes missing'); }
 
 // Status endpoint retained
 app.get('/api/status', (req, res) => {

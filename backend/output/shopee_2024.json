@@ -1,0 +1,104 @@
+[
+  {
+    "item_id": 22476841972,
+    "product_name": "🌊 Wave To Earth Bracelets",
+    "product_sku": "w2e-ver1",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 1742,
+      "add_to_cart_units": 239,
+      "confirmed_units": 31,
+      "sales_amount": 5069.0
+    },
+    "conversion_rate": 1.7795637198622274,
+    "import_date": "2025-01-01",
+    "month": 1,
+    "year": 2025
+  },
+  {
+    "item_id": 25184912855,
+    "product_name": "🌀 Seasons - W2E Adjustable Bracelet",
+    "product_sku": "SHOPEE-25184912855",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 1391,
+      "add_to_cart_units": 130,
+      "confirmed_units": 20,
+      "sales_amount": 2981.0
+    },
+    "conversion_rate": 1.4378145219266714,
+    "import_date": "2025-01-01",
+    "month": 1,
+    "year": 2025
+  },
+  {
+    "item_id": 25717714565,
+    "product_name": "🩰 Barbie - The Popstar & The Princess Adjustable Bracelet",
+    "product_sku": "barbie",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 96,
+      "add_to_cart_units": 12,
+      "confirmed_units": 4,
+      "sales_amount": 468.0
+    },
+    "conversion_rate": 4.166666666666666,
+    "import_date": "2025-01-01",
+    "month": 1,
+    "year": 2025
+  },
+  {
+    "item_id": 29409989524,
+    "product_name": "🎣 Gold Fish Keychains",
+    "product_sku": "SHOPEE-29409989524",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 64,
+      "add_to_cart_units": 4,
+      "confirmed_units": 1,
+      "sales_amount": 180.0
+    },
+    "conversion_rate": 1.5625,
+    "import_date": "2025-01-01",
+    "month": 1,
+    "year": 2025
+  },
+  {
+    "item_id": 24935615428,
+    "product_name": "🎀 Coquette Beaded Bracelets",
+    "product_sku": "SHOPEE-24935615428",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 128,
+      "add_to_cart_units": 21,
+      "confirmed_units": 1,
+      "sales_amount": 140.0
+    },
+    "conversion_rate": 0.78125,
+    "import_date": "2025-01-01",
+    "month": 1,
+    "year": 2025
+  },
+  {
+    "item_id": 28159990373,
+    "product_name": "🧸 Sanrio Friendship Bracelets",
+    "product_sku": "SHOPEE-28159990373",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 79,
+      "add_to_cart_units": 4,
+      "confirmed_units": 1,
+      "sales_amount": 94.0
+    },
+    "conversion_rate": 1.2658227848101267,
+    "import_date": "2025-01-01",
+    "month": 1,
+    "year": 2025
+  }
+]

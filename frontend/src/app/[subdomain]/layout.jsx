@@ -4,6 +4,8 @@ import { useEffect } from 'react';
 import { useParams } from 'next/navigation';
 
 import { isStoreSubdomain, getCurrentStoreId } from 'src/utils/subdomain';
+import { CheckoutProvider } from 'src/sections/checkout/context';
+import { Snackbar } from 'src/components/snackbar';
 
 // ----------------------------------------------------------------------
 
@@ -26,5 +28,10 @@ export default function SubdomainLayout({ children }) {
     }
   }, [subdomain]);
 
-  return <>{children}</>;
+  return (
+    <CheckoutProvider>
+      <Snackbar />
+      {children}
+    </CheckoutProvider>
+  );
 }

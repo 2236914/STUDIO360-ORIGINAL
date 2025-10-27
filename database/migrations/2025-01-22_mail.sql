@@ -157,21 +157,25 @@ CREATE INDEX IF NOT EXISTS idx_mail_templates_category ON public.mail_templates 
 -- CREATE TRIGGERS FOR UPDATED_AT
 -- ============================================
 
+DROP TRIGGER IF EXISTS update_mail_updated_at ON public.mail;
 CREATE TRIGGER update_mail_updated_at 
     BEFORE UPDATE ON public.mail 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_mail_replies_updated_at ON public.mail_replies;
 CREATE TRIGGER update_mail_replies_updated_at 
     BEFORE UPDATE ON public.mail_replies 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_mail_labels_updated_at ON public.mail_labels;
 CREATE TRIGGER update_mail_labels_updated_at 
     BEFORE UPDATE ON public.mail_labels 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_mail_templates_updated_at ON public.mail_templates;
 CREATE TRIGGER update_mail_templates_updated_at 
     BEFORE UPDATE ON public.mail_templates 
     FOR EACH ROW 
@@ -191,15 +195,19 @@ ALTER TABLE public.mail_templates ENABLE ROW LEVEL SECURITY;
 -- ============================================
 
 -- Mail Policies
+DROP POLICY IF EXISTS "Users can view own mail" ON public.mail;
 CREATE POLICY "Users can view own mail" ON public.mail
     FOR SELECT USING (auth.uid() = user_id AND deleted_at IS NULL);
 
+DROP POLICY IF EXISTS "Users can insert own mail" ON public.mail;
 CREATE POLICY "Users can insert own mail" ON public.mail
     FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own mail" ON public.mail;
 CREATE POLICY "Users can update own mail" ON public.mail
     FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own mail" ON public.mail;
 CREATE POLICY "Users can delete own mail" ON public.mail
     FOR DELETE USING (auth.uid() = user_id);
 
@@ -258,6 +266,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS auto_update_mail_read_status ON public.mail;
 CREATE TRIGGER auto_update_mail_read_status
     BEFORE UPDATE OF is_read
     ON public.mail
@@ -280,6 +289,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS auto_update_mail_resolved_status ON public.mail;
 CREATE TRIGGER auto_update_mail_resolved_status
     BEFORE UPDATE OF status
     ON public.mail

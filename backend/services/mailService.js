@@ -14,8 +14,12 @@ class MailService {
         .from('mail')
         .select('*')
         .eq('user_id', userId)
-        .is('deleted_at', null)
         .order('received_at', { ascending: false });
+      
+      // Only filter deleted if not specifically requesting them
+      if (!filters.includeDeleted) {
+        query = query.is('deleted_at', null);
+      }
 
       // Apply filters
       if (filters.label) {
@@ -79,6 +83,92 @@ class MailService {
       return data;
     } catch (error) {
       console.error('Error in getMailById:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Find existing mail from same customer today
+   */
+  async findExistingMailToday(userId, fromEmail) {
+    try {
+      if (fromEmail === 'no-email@customer.tmp') return null;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const { data, error } = await supabase
+        .from('mail')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('from_email', fromEmail)
+        .eq('source', 'chatbot')
+        .gte('created_at', today.toISOString())
+        .lt('created_at', tomorrow.toISOString())
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (error || !data) return null;
+      return data;
+    } catch (error) {
+      console.error('Error finding existing mail:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Append message to existing mail's conversation
+   */
+  async appendToConversation(mailId, newMessage, aiReply, customerName) {
+    try {
+      // Get current mail
+      const { data: currentMail, error: fetchError } = await supabase
+        .from('mail')
+        .select('metadata, message')
+        .eq('id', mailId)
+        .single();
+
+      if (fetchError || !currentMail) return null;
+
+      // Get or initialize conversation array
+      const metadata = currentMail.metadata || {};
+      const conversation = metadata.conversation || [];
+      
+      // Add new exchange
+      conversation.push({
+        timestamp: new Date().toISOString(),
+        customerMessage: newMessage,
+        aiReply: aiReply,
+        customerName: customerName
+      });
+
+      // Update the mail with conversation and update the main message field
+      const updatedMessage = currentMail.message 
+        ? `${currentMail.message}\n\n--- New Message ---\nCustomer: ${newMessage}\nAI: ${aiReply}`
+        : `${newMessage}\n\nAI: ${aiReply}`;
+
+      const { data, error } = await supabase
+        .from('mail')
+        .update({
+          message: updatedMessage,
+          metadata: { ...metadata, conversation }
+        })
+        .eq('id', mailId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating conversation:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in appendToConversation:', error);
       return null;
     }
   }

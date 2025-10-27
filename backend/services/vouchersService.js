@@ -1,5 +1,10 @@
 const { supabase } = require('./supabaseClient');
 
+// Helper to check if supabase is configured
+if (!supabase) {
+  console.warn('⚠️ Supabase client not configured. Please check SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env file');
+}
+
 class VouchersService {
   // ============================================
   // VOUCHER METHODS
@@ -10,6 +15,9 @@ class VouchersService {
    */
   async getVouchers(userId, filters = {}) {
     try {
+      console.log('Fetching vouchers for userId:', userId);
+      console.log('Filters:', filters);
+      
       let query = supabase
         .from('vouchers')
         .select('*')
@@ -35,10 +43,30 @@ class VouchersService {
       const { data, error } = await query;
 
       if (error) {
-        console.error('Error fetching vouchers:', error);
+        console.error('❌ Error fetching vouchers:', error);
+        console.error('Supabase error details:', JSON.stringify(error, null, 2));
         return [];
       }
 
+      console.log(`✅ Fetched ${data?.length || 0} vouchers for user ${userId}`);
+      
+      // Log the first voucher's structure to help debug
+      if (data && data.length > 0) {
+        console.log('📋 Sample voucher:', {
+          id: data[0].id,
+          name: data[0].name,
+          user_id: data[0].user_id,
+          matches_user: data[0].user_id === userId
+        });
+      } else {
+        console.warn('⚠️ No vouchers found! Query returned empty array.');
+        console.log('Query details:', {
+          userId,
+          filters,
+          table: 'vouchers'
+        });
+      }
+      
       return data || [];
     } catch (error) {
       console.error('Error in getVouchers:', error);
@@ -101,26 +129,35 @@ class VouchersService {
    */
   async createVoucher(userId, voucherData) {
     try {
+      console.log('Creating voucher for userId:', userId);
+      console.log('Voucher data:', voucherData);
+      
       // Check if code already exists for this user
       const existing = await this.getVoucherByCode(voucherData.code, userId);
       if (existing) {
         return { error: 'Voucher code already exists' };
       }
 
+      const insertData = {
+        user_id: userId,
+        ...voucherData
+      };
+      
+      console.log('Inserting voucher data:', insertData);
+
       const { data, error } = await supabase
         .from('vouchers')
-        .insert([{
-          user_id: userId,
-          ...voucherData
-        }])
+        .insert([insertData])
         .select()
         .single();
 
       if (error) {
-        console.error('Error creating voucher:', error);
+        console.error('Supabase error creating voucher:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
         return { error: error.message };
       }
 
+      console.log('Voucher created successfully:', data);
       return data;
     } catch (error) {
       console.error('Error in createVoucher:', error);

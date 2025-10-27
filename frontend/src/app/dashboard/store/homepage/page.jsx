@@ -9,7 +9,6 @@ import {
   Grid,
   Chip,
   Stack,
-  Alert,
   Paper,
   Button,
   Select,
@@ -40,6 +39,7 @@ import { useBoolean } from 'src/hooks/use-boolean';
 
 import { DashboardContent } from 'src/layouts/dashboard';
 import { homepageApi } from 'src/services/storePagesService';
+import { inventoryApi } from 'src/services/inventoryService';
 
 import { Upload } from 'src/components/upload';
 import { toast } from 'src/components/snackbar';
@@ -82,14 +82,25 @@ export default function HomepageEditorPage() {
         setFeaturedProducts({
           title: data.featuredProducts.title || 'Featured Products',
           description: data.featuredProducts.description || '',
-          selectedProducts: [],
+          selectedProducts: data.featuredProducts.productIds || [],
           maxProducts: 5,
         });
       }
       
       // Populate categories
       if (data.categories && Array.isArray(data.categories)) {
-        setCategories(data.categories);
+        // Map database fields to UI fields
+        const mappedCategories = data.categories.map(cat => ({
+          id: cat.id,
+          name: cat.name || '',
+          description: cat.description || '',
+          type: cat.type || 'Physical', // Use product type from database if available
+          image: cat.image_url || '', // Map image_url to image
+          image_url: cat.image_url || '',
+          display_order: cat.display_order || 0,
+          is_active: cat.is_active !== false,
+        }));
+        setCategories(mappedCategories);
       }
       
       // Populate split feature
@@ -104,7 +115,7 @@ export default function HomepageEditorPage() {
       // Populate coupon
       if (data.coupon) {
         setCoupon({
-          enabled: data.coupon.enabled || false,
+          enabled: data.coupon.enabled !== false,
           headline: data.coupon.headline || '',
           subtext: data.coupon.subtext || '',
           buttonText: data.coupon.button_text || '',
@@ -165,6 +176,7 @@ export default function HomepageEditorPage() {
 
   // Categories manager state
   const [categories, setCategories] = useState([]);
+  const [categoryUrls, setCategoryUrls] = useState({}); // Track URLs being typed for each category
   const productTypes = ['Physical', 'Digital', 'Service'];
 
   // Split Feature (Text + Image)
@@ -192,8 +204,9 @@ export default function HomepageEditorPage() {
   // Platforms section
   const [platforms, setPlatforms] = useState([]);
 
-  // Empty products array - will be populated from database
-  const availableProducts = [];
+  // Products from database - will be populated
+  const [availableProducts, setAvailableProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
 
   const [expanded, setExpanded] = useState('announcement');
   const [saveStatus, setSaveStatus] = useState('');
@@ -206,6 +219,47 @@ export default function HomepageEditorPage() {
   const [sortBy, setSortBy] = useState('name');
   const [currentPage, setCurrentPage] = useState(1);
   const productsPerPage = 12;
+
+  // Load products from inventory
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setProductsLoading(true);
+        const products = await inventoryApi.getProducts({ status: ['active'] });
+        
+        // Transform products to match the expected format
+        const transformedProducts = products.map(product => {
+          let coverUrl = product.cover_image_url;
+          if (!coverUrl && product.images && product.images.length > 0) {
+            coverUrl = Array.isArray(product.images) ? product.images[0] : product.images;
+          }
+          
+          return {
+            id: product.id,
+            name: product.name,
+            sku: product.sku,
+            price: parseFloat(product.price || 0),
+            stock: product.stock_quantity || 0,
+            category: product.category || 'Uncategorized',
+            material: product.category || 'General',
+            inStock: product.stock_status === 'in stock',
+            image: coverUrl || '/assets/images/product/product-placeholder.png',
+            rating: 0,
+            sales: 0
+          };
+        });
+        
+        setAvailableProducts(transformedProducts);
+      } catch (error) {
+        console.error('Error loading products:', error);
+        toast.error('Failed to load products');
+      } finally {
+        setProductsLoading(false);
+      }
+    };
+
+    loadProducts();
+  }, []);
 
   // Available icons for announcement banner
   const announcementIcons = [
@@ -269,6 +323,7 @@ export default function HomepageEditorPage() {
           title: featuredProducts.title,
           description: featuredProducts.description,
           show_section: true,
+          productIds: featuredProducts.selectedProducts,
         }),
         homepageApi.updateSplitFeature({
           title: splitFeature.title,
@@ -293,10 +348,80 @@ export default function HomepageEditorPage() {
           show_section: !!eventsBlock.title,
         }),
       ]);
+
+      // Save platforms
+      const savedPlatforms = await homepageApi.getPlatforms();
+      
+      // Delete platforms that are no longer in the list
+      const currentPlatformIds = platforms.map(p => p.id);
+      const platformsToDelete = savedPlatforms.filter(sp => !currentPlatformIds.includes(sp.id));
+      
+      for (const platform of platformsToDelete) {
+        if (platform.id && typeof platform.id === 'number') {
+          await homepageApi.deletePlatform(platform.id);
+        }
+      }
+      
+      // Create or update platforms
+      for (const platform of platforms) {
+        if (platform.id && typeof platform.id === 'number' && platform.id.toString().length < 13) {
+          // Existing platform from database
+          await homepageApi.updatePlatform(platform.id, {
+            name: platform.name,
+            url: platform.url,
+            icon: platform.icon,
+            is_active: true,
+          });
+        } else {
+          // New platform (has temp ID from Date.now())
+          await homepageApi.createPlatform({
+            name: platform.name,
+            url: platform.url,
+            icon: platform.icon,
+            is_active: true,
+            display_order: 0,
+          });
+        }
+      }
+
+      // Save categories
+      const savedCategories = await homepageApi.getCategories();
+      
+      // Delete categories that are no longer in the list
+      const currentCategoryIds = categories.map(c => c.id);
+      const categoriesToDelete = savedCategories.filter(sc => !currentCategoryIds.includes(sc.id));
+      
+      for (const category of categoriesToDelete) {
+        if (category.id && typeof category.id === 'string') {
+          await homepageApi.deleteCategory(category.id);
+        }
+      }
+      
+      // Create or update categories
+      for (const [index, category] of categories.entries()) {
+        if (category.id && typeof category.id === 'string' && category.id.length === 36) {
+          // Existing category from database (UUID format)
+          await homepageApi.updateCategory(category.id, {
+            name: category.name,
+            description: category.description || '',
+            image_url: typeof category.image === 'string' ? category.image : (category.image_url || ''),
+            display_order: index,
+            is_active: category.is_active !== false,
+          });
+        } else {
+          // New category (has temp ID from Date.now())
+          await homepageApi.createCategory({
+            name: category.name,
+            description: category.description || '',
+            image_url: typeof category.image === 'string' ? category.image : '',
+            display_order: index,
+            is_active: category.is_active !== false,
+          });
+        }
+      }
       
       setSaveStatus('saved');
       toast.success('Homepage saved successfully!');
-      setTimeout(() => setSaveStatus(''), 3000);
     } catch (error) {
       console.error('Error saving homepage:', error);
       toast.error('Failed to save homepage. Please try again.');
@@ -430,13 +555,6 @@ export default function HomepageEditorPage() {
         }
         sx={{ mb: { xs: 3, md: 5 } }}
       />
-
-      {/* Save Status Alert */}
-      {saveStatus === 'saved' && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Homepage changes saved successfully!
-        </Alert>
-      )}
 
       <Grid container spacing={3}>
         {/* Editor Panel */}
@@ -925,29 +1043,101 @@ export default function HomepageEditorPage() {
                             <Typography variant="caption" sx={{ mb: 1, display: 'block', color: 'text.secondary' }}>
                               Category Picture
                             </Typography>
-                            <Upload
-                              file={cat.image}
-                              onDrop={(acceptedFiles) => {
-                                const file = acceptedFiles[0];
-                                if (!file) return;
-                                setCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, image: file } : c)));
-                              }}
-                              sx={{ minHeight: 140, '& > div': { minHeight: 140 } }}
-                            />
+                            
+                            {/* Show image preview if URL */}
+                            {typeof cat.image === 'string' && cat.image && (
+                              <Box
+                                sx={{
+                                  width: '100%',
+                                  height: 140,
+                                  mb: 1,
+                                  border: '1px dashed',
+                                  borderColor: 'divider',
+                                  borderRadius: 1,
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  overflow: 'hidden',
+                                  position: 'relative',
+                                  bgcolor: 'grey.100'
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={cat.image}
+                                  alt={cat.name}
+                                  sx={{
+                                    maxWidth: '100%',
+                                    maxHeight: '100%',
+                                    objectFit: 'contain'
+                                  }}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                                <IconButton
+                                  size="small"
+                                  onClick={() => setCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, image: null } : c)))}
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 4,
+                                    right: 4,
+                                    bgcolor: 'background.paper',
+                                    '&:hover': { bgcolor: 'grey.300' }
+                                  }}
+                                >
+                                  <Iconify icon="eva:close-fill" />
+                                </IconButton>
+                              </Box>
+                            )}
+                            
+                            {!(typeof cat.image === 'string' && cat.image) && (
+                              <Upload
+                                file={cat.image}
+                                onDrop={(acceptedFiles) => {
+                                  const file = acceptedFiles[0];
+                                  if (!file) return;
+                                  setCategories((prev) => prev.map((c) => (c.id === cat.id ? { ...c, image: file } : c)));
+                                }}
+                                sx={{ minHeight: 140, '& > div': { minHeight: 140 } }}
+                              />
+                            )}
                             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                               <TextField
                                 size="small"
                                 fullWidth
                                 label="Or paste image URL"
                                 placeholder="https://example.com/category.jpg"
-                                value={typeof cat.image === 'string' ? cat.image : ''}
+                                value={categoryUrls[cat.id] || ''}
                                 onChange={(e) =>
-                                  setCategories((prev) =>
-                                    prev.map((c) => (c.id === cat.id ? { ...c, image: e.target.value } : c))
-                                  )
+                                  setCategoryUrls((prev) => ({
+                                    ...prev,
+                                    [cat.id]: e.target.value
+                                  }))
                                 }
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && categoryUrls[cat.id]) {
+                                    setCategories((prev) =>
+                                      prev.map((c) => (c.id === cat.id ? { ...c, image: categoryUrls[cat.id] } : c))
+                                    );
+                                    setCategoryUrls((prev) => ({ ...prev, [cat.id]: '' }));
+                                  }
+                                }}
                               />
-                              <Button variant="outlined" size="small">Use URL</Button>
+                              <Button 
+                                variant="outlined" 
+                                size="small"
+                                onClick={() => {
+                                  if (categoryUrls[cat.id]) {
+                                    setCategories((prev) =>
+                                      prev.map((c) => (c.id === cat.id ? { ...c, image: categoryUrls[cat.id] } : c))
+                                    );
+                                    setCategoryUrls((prev) => ({ ...prev, [cat.id]: '' }));
+                                  }
+                                }}
+                              >
+                                Use URL
+                              </Button>
                             </Stack>
                           </Box>
                         </Stack>

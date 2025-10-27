@@ -24,6 +24,7 @@ import { PresetsOptions } from './presets-options';
 import { CustomDrawer } from '../../custom-drawer';
 import { defaultSettings } from '../config-settings';
 import { FullScreenButton } from './fullscreen-button';
+import { BorderRadiusOptions } from './border-radius-options';
 
 // ----------------------------------------------------------------------
 
@@ -171,6 +172,19 @@ export function SettingsDrawer({
     />
   );
 
+  const renderBorderRadius = (
+    <BorderRadiusOptions
+      value={settings.borderRadius || 8}
+      onClickOption={(newValue) => settings.onUpdateField('borderRadius', newValue)}
+      options={[
+        { label: 'Sharp', value: 0 },
+        { label: 'Soft', value: 4 },
+        { label: 'Default', value: 8 },
+        { label: 'Round', value: 16 },
+      ]}
+    />
+  );
+
   return (
     <ClientOnly>
       <CustomDrawer
@@ -221,6 +235,12 @@ export function SettingsDrawer({
                 {renderPresets}
               </Stack>
             )}
+
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">Border Radius</Typography>
+
+              {renderBorderRadius}
+            </Stack>
           </Stack>
         </Scrollbar>
       </CustomDrawer>

@@ -7,7 +7,6 @@ import {
   Card,
   Grid,
   Stack,
-  Alert,
   Button,
   Switch,
   Divider,
@@ -200,7 +199,6 @@ export default function ShippingReturnsPage() {
       
       setSaveStatus('saved');
       toast.success('Shipping page saved successfully!');
-      setTimeout(() => setSaveStatus(''), 3000);
       
       // Reload to get updated IDs from database
       await loadShippingData();
@@ -299,13 +297,6 @@ export default function ShippingReturnsPage() {
         }
         sx={{ mb: { xs: 3, md: 5 } }}
       />
-
-      {/* Save Status Alert */}
-      {saveStatus === 'saved' && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Shipping & Returns changes saved successfully!
-        </Alert>
-      )}
 
       <Grid container spacing={3}>
         {/* Editor Panel */}

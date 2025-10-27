@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -21,17 +21,39 @@ import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
-export function MailCompose({ onCloseCompose, onSendMail, ...other }) {
+export function MailCompose({ onCloseCompose, onSendMail, replyMail, ...other }) {
   const [formData, setFormData] = useState({
-    to: '',
-    toEmail: '',
-    subject: '',
+    to: replyMail?.from || '',
+    toEmail: replyMail?.email || '',
+    subject: replyMail?.subject ? `Re: ${replyMail.subject}` : '',
     message: '',
-    priority: 'normal'
+    priority: replyMail?.priority || 'normal'
   });
   const [sending, setSending] = useState(false);
 
   const fullScreen = useBoolean(false);
+
+  // Update form when replyMail changes
+  useEffect(() => {
+    if (replyMail) {
+      setFormData({
+        to: replyMail.from || '',
+        toEmail: replyMail.email || '',
+        subject: replyMail.subject ? `Re: ${replyMail.subject}` : '',
+        message: '',
+        priority: replyMail.priority || 'normal'
+      });
+    } else {
+      // Reset to empty for new mail
+      setFormData({
+        to: '',
+        toEmail: '',
+        subject: '',
+        message: '',
+        priority: 'normal'
+      });
+    }
+  }, [replyMail]);
 
   const handleChange = (field) => (event) => {
     setFormData(prev => ({
@@ -96,7 +118,9 @@ export function MailCompose({ onCloseCompose, onSendMail, ...other }) {
     >
       <DialogTitle>
         <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <Typography variant="h6">New Message</Typography>
+          <Typography variant="h6">
+            {replyMail ? 'Reply' : 'New Message'}
+          </Typography>
           <Stack direction="row" spacing={1}>
             <IconButton onClick={fullScreen.onToggle}>
               <Iconify icon={fullScreen.value ? "eva:collapse-fill" : "eva:expand-fill"} />

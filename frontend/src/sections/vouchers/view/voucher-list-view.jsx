@@ -18,7 +18,6 @@ import {
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
-import { RouterLink } from 'src/routes/components';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 import { useSetState } from 'src/hooks/use-set-state';
@@ -35,6 +34,7 @@ import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import { VoucherStatsCard } from '../voucher-stats-card';
 import { VoucherTableToolbar } from '../voucher-table-toolbar';
 import { VoucherTableFiltersResult } from '../voucher-table-filters-result';
+import { VoucherModal } from '../voucher-modal';
 import {
   RenderCellCreatedAt,
   RenderCellVoucherCode,
@@ -124,6 +124,11 @@ export function VoucherListView() {
   const [initialLoad, setInitialLoad] = useState(true);
   const [filterButtonEl, setFilterButtonEl] = useState(null);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
+  
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('create'); // 'create', 'edit', 'view'
+  const [modalVoucherId, setModalVoucherId] = useState(null);
 
   // Load vouchers from database
   useEffect(() => {
@@ -133,7 +138,10 @@ export function VoucherListView() {
   const loadVouchers = async () => {
     try {
       setLoading(true);
+      console.log('🔄 Loading vouchers...');
       const vouchers = await vouchersApi.getVouchers();
+      console.log('📋 Received vouchers from API:', vouchers);
+      console.log('📊 Voucher count:', vouchers?.length || 0);
       
       // Transform database data to match component format
       const transformedVouchers = vouchers.map(voucher => ({
@@ -142,17 +150,26 @@ export function VoucherListView() {
         code: voucher.code,
         description: voucher.description || '',
         type: voucher.type,
+        value: parseFloat(voucher.discount_value || 0),
         discount_value: parseFloat(voucher.discount_value || 0),
+        minOrderAmount: parseFloat(voucher.min_purchase_amount || 0),
         min_purchase_amount: parseFloat(voucher.min_purchase_amount || 0),
         max_discount_amount: voucher.max_discount_amount ? parseFloat(voucher.max_discount_amount) : null,
+        usageLimit: voucher.usage_limit,
         usage_limit: voucher.usage_limit,
+        usedCount: voucher.usage_count || 0,
         usage_count: voucher.usage_count || 0,
         usage_limit_per_user: voucher.usage_limit_per_user || 1,
+        validFrom: voucher.start_date ? new Date(voucher.start_date) : new Date(),
+        validUntil: voucher.end_date ? new Date(voucher.end_date) : undefined,
         start_date: voucher.start_date,
         end_date: voucher.end_date,
         status: voucher.status,
         is_active: voucher.is_active,
         created_at: voucher.created_at,
+        createdAt: voucher.created_at,
+        applicableTo: voucher.applicable_product_ids ? 'products' : (voucher.applicable_category_ids ? 'categories' : 'all'),
+        applicableIds: voucher.applicable_product_ids || voucher.applicable_category_ids || [],
       }));
       
       setTableData(transformedVouchers);
@@ -242,17 +259,37 @@ export function VoucherListView() {
 
   const handleEditRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.vouchers.edit(id));
+      setModalMode('edit');
+      setModalVoucherId(id);
+      setModalOpen(true);
     },
-    [router]
+    []
   );
 
   const handleViewRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.vouchers.details(id));
+      setModalMode('view');
+      setModalVoucherId(id);
+      setModalOpen(true);
     },
-    [router]
+    []
   );
+
+  const handleCreateVoucher = useCallback(() => {
+    setModalMode('create');
+    setModalVoucherId(null);
+    setModalOpen(true);
+  }, []);
+
+  const handleModalClose = useCallback(() => {
+    setModalOpen(false);
+    setModalVoucherId(null);
+  }, []);
+
+  const handleModalSuccess = useCallback(() => {
+    // Reload vouchers after successful create/edit
+    loadVouchers();
+  }, [loadVouchers]);
 
   const handleToggleStatus = useCallback(
     (id) => {
@@ -404,8 +441,7 @@ export function VoucherListView() {
           ]}
           action={
             <Button
-              component={RouterLink}
-              href={paths.dashboard.vouchers.new}
+              onClick={handleCreateVoucher}
               variant="contained"
               startIcon={<Iconify icon="mingcute:add-line" />}
             >
@@ -510,6 +546,15 @@ export function VoucherListView() {
             {loading ? 'Deleting...' : 'Delete'}
           </Button>
         }
+      />
+
+      {/* Voucher Modal */}
+      <VoucherModal
+        open={modalOpen}
+        onClose={handleModalClose}
+        mode={modalMode}
+        voucherId={modalVoucherId}
+        onSuccess={handleModalSuccess}
       />
     </>
   );

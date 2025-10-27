@@ -16,6 +16,7 @@ import { defaultSettings, SettingsProvider } from 'src/components/settings';
 import { CheckoutProvider } from 'src/sections/checkout/context';
 
 import { AuthProvider } from 'src/auth/context/jwt';
+import { Snackbar } from 'src/components/snackbar';
 
 // ----------------------------------------------------------------------
 
@@ -52,6 +53,7 @@ export default async function RootLayout({ children }) {
             <ThemeProvider>
               <MotionLazy>
                 <ProgressBar />
+                <Snackbar />
                 <CheckoutProvider>
                   {children}
                 </CheckoutProvider>

@@ -416,3 +416,45 @@ export const customerSupportApi = {
   },
 };
 
+// ============================================
+// EVENTS API
+// ============================================
+
+export const eventsApi = {
+  async getEvents() {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/events`);
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data.data;
+  },
+
+  async createEvent(eventData) {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/events`, {
+      method: 'POST',
+      body: JSON.stringify(eventData),
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data.data;
+  },
+
+  async updateEvent(eventId, eventData) {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/events/${eventId}`, {
+      method: 'PUT',
+      body: JSON.stringify(eventData),
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data.data;
+  },
+
+  async deleteEvent(eventId) {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/events/${eventId}`, {
+      method: 'DELETE',
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data;
+  },
+};
+

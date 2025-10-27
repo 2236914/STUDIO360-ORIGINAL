@@ -214,5 +214,16 @@ export const mailApi = {
     if (!data.success) throw new Error(data.message);
     return data.data;
   },
+
+  // Send email via SMTP
+  async sendEmail(emailData) {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/mail/send-email`, {
+      method: 'POST',
+      body: JSON.stringify(emailData),
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data.data;
+  },
 };
 

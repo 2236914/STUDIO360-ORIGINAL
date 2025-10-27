@@ -27,6 +27,7 @@ import { FontOptions } from '../drawer/font-options';
 import { defaultSettings } from '../config-settings';
 import { PresetsOptions } from '../drawer/presets-options';
 import { FullScreenButton } from '../drawer/fullscreen-button';
+import { BorderRadiusOptions } from '../drawer/border-radius-options';
 
 // ----------------------------------------------------------------------
 
@@ -175,6 +176,19 @@ export function SettingsPopover({
     />
   );
 
+  const renderBorderRadius = (
+    <BorderRadiusOptions
+      value={settings.borderRadius || 8}
+      onClickOption={(newValue) => settings.onUpdateField('borderRadius', newValue)}
+      options={[
+        { label: 'Sharp', value: 0 },
+        { label: 'Soft', value: 4 },
+        { label: 'Default', value: 8 },
+        { label: 'Round', value: 16 },
+      ]}
+    />
+  );
+
   return (
     <>
       <IconButton
@@ -246,6 +260,11 @@ export function SettingsPopover({
                 {renderPresets}
               </Stack>
             )}
+
+            <Stack spacing={2}>
+              <Typography variant="subtitle2">Border Radius</Typography>
+              {renderBorderRadius}
+            </Stack>
           </Stack>
         </Scrollbar>
       </CustomPopover>

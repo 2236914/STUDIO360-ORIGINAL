@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const mailService = require('../../services/mailService');
+const emailService = require('../../services/emailService');
 const { authenticateTokenHybrid } = require('../../middleware/auth');
 
 // ============================================
@@ -732,6 +733,78 @@ router.post('/templates/create', authenticateTokenHybrid, async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating template:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/mail/send-email
+ * @desc Send email via SMTP
+ * @access Private
+ */
+router.post('/send-email', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    const { toEmail, toName, subject, message, fromName } = req.body;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    if (!toEmail || !subject || !message) {
+      return res.status(400).json({
+        success: false,
+        message: 'toEmail, subject, and message are required'
+      });
+    }
+
+    console.log(`[Email Service] Sending email to ${toEmail}`);
+    
+    const emailResult = await emailService.sendEmail({
+      to: toEmail,
+      subject: subject,
+      html: message,
+      text: message.replace(/<[^>]*>/g, '') // Strip HTML for text version
+    });
+
+    if (!emailResult.success) {
+      return res.status(500).json({ 
+        success: false, 
+        message: emailResult.error 
+      });
+    }
+
+    // Save sent email to database
+    const mailData = {
+      from_name: fromName || 'Support Team',
+      from_email: process.env.SMTP_USER,
+      to_name: toName,
+      to_email: toEmail,
+      subject: subject,
+      message: message,
+      type: 'sent',
+      source: 'manual',
+      status: 'pending',
+      labels: ['sent'],
+      is_read: true,
+      sent_at: new Date().toISOString(),
+    };
+
+    await mailService.createMail(userId, mailData);
+
+    res.json({
+      success: true,
+      data: { messageId: emailResult.messageId },
+      message: 'Email sent successfully'
+    });
+  } catch (error) {
+    console.error('Error in send mail:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Internal server error' 

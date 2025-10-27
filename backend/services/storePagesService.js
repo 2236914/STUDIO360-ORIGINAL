@@ -108,6 +108,68 @@ class StorePagesService {
   }
 
   /**
+   * Get featured product items
+   */
+  async getFeaturedProductItems(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('featured_product_items')
+        .select('*')
+        .eq('user_id', userId)
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching featured product items:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error in getFeaturedProductItems:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Update featured product items (replaces all items)
+   */
+  async upsertFeaturedProductItems(userId, productIds) {
+    try {
+      // Delete all existing items
+      await supabase
+        .from('featured_product_items')
+        .delete()
+        .eq('user_id', userId);
+
+      // Insert new items
+      if (productIds && productIds.length > 0) {
+        const items = productIds.map((productId, index) => ({
+          user_id: userId,
+          product_id: productId,
+          display_order: index
+        }));
+
+        const { data, error } = await supabase
+          .from('featured_product_items')
+          .insert(items)
+          .select();
+
+        if (error) {
+          console.error('Error upserting featured product items:', error);
+          return [];
+        }
+
+        return data || [];
+      }
+
+      return [];
+    } catch (error) {
+      console.error('Error in upsertFeaturedProductItems:', error);
+      return [];
+    }
+  }
+
+  /**
    * Get categories
    */
   async getCategories(userId) {
@@ -509,6 +571,7 @@ class StorePagesService {
       const [
         heroSection,
         featuredProducts,
+        featuredProductItems,
         categories,
         splitFeature,
         coupon,
@@ -518,6 +581,7 @@ class StorePagesService {
       ] = await Promise.all([
         this.getHeroSection(userId),
         this.getFeaturedProducts(userId),
+        this.getFeaturedProductItems(userId),
         this.getCategories(userId),
         this.getSplitFeature(userId),
         this.getCoupon(userId),
@@ -528,7 +592,10 @@ class StorePagesService {
 
       return {
         heroSection,
-        featuredProducts,
+        featuredProducts: {
+          ...featuredProducts,
+          productIds: featuredProductItems.map(item => item.product_id)
+        },
         categories,
         splitFeature,
         coupon,
@@ -1378,6 +1445,158 @@ class StorePagesService {
     } catch (error) {
       console.error('Error in getCompleteCustomerSupportData:', error);
       return {};
+    }
+  }
+
+  // ============================================
+  // EVENTS METHODS
+  // ============================================
+
+  /**
+   * Get all events for a user
+   */
+  async getEvents(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('store_events')
+        .select('*')
+        .eq('user_id', userId)
+        .order('event_date', { ascending: true })
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching events:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error in getEvents:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get active events (for public storefront)
+   */
+  async getActiveEvents(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('store_events')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .gte('event_date', new Date().toISOString().split('T')[0]) // Only future events
+        .order('event_date', { ascending: true })
+        .order('display_order', { ascending: true });
+
+      if (error) {
+        console.error('Error fetching active events:', error);
+        return [];
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Error in getActiveEvents:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Get event by ID
+   */
+  async getEventById(eventId, userId) {
+    try {
+      const { data, error } = await supabase
+        .from('store_events')
+        .select('*')
+        .eq('id', eventId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error) {
+        console.error('Error fetching event:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in getEventById:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Create a new event
+   */
+  async createEvent(userId, eventData) {
+    try {
+      const { data, error } = await supabase
+        .from('store_events')
+        .insert([{
+          user_id: userId,
+          ...eventData
+        }])
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating event:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in createEvent:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update an event
+   */
+  async updateEvent(eventId, userId, eventData) {
+    try {
+      const { data, error } = await supabase
+        .from('store_events')
+        .update(eventData)
+        .eq('id', eventId)
+        .eq('user_id', userId)
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error updating event:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in updateEvent:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Delete an event
+   */
+  async deleteEvent(eventId, userId) {
+    try {
+      const { error } = await supabase
+        .from('store_events')
+        .delete()
+        .eq('id', eventId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Error deleting event:', error);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Error in deleteEvent:', error);
+      return false;
     }
   }
 }

@@ -167,10 +167,18 @@ export function VoucherTableRow({
         </TableCell>
 
         <TableCell align="right">
+          <IconButton
+            color={popover.open ? 'inherit' : 'default'}
+            onClick={popover.onOpen}
+          >
+            <Iconify icon="eva:more-vertical-fill" />
+          </IconButton>
+
           <CustomPopover
             open={popover.open}
             onClose={popover.onClose}
             arrow="right-top"
+            anchorEl={popover.anchorEl}
             sx={{ width: 160 }}
           >
             <Button
@@ -209,13 +217,6 @@ export function VoucherTableRow({
               Delete
             </Button>
           </CustomPopover>
-
-          <IconButton
-            color={popover.open ? 'inherit' : 'default'}
-            onClick={popover.onOpen}
-          >
-            <Iconify icon="eva:more-vertical-fill" />
-          </IconButton>
         </TableCell>
       </TableRow>
 

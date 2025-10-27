@@ -8,9 +8,9 @@ import {
   AnalyticsKpiCards,
   AnalyticsAiForecast,
   AnalyticsWidgetSummary,
-  AnalyticsTaxableIncome,
   AnalyticsSalesAnalytics,
-  AnalyticsMonthlyProfitTrend
+  AnalyticsMonthlyProfitTrend,
+  AnalyticsProductPerformance
 } from 'src/sections/overview/analytics';
 
 // ----------------------------------------------------------------------
@@ -60,27 +60,31 @@ export default async function Page() {
         </Grid>
       </Grid>
 
-      {/* Second Row - Sales Analytics (full width) */}
+      {/* Second Row - Sales Analytics and Monthly Profit Trend */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid xs={12}>
+        <Grid xs={12} lg={6}>
           <AnalyticsSalesAnalytics />
         </Grid>
+        <Grid xs={12} lg={6}>
+          <AnalyticsMonthlyProfitTrend />
+        </Grid>
       </Grid>
 
-      {/* Third Row - AI Forecast and Taxable Income */}
+      {/* Third Row - AI Forecast and Top Product Chart */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid xs={12} lg={8}>
+        <Grid xs={12} lg={6}>
           <AnalyticsAiForecast />
         </Grid>
-        <Grid xs={12} lg={4}>
-          <AnalyticsTaxableIncome />
+        <Grid xs={12} lg={6}>
+          {/* This will render only the chart part, not the table */}
+          <AnalyticsProductPerformance hideHeader={true} showTableOnly={false} showChartOnly={true} />
         </Grid>
       </Grid>
 
-      {/* Fourth Row - Monthly Profit Trend and KPI Cards */}
+      {/* Fourth Row - Top Products Performance and KPI Cards */}
       <Grid container spacing={3}>
         <Grid xs={12} lg={8}>
-          <AnalyticsMonthlyProfitTrend />
+          <AnalyticsProductPerformance hideHeader={true} showTableOnly={true} />
         </Grid>
         <Grid xs={12} lg={4}>
           <AnalyticsKpiCards />

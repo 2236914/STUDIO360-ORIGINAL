@@ -98,6 +98,8 @@ export const paths = {
     },
     forecasting: {
       root: `${ROOTS.DASHBOARD}/forecasting`,
+      finance: `${ROOTS.DASHBOARD}/forecasting/finance`,
+      productPerformance: `${ROOTS.DASHBOARD}/forecasting/product-performance`,
     },
     // Shop
     inventory: {

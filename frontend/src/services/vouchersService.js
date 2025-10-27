@@ -49,8 +49,11 @@ export const vouchersApi = {
     const queryString = params.toString();
     const url = `${CONFIG.site.serverUrl}/api/vouchers${queryString ? `?${queryString}` : ''}`;
     
+    console.log('🔍 Fetching vouchers from:', url);
     const response = await authenticatedRequest(url);
     const data = await response.json();
+    console.log('📦 Response:', { success: data.success, count: data.data?.length || 0 });
+    
     if (!data.success) throw new Error(data.message);
     return data.data;
   },
@@ -70,11 +73,13 @@ export const vouchersApi = {
   },
 
   async createVoucher(voucherData) {
+    console.log('➕ Creating voucher:', voucherData);
     const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/vouchers`, {
       method: 'POST',
       body: JSON.stringify(voucherData),
     });
     const data = await response.json();
+    console.log('✅ Voucher creation response:', data);
     if (!data.success) throw new Error(data.message);
     return data.data;
   },

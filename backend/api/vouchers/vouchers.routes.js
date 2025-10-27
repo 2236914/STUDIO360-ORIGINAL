@@ -16,6 +16,9 @@ router.get('/', authenticateTokenHybrid, async (req, res) => {
   try {
     const userId = req.user?.id;
     
+    console.log('🔵 GET /api/vouchers - userId:', userId);
+    console.log('User object:', req.user);
+    
     if (!userId) {
       return res.status(401).json({ 
         success: false, 
@@ -29,7 +32,11 @@ router.get('/', authenticateTokenHybrid, async (req, res) => {
       search: req.query.search,
     };
 
+    console.log('Fetching vouchers with filters:', filters);
+
     const vouchers = await vouchersService.getVouchers(userId, filters);
+    
+    console.log('✅ Returning vouchers to frontend:', vouchers.length);
     
     res.json({
       success: true,
@@ -162,6 +169,10 @@ router.post('/', authenticateTokenHybrid, async (req, res) => {
   try {
     const userId = req.user?.id;
     
+    console.log('POST /api/vouchers - userId:', userId);
+    console.log('User object:', req.user);
+    console.log('Request body:', req.body);
+    
     if (!userId) {
       return res.status(401).json({ 
         success: false, 
@@ -181,11 +192,14 @@ router.post('/', authenticateTokenHybrid, async (req, res) => {
     const newVoucher = await vouchersService.createVoucher(userId, voucherData);
     
     if (newVoucher.error) {
+      console.error('Voucher creation error:', newVoucher.error);
       return res.status(400).json({ 
         success: false, 
         message: newVoucher.error 
       });
     }
+    
+    console.log('Voucher created successfully:', newVoucher.id);
     
     res.status(201).json({
       success: true,

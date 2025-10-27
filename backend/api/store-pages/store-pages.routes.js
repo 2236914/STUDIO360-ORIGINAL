@@ -94,8 +94,15 @@ router.put('/homepage/featured-products', authenticateTokenHybrid, async (req, r
       });
     }
 
-    const featuredData = req.body;
+    const { productIds, ...featuredData } = req.body;
+    
+    // Update featured products section metadata
     const updatedFeatured = await storePagesService.upsertFeaturedProducts(userId, featuredData);
+    
+    // Update featured product items if productIds provided
+    if (productIds !== undefined) {
+      await storePagesService.upsertFeaturedProductItems(userId, productIds);
+    }
     
     if (!updatedFeatured) {
       return res.status(500).json({ 
@@ -1456,6 +1463,240 @@ router.delete('/customer-support/faq-chatbot/items/:id', authenticateTokenHybrid
     });
   } catch (error) {
     console.error('Error deleting FAQ Chatbot item:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+// ============================================
+// EVENTS ROUTES
+// ============================================
+
+/**
+ * @route GET /api/store-pages/events
+ * @desc Get all events
+ * @access Private
+ */
+router.get('/events', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    const events = await storePagesService.getEvents(userId);
+    
+    res.json({
+      success: true,
+      data: events
+    });
+  } catch (error) {
+    console.error('Error fetching events:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route GET /api/store-pages/events/active
+ * @desc Get active events (for public storefront)
+ * @access Private
+ */
+router.get('/events/active', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    const events = await storePagesService.getActiveEvents(userId);
+    
+    res.json({
+      success: true,
+      data: events
+    });
+  } catch (error) {
+    console.error('Error fetching active events:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route GET /api/store-pages/events/:id
+ * @desc Get event by ID
+ * @access Private
+ */
+router.get('/events/:id', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    const event = await storePagesService.getEventById(id, userId);
+    
+    if (!event) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: event
+    });
+  } catch (error) {
+    console.error('Error fetching event:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/store-pages/events
+ * @desc Create a new event
+ * @access Private
+ */
+router.post('/events', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    const { title, event_date } = req.body;
+
+    if (!title || !event_date) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Title and event date are required' 
+      });
+    }
+
+    const eventData = req.body;
+    const newEvent = await storePagesService.createEvent(userId, eventData);
+    
+    if (!newEvent) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to create event' 
+      });
+    }
+    
+    res.status(201).json({
+      success: true,
+      data: newEvent,
+      message: 'Event created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating event:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route PUT /api/store-pages/events/:id
+ * @desc Update event
+ * @access Private
+ */
+router.put('/events/:id', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    const eventData = req.body;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    const updatedEvent = await storePagesService.updateEvent(id, userId, eventData);
+    
+    if (!updatedEvent) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found or update failed' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: updatedEvent,
+      message: 'Event updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating event:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route DELETE /api/store-pages/events/:id
+ * @desc Delete event
+ * @access Private
+ */
+router.delete('/events/:id', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      return res.status(401).json({ 
+        success: false, 
+        message: 'User not authenticated' 
+      });
+    }
+
+    const success = await storePagesService.deleteEvent(id, userId);
+    
+    if (!success) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Event not found or delete failed' 
+      });
+    }
+    
+    res.json({
+      success: true,
+      message: 'Event deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting event:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Internal server error' 

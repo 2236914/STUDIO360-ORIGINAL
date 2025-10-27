@@ -344,6 +344,60 @@ router.get('/cash-receipts', (req, res) => {
 });
 
 /**
+ * @route   GET /api/bookkeeping/quarterly-sales
+ * @desc    Get quarterly sales totals for tax calculation
+ * @access  Private
+ */
+router.get('/quarterly-sales', async (req, res) => {
+  try {
+    const { quarter = 1, year = 2025 } = req.query;
+    
+    // Get all cash receipts from database
+    const receipts = await getCashReceiptsAll();
+    
+    // Filter by quarter
+    const quarterStart = new Date(year, (quarter - 1) * 3, 1);
+    const quarterEnd = new Date(year, quarter * 3, 0);
+    
+    const quarterlyReceipts = receipts.filter(receipt => {
+      const receiptDate = new Date(receipt.date);
+      return receiptDate >= quarterStart && receiptDate <= quarterEnd;
+    });
+    
+    // Calculate total sales (cr_sales column)
+    const totalSales = quarterlyReceipts.reduce((sum, receipt) => {
+      return sum + (receipt.cr_sales || 0);
+    }, 0);
+    
+    // Calculate total cash received (dr_cash column)
+    const totalCash = quarterlyReceipts.reduce((sum, receipt) => {
+      return sum + (receipt.dr_cash || 0);
+    }, 0);
+    
+    // Calculate total fees
+    const totalFees = quarterlyReceipts.reduce((sum, receipt) => {
+      return sum + (receipt.dr_fees || 0);
+    }, 0);
+    
+    ok(res, { 
+      message: 'Quarterly sales retrieved', 
+      data: { 
+        quarter: parseInt(quarter),
+        year: parseInt(year),
+        totalSales,
+        totalCash,
+        totalFees,
+        receiptCount: quarterlyReceipts.length,
+        receipts: quarterlyReceipts
+      } 
+    });
+  } catch (error) {
+    console.error('Error getting quarterly sales:', error);
+    res.status(500).json({ success: false, message: 'Error retrieving quarterly sales', error: error.message });
+  }
+});
+
+/**
  * @route   POST /api/bookkeeping/cash-receipts
  * @desc    Add cash receipt entry
  * @access  Private

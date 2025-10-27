@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -20,7 +20,6 @@ import InputAdornment from '@mui/material/InputAdornment';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
-import { RouterLink } from 'src/routes/components';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 import { useSetState } from 'src/hooks/use-set-state';
@@ -47,6 +46,8 @@ import {
 } from 'src/components/table';
 
 import { VoucherTableRow } from '../voucher-table-row-new';
+import { VoucherModal } from '../voucher-modal';
+import { vouchersApi } from 'src/services/vouchersService';
 
 // Empty voucher data - will be populated from database
 const VOUCHER_DATA = [];
@@ -69,9 +70,67 @@ export function VoucherListViewInvoiceStyle() {
   const table = useTable({ defaultOrderBy: 'createdAt' });
   const confirm = useBoolean();
 
-  const [tableData, setTableData] = useState(VOUCHER_DATA);
+  const [tableData, setTableData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [printMenuAnchor, setPrintMenuAnchor] = useState(null);
+  const [loading, setLoading] = useState(false);
+  
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('create'); // 'create', 'edit', 'view'
+  const [modalVoucherId, setModalVoucherId] = useState(null);
+
+  // Load vouchers from database
+  useEffect(() => {
+    loadVouchers();
+  }, []);
+
+  const loadVouchers = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading vouchers from API...');
+      const vouchers = await vouchersApi.getVouchers();
+      console.log('📋 Received vouchers from API:', vouchers);
+      console.log('📊 Voucher count:', vouchers?.length || 0);
+      
+      // Transform database data to match component format
+      const transformedVouchers = vouchers.map(voucher => ({
+        id: voucher.id,
+        name: voucher.name,
+        code: voucher.code,
+        description: voucher.description || '',
+        type: voucher.type,
+        value: parseFloat(voucher.discount_value || 0),
+        discount_value: parseFloat(voucher.discount_value || 0),
+        minOrderAmount: parseFloat(voucher.min_purchase_amount || 0),
+        min_purchase_amount: parseFloat(voucher.min_purchase_amount || 0),
+        max_discount_amount: voucher.max_discount_amount ? parseFloat(voucher.max_discount_amount) : null,
+        usageLimit: voucher.usage_limit,
+        usage_limit: voucher.usage_limit,
+        usedCount: voucher.usage_count || 0,
+        usage_count: voucher.usage_count || 0,
+        usage_limit_per_user: voucher.usage_limit_per_user || 1,
+        validFrom: voucher.start_date ? new Date(voucher.start_date) : new Date(),
+        validUntil: voucher.end_date ? new Date(voucher.end_date) : undefined,
+        start_date: voucher.start_date,
+        end_date: voucher.end_date,
+        status: voucher.status,
+        is_active: voucher.is_active,
+        created_at: voucher.created_at,
+        createdAt: voucher.created_at,
+        applicableTo: voucher.applicable_product_ids ? 'products' : (voucher.applicable_category_ids ? 'categories' : 'all'),
+        applicableIds: voucher.applicable_product_ids || voucher.applicable_category_ids || [],
+      }));
+      
+      setTableData(transformedVouchers);
+      console.log('✅ Vouchers loaded successfully:', transformedVouchers.length);
+    } catch (error) {
+      console.error('❌ Error loading vouchers:', error);
+      toast.error('Failed to load vouchers');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const { state: filters, setState: setFilters } = useSetState({
     name: '',
@@ -157,17 +216,39 @@ export function VoucherListViewInvoiceStyle() {
 
   const handleEditRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.vouchers.edit(id));
+      setModalMode('edit');
+      setModalVoucherId(id);
+      setModalOpen(true);
     },
-    [router]
+    []
   );
 
   const handleViewRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.vouchers.details(id));
+      setModalMode('view');
+      setModalVoucherId(id);
+      setModalOpen(true);
     },
-    [router]
+    []
   );
+
+  const handleCreateVoucher = useCallback(() => {
+    setModalMode('create');
+    setModalVoucherId(null);
+    setModalOpen(true);
+  }, []);
+
+  const handleModalClose = useCallback(() => {
+    setModalOpen(false);
+    setModalVoucherId(null);
+  }, []);
+
+  const handleModalSuccess = useCallback(() => {
+    // Reload vouchers after successful create/edit
+    loadVouchers();
+    setModalOpen(false);
+    setModalVoucherId(null);
+  }, []);
 
   const handleFilterStatus = useCallback(
     (status) => {
@@ -214,8 +295,7 @@ export function VoucherListViewInvoiceStyle() {
           ]}
           action={
             <Button
-              component={RouterLink}
-              href={paths?.dashboard?.vouchers?.new || '/dashboard/vouchers/new'}
+              onClick={handleCreateVoucher}
               variant="contained"
               startIcon={<Iconify icon="mingcute:add-line" />}
               sx={{
@@ -488,6 +568,15 @@ export function VoucherListViewInvoiceStyle() {
             Delete
           </Button>
         }
+      />
+
+      {/* Voucher Modal */}
+      <VoucherModal
+        open={modalOpen}
+        onClose={handleModalClose}
+        mode={modalMode}
+        voucherId={modalVoucherId}
+        onSuccess={handleModalSuccess}
       />
     </>
   );

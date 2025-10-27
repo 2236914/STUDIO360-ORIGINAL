@@ -30,7 +30,7 @@ const SOURCE_ICONS = {
   direct: 'eva:phone-fill'
 };
 
-export function MailDetails({ mail, empty, loading }) {
+export function MailDetails({ mail, empty, loading, onDelete, onStar, onArchive, onResolve, onReply }) {
   const theme = useTheme();
 
   if (loading) {
@@ -50,25 +50,25 @@ export function MailDetails({ mail, empty, loading }) {
   const renderHead = (
     <Stack direction="row" alignItems="center" sx={{ p: 3, pb: 2 }}>
       <Stack direction="row" alignItems="center" spacing={2} sx={{ flexGrow: 1 }}>
-        <IconButton>
+        <IconButton disabled>
           <Iconify icon="eva:arrow-back-fill" />
         </IconButton>
 
         <Stack direction="row" spacing={1}>
-          <IconButton>
+          <IconButton onClick={() => onArchive?.(mail.id)}>
             <Iconify icon="eva:archive-fill" />
           </IconButton>
-          <IconButton>
+          <IconButton onClick={() => onDelete?.(mail.id)} color="error">
             <Iconify icon="eva:trash-2-fill" />
           </IconButton>
-          <IconButton>
+          <IconButton onClick={() => onStar?.(mail.id)} color={mail.isStarred ? 'warning' : 'default'}>
             <Iconify icon={mail.isStarred ? "eva:star-fill" : "eva:star-outline"} />
           </IconButton>
         </Stack>
       </Stack>
 
       <Stack direction="row" spacing={1}>
-        <IconButton>
+        <IconButton disabled>
           <Iconify icon="eva:more-vertical-fill" />
         </IconButton>
       </Stack>
@@ -174,6 +174,7 @@ export function MailDetails({ mail, empty, loading }) {
         variant="contained"
         startIcon={<Iconify icon="eva:email-fill" />}
         sx={{ flex: 1 }}
+        onClick={() => onReply?.(mail)}
       >
         Reply
       </Button>
@@ -181,10 +182,11 @@ export function MailDetails({ mail, empty, loading }) {
         variant="outlined"
         startIcon={<Iconify icon="eva:checkmark-circle-2-fill" />}
         color="success"
+        onClick={() => onResolve?.(mail.id)}
       >
         Resolve
       </Button>
-      <IconButton color="primary">
+      <IconButton color="primary" disabled>
         <Iconify icon="eva:more-horizontal-fill" />
       </IconButton>
     </Stack>

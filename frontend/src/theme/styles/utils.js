@@ -61,7 +61,7 @@ export function hexToRgbChannel(hex) {
 }
 
 /**
- * Converts a hex color to RGB channels
+ * Converts a hex palette object to include RGB channels
  */
 export function createPaletteChannel(hexPalette) {
   const channelPalette = {};

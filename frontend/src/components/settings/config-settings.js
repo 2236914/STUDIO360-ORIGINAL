@@ -13,4 +13,5 @@ export const defaultSettings = {
   navColor: 'integrate',
   compactLayout: true,
   fontFamily: defaultFont,
+  borderRadius: 8, // Border radius for buttons, cards, etc. (in pixels)
 };

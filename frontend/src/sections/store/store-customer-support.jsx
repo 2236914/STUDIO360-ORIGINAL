@@ -412,7 +412,7 @@ export function StoreCustomerSupport() {
                     <Field.Text
                       name="gmailAddress"
                       label="Support Email Address"
-                      placeholder="support@kitschstudio.com"
+                      placeholder="kitschstudioofficial@gmail.com"
                       InputProps={{
                         startAdornment: (
                           <Iconify icon="solar:letter-bold" sx={{ color: 'text.secondary', mr: 1 }} />

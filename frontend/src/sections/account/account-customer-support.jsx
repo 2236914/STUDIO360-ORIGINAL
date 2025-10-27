@@ -65,9 +65,9 @@ export function AccountCustomerSupport() {
       whatsappNumber: '+63 912 345 6789',
       whatsappWelcomeMessage: 'Hi! Welcome to Kitsch Studio! How can we help you today?',
       whatsappBusinessHours: 'Monday to Friday, 9AM to 6PM',
-      gmailAddress: 'support@kitschstudio.com',
+      gmailAddress: 'kitschstudioofficial@gmail.com',
       gmailAutoReply: 'Thank you for contacting us! We will get back to you within 24 hours.',
-      gmailSignature: 'Best regards,\nKitsch Studio Support Team\nsupport@kitschstudio.com',
+      gmailSignature: 'Best regards,\nKitsch Studio Support Team\nkitschstudioofficial@gmail.com',
       faqChatbotName: 'Kitsch Assistant',
       faqWelcomeMessage: 'Hello! I\'m here to help answer your questions. You can ask me about shipping, orders, returns, and more!',
       faqFallbackMessage: 'I\'m sorry, I don\'t have an answer for that question. Let me connect you with our support team.',
@@ -294,7 +294,7 @@ export function AccountCustomerSupport() {
                     <Field.Text
                       name="gmailAddress"
                       label="Support Email Address"
-                      placeholder="support@kitschstudio.com"
+                      placeholder="kitschstudioofficial@gmail.com"
                       InputProps={{
                         startAdornment: (
                           <Iconify icon="solar:letter-bold" sx={{ color: 'text.secondary', mr: 1 }} />

@@ -40,11 +40,26 @@ export function isStoreSubdomain() {
   }
 
   const subdomain = getCurrentSubdomain();
-  const {hostname} = window.location;
+  const {hostname, pathname} = window.location;
   
-  // Check if we're on a subdomain route (like /[subdomain])
-  const {pathname} = window.location;
-  const isSubdomainRoute = pathname.startsWith('/') && pathname.split('/').length >= 2;
+  // For localhost development, check if we're on a subdomain route
+  if (hostname === 'localhost') {
+    const pathParts = pathname.split('/').filter(part => part.length > 0);
+    const firstPart = pathParts[0];
+    
+    // Check if first part is a valid store subdomain (not reserved routes)
+    const isValidStoreRoute = firstPart && 
+      firstPart !== 'dashboard' && 
+      firstPart !== 'admin' &&
+      firstPart !== 'api' &&
+      firstPart !== 'auth' &&
+      firstPart !== 'stores' &&
+      firstPart !== 'stores' &&
+      firstPart !== '_next' &&
+      firstPart !== 'favicon.ico';
+    
+    return isValidStoreRoute;
+  }
   
   // Check if subdomain exists and is not reserved
   const isValidStoreSubdomain = subdomain && 
@@ -54,7 +69,7 @@ export function isStoreSubdomain() {
     subdomain !== 'app' &&
     subdomain !== 'api';
   
-  return isValidStoreSubdomain || (isSubdomainRoute && !pathname.startsWith('/dashboard') && !pathname.startsWith('/admin'));
+  return isValidStoreSubdomain;
 }
 
 /**

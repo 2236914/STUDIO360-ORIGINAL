@@ -8,7 +8,6 @@ import {
   Grid,
   Chip,
   Stack,
-  Alert,
   Button,
   Select,
   Divider,
@@ -184,7 +183,6 @@ export default function AboutPage() {
       
       setSaveStatus('saved');
       toast.success('About page saved successfully!');
-      setTimeout(() => setSaveStatus(''), 3000);
       
       // Reload to get updated IDs from database
       await loadAboutData();
@@ -295,13 +293,6 @@ export default function AboutPage() {
         }
         sx={{ mb: { xs: 3, md: 5 } }}
       />
-
-      {/* Save Status Alert */}
-      {saveStatus === 'saved' && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          About page changes saved successfully!
-        </Alert>
-      )}
 
       <Grid container spacing={3}>
         {/* Editor Panel */}

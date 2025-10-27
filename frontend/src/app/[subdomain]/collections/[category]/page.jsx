@@ -4,8 +4,6 @@ import { use } from 'react';
 
 import { isStoreSubdomain } from 'src/utils/subdomain';
 
-import StoreCategoryPage from '../../../stores/[storeId]/collections/[category]/page';
-
 // ----------------------------------------------------------------------
 
 export default function SubdomainCategoryPage({ params }) {
@@ -13,8 +11,19 @@ export default function SubdomainCategoryPage({ params }) {
 
   // Check if this is a store subdomain
   if (isStoreSubdomain()) {
-    // Pass the subdomain as storeId to the existing store category page
-    return <StoreCategoryPage params={{ storeId: subdomain, category }} />;
+    // TODO: Implement category page content
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        flexDirection: 'column'
+      }}>
+        <h1>{category} Collection - {subdomain}</h1>
+        <p>Category page coming soon...</p>
+      </div>
+    );
   }
 
   // For non-store subdomains, show a 404

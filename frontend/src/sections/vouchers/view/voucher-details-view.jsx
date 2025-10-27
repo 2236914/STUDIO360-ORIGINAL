@@ -28,7 +28,7 @@ import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
-export function VoucherDetailsView({ id }) {
+export function VoucherDetailsView({ id, isModal = false, onClose }) {
   const router = useRouter();
   const [voucher, setVoucher] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,7 +43,11 @@ export function VoucherDetailsView({ id }) {
         
         if (!voucherData) {
           toast.error('Voucher not found');
-          router.push(paths.dashboard.vouchers.root);
+          if (isModal && onClose) {
+            onClose();
+          } else {
+            router.push(paths.dashboard.vouchers.root);
+          }
           return;
         }
 
@@ -72,7 +76,11 @@ export function VoucherDetailsView({ id }) {
       } catch (error) {
         console.error('Error fetching voucher:', error);
         toast.error('Failed to load voucher details');
-        router.push(paths.dashboard.vouchers.root);
+        if (isModal && onClose) {
+          onClose();
+        } else {
+          router.push(paths.dashboard.vouchers.root);
+        }
       } finally {
         setLoading(false);
       }
@@ -84,7 +92,11 @@ export function VoucherDetailsView({ id }) {
   }, [id, router]);
 
   const handleBack = () => {
-    router.push(paths.dashboard.vouchers.root);
+    if (isModal && onClose) {
+      onClose();
+    } else {
+      router.push(paths.dashboard.vouchers.root);
+    }
   };
 
   const getStatusConfig = (status) => {
@@ -148,84 +160,34 @@ export function VoucherDetailsView({ id }) {
 
   if (loading) {
     return (
-      <DashboardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-          <CircularProgress />
-        </Box>
-      </DashboardContent>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
     );
   }
 
   if (!voucher) {
     return (
-      <DashboardContent>
-        <CustomBreadcrumbs
-          heading="Voucher not found"
-          links={[
-            { name: 'Dashboard', href: paths.dashboard.root },
-            { name: 'Vouchers', href: paths.dashboard.vouchers.root },
-            { name: 'Not found' },
-          ]}
-          action={
-            <Button
-              variant="text"
-              color="inherit"
-              onClick={handleBack}
-              startIcon={<Iconify icon="eva:arrow-back-fill" />}
-              sx={{ 
-                color: 'text.primary',
-                '&:hover': { bgcolor: 'transparent' }
-              }}
-            >
-              Back
-            </Button>
-          }
-          sx={{ mb: { xs: 3, md: 5 } }}
-        />
-      </DashboardContent>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Voucher not found
+        </Typography>
+        <Button
+          variant="outlined"
+          onClick={handleBack}
+          startIcon={<Iconify icon="eva:arrow-back-fill" />}
+        >
+          Back
+        </Button>
+      </Box>
     );
   }
 
   const statusConfig = getStatusConfig(voucher.status);
   const typeConfig = getTypeConfig(voucher.type);
 
-  return (
-    <DashboardContent>
-      <CustomBreadcrumbs
-        heading={voucher.name}
-        links={[
-          { name: 'Dashboard', href: paths.dashboard.root },
-          { name: 'Vouchers', href: paths.dashboard.vouchers.root },
-          { name: voucher.name },
-        ]}
-        action={
-          <Stack direction="row" spacing={1}>
-            <Button
-              component={RouterLink}
-              href={paths.dashboard.vouchers.edit(voucher.id)}
-              variant="contained"
-              startIcon={<Iconify icon="eva:edit-fill" />}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="text"
-              color="inherit"
-              onClick={handleBack}
-              startIcon={<Iconify icon="eva:arrow-back-fill" />}
-              sx={{ 
-                color: 'text.primary',
-                '&:hover': { bgcolor: 'transparent' }
-              }}
-            >
-              Back
-            </Button>
-          </Stack>
-        }
-        sx={{ mb: { xs: 3, md: 5 } }}
-      />
-
-      <Grid container spacing={3}>
+  const content = (
+    <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
           <Card sx={{ p: 3 }}>
             <Stack spacing={3}>
@@ -380,7 +342,7 @@ export function VoucherDetailsView({ id }) {
                       Applicable To
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 'fontWeightMedium', textTransform: 'capitalize' }}>
-                      {voucher.applicableTo.replace('_', ' ')}
+                      {voucher.applicableTo?.replace('_', ' ') || 'All products'}
                     </Typography>
                   </Box>
 
@@ -407,6 +369,48 @@ export function VoucherDetailsView({ id }) {
           </Card>
         </Grid>
       </Grid>
+  );
+
+  if (isModal) {
+    return content;
+  }
+
+  return (
+    <DashboardContent>
+      <CustomBreadcrumbs
+        heading={voucher.name}
+        links={[
+          { name: 'Dashboard', href: paths.dashboard.root },
+          { name: 'Vouchers', href: paths.dashboard.vouchers.root },
+          { name: voucher.name },
+        ]}
+        action={
+          <Stack direction="row" spacing={1}>
+            <Button
+              component={RouterLink}
+              href={paths.dashboard.vouchers.edit(voucher.id)}
+              variant="contained"
+              startIcon={<Iconify icon="eva:edit-fill" />}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="text"
+              color="inherit"
+              onClick={handleBack}
+              startIcon={<Iconify icon="eva:arrow-back-fill" />}
+              sx={{ 
+                color: 'text.primary',
+                '&:hover': { bgcolor: 'transparent' }
+              }}
+            >
+              Back
+            </Button>
+          </Stack>
+        }
+        sx={{ mb: { xs: 3, md: 5 } }}
+      />
+      {content}
     </DashboardContent>
   );
 }

@@ -53,6 +53,15 @@ export const navData = [
     subheader: 'GENERAL',
     items: [
       { title: 'Dashboard', path: paths.dashboard.root, icon: ICONS.dashboard },
+      {
+        title: 'Forecasting',
+        path: paths.dashboard.forecasting.root,
+        icon: ICONS.forecasting,
+        children: [
+          { title: 'Finance', path: paths.dashboard.forecasting.finance },
+          { title: 'Product Performance', path: paths.dashboard.forecasting.productPerformance },
+        ],
+      },
     ],
   },
   /**
@@ -76,11 +85,6 @@ export const navData = [
         title: 'AI Bookkeeper',
         path: paths.dashboard.aiBookkeeper.root,
         icon: ICONS.aiBookkeeper,
-      },
-      {
-        title: 'Forecasting Analytics',
-        path: paths.dashboard.forecasting.root,
-        icon: ICONS.forecasting,
       },
     ],
   },
