@@ -49,8 +49,24 @@ export function canvasPreview(
   const pixelRatio = window.devicePixelRatio;
   // const pixelRatio = 1
 
-  canvas.width = Math.floor(crop.width * scaleX * pixelRatio);
-  canvas.height = Math.floor(crop.height * scaleY * pixelRatio);
+  // ReactCrop can provide crop values in '%' when the source crop uses percent units.
+  // Normalize to pixel values relative to the rendered image and then map to natural size.
+  const isPercent = crop?.unit === '%';
+  const cropPx = {
+    x: isPercent ? (crop.x / 100) * image.width : crop.x,
+    y: isPercent ? (crop.y / 100) * image.height : crop.y,
+    width: isPercent ? (crop.width / 100) * image.width : crop.width,
+    height: isPercent ? (crop.height / 100) * image.height : crop.height,
+  };
+
+  // If crop is invalid or zero-sized, bail early to avoid a 0x0 canvas which makes toBlob return null.
+  if (!cropPx.width || !cropPx.height) {
+    console.warn('canvasPreview: empty crop dimensions', crop);
+    return;
+  }
+
+  canvas.width = Math.floor(cropPx.width * scaleX * pixelRatio);
+  canvas.height = Math.floor(cropPx.height * scaleY * pixelRatio);
 
   ctx.scale(pixelRatio, pixelRatio);
   ctx.imageSmoothingQuality = 'high';
@@ -59,8 +75,8 @@ export function canvasPreview(
   const imagePositionX = (imagePosition.x * scaleX) / scale;
   const imagePositionY = (imagePosition.y * scaleY) / scale;
 
-  const cropX = crop.x * scaleX;
-  const cropY = crop.y * scaleY;
+  const cropX = (isPercent ? (crop.x / 100) * image.width : crop.x) * scaleX;
+  const cropY = (isPercent ? (crop.y / 100) * image.height : crop.y) * scaleY;
 
   const rotateRads = rotate * (Math.PI / 180);
   const centerX = image.naturalWidth / 2;

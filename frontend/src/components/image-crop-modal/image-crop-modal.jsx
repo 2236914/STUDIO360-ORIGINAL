@@ -169,22 +169,37 @@ export function ImageCropModal({
 
     previewCanvasRef.current.toBlob((blob) => {
       if (!blob) {
-        console.error('Failed to create blob');
-        throw new Error('Failed to create blob');
+        // Fallback: some browsers can return null if canvas is 0x0 or immediately after draw.
+        // Use toDataURL fallback to build a Blob.
+        try {
+          const dataUrl = previewCanvasRef.current.toDataURL('image/png');
+          const byteString = atob(dataUrl.split(',')[1] || '');
+          const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
+          const ab = new ArrayBuffer(byteString.length);
+          const ia = new Uint8Array(ab);
+          for (let i = 0; i < byteString.length; i += 1) {
+            ia[i] = byteString.charCodeAt(i);
+          }
+          blob = new Blob([ab], { type: mimeString });
+        } catch (e) {
+          console.error('Failed to create blob from dataURL fallback', e);
+          console.error('Failed to create blob');
+          return;
+        }
       }
       
       console.log('Blob created:', blob.size, 'bytes');
       
       // Create a new file from the cropped blob
-      const croppedFile = new File([blob], imageFile.name, {
-        type: blob.type,
+      const croppedFile = new File([blob], imageFile.name || 'cropped.png', {
+        type: blob.type || 'image/png',
         lastModified: Date.now(),
       });
       
       console.log('Cropped file created:', croppedFile.name, croppedFile.size);
       onSave(croppedFile);
       onClose();
-    });
+    }, 'image/png');
   }, [completedCrop, imageFile, onSave, onClose]);
 
   const handleClose = useCallback(() => {
