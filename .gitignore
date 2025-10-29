@@ -110,3 +110,18 @@ temp/
 
 # Local Netlify folder
 .netlify 
+
+# Python virtual environment
+.venv/
+venv/
+backend/python/.venv/
+
+# Uploaded files
+backend/uploads/*.xlsx
+backend/uploads/*.pdf
+backend/uploads/*.jpg
+backend/uploads/*.jpeg
+backend/uploads/*.png
+
+# Duplicate/backup directories
+JESSA-STUDIO360/
