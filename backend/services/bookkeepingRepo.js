@@ -74,6 +74,36 @@ async function insertCashReceiptDetails(receiptId, details) {
   }
   const { error } = await supabase.from('cash_receipt_journal').update(delta).eq('id', receiptId);
   if (error) throw error;
+  // Also persist corresponding balanced journal lines into general_journal so ledger can be derived
+  try {
+    // Fetch the updated receipt row to get date/reference/cash amount
+    const { data: receiptRows, error: rErr } = await supabase.from('cash_receipt_journal').select('id, date, reference, dr_cash, dr_fees, dr_returns, cr_sales, cr_income, cr_ar, remarks').eq('id', receiptId).limit(1).maybeSingle();
+    if (!rErr && receiptRows) {
+      const r = receiptRows;
+      const lines = [];
+      // Cash debit line (if present)
+      const cashAmt = Number(r.dr_cash || 0);
+      if (cashAmt) lines.push({ code: '101', description: 'Cash received', debit: cashAmt, credit: 0 });
+      // Details from the stored aggregated fields (prefer the details passed in)
+      for (const d of details) {
+        const code = String(d.code);
+        const debit = Number(d.debit || 0);
+        const credit = Number(d.credit || 0);
+        // Only push non-zero amounts
+        if (debit > 0 || credit > 0) lines.push({ code, description: '', debit, credit });
+      }
+      // Build a reference string for idempotency
+      const ref = r.reference || `CRJ${String(receiptId).padStart(4, '0')}`;
+      // Insert balanced journal only when there are at least 2 lines
+      if (lines.length >= 2) {
+        try {
+          await insertJournal({ date: r.date, reference: ref, remarks: r.remarks || ('Cash Receipt ' + ref), lines });
+        } catch (_) {
+          // ignore journaling failures (best-effort)
+        }
+      }
+    }
+  } catch (_) {}
   try { await refreshGeneralLedger(); } catch (_) {}
   return true;
 }
@@ -117,6 +147,29 @@ async function insertCashDisbursementDetails(disbursementId, details) {
   }
   const { error } = await supabase.from('cash_disbursement_book').update(delta).eq('id', disbursementId);
   if (error) throw error;
+  // Also persist corresponding balanced journal lines into general_journal so ledger can be derived
+  try {
+    const { data: drow, error: dErr } = await supabase.from('cash_disbursement_book').select('id, date, reference, payee_particulars, cr_cash, dr_materials, dr_supplies, dr_rent, dr_advertising, dr_delivery, dr_taxes_licenses, dr_misc, remarks').eq('id', disbursementId).limit(1).maybeSingle();
+    if (!dErr && drow) {
+      const r = drow;
+      const lines = [];
+      // Expense debits from details
+      for (const d of details) {
+        const code = String(d.code);
+        const debit = Number(d.debit || 0);
+        if (debit > 0) lines.push({ code, description: '', debit, credit: 0 });
+      }
+      // Cash credit line
+      const cashCredit = Number(r.cr_cash || 0);
+      if (cashCredit > 0) lines.push({ code: '101', description: 'Cash/Bank/eWallet', debit: 0, credit: cashCredit });
+      const ref = r.reference || `CDB${String(disbursementId).padStart(4, '0')}`;
+      if (lines.length >= 2) {
+        try {
+          await insertJournal({ date: r.date, reference: ref, remarks: r.payee_particulars || r.remarks || ('Cash Disbursement ' + ref), lines });
+        } catch (_) {}
+      }
+    }
+  } catch (_) {}
   try { await refreshGeneralLedger(); } catch (_) {}
   return true;
 }

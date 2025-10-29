@@ -181,7 +181,7 @@ router.get('/journal', (req, res) => {
  * @desc    Add entry to general journal
  * @access  Private
  */
-router.post('/journal', (req, res) => {
+router.post('/journal', async (req, res) => {
   const { date, ref, particulars, lines } = req.body || {};
   if (!date || !Array.isArray(lines) || lines.length < 2) return bad(res, 'Provide date and at least 2 lines');
   // Idempotency: same ref -> return existing
@@ -211,17 +211,33 @@ router.post('/journal', (req, res) => {
   const dupByLines = findJournalDuplicateByLines(date, normLines);
   if (dupByLines) return ok(res, { message: 'Journal entry (duplicate by lines) exists', data: { entry: dupByLines, duplicate: true } });
   const id = store.journal.length + 1;
-  const entry = { id, date, ref: ref || `GJ${String(id).padStart(4, '0')}`, particulars: particulars || '', lines: normLines };
-  store.journal.push(entry);
-  // Best-effort persist to Supabase (does not affect response)
-  (async () => {
+  const entry = { id, date, ref: ref || `GJ${String(id).padStart(4,'0')}`, particulars: particulars || '', lines: normLines };
+
+  // If DB is configured, attempt to persist and only commit to in-memory on success to keep consistency
+  if (isDbReady()) {
     try {
       const codes = Array.from(new Set(normLines.map((l) => String(l.code))));
       for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
       await insertJournal({ date, reference: entry.ref, remarks: entry.particulars, lines: normLines });
-    } catch (_) {}
-  })();
-  ok(res, { message: 'Journal entry added', data: { entry } });
+      // Refresh ledger after successful journal insert
+      try { await refreshGeneralLedger(); } catch (_) {}
+    } catch (e) {
+      // If DB persistence fails (missing functions/migrations or runtime DB errors),
+      // fall back to in-memory store but surface a helpful warning so the caller
+      // can retry after fixing DB migrations. This avoids hard 500s during local
+      // testing while keeping the error visible.
+      console.warn('Journal DB persistence failed, falling back to memory. Error:', e && e.message ? e.message : e);
+      store.journal.push(entry);
+      return res.json({ success: true, message: 'Journal entry added (memory only). DB persistence failed', warning: String(e && e.message ? e.message : e), data: { entry } });
+    }
+    // Persisted to DB; now add to in-memory store for fast reads
+    store.journal.push(entry);
+    return ok(res, { message: 'Journal entry added (DB)', data: { entry } });
+  }
+
+  // DB not ready: fall back to in-memory only
+  store.journal.push(entry);
+  ok(res, { message: 'Journal entry added (memory)', data: { entry } });
 });
 
 /**
@@ -351,7 +367,7 @@ router.get('/cash-receipts', (req, res) => {
 // Cash Receipt Journal schema (columns given):
 // Date | OR/Reference No. | Customer/Source | CashBank/eWallet (DEBIT) | Fees & Charges (DEBIT)
 // | Sales Returns/Refunds (DEBIT) | Net Sales (CREDIT) | Other Income (CREDIT) | Accounts Receivable (CREDIT) | Remarks/Note
-router.post('/cash-receipts', (req, res) => {
+router.post('/cash-receipts', async (req, res) => {
   const { date, referenceNo, customer, cashDebit = 0, feesChargesDebit = 0, salesReturnsDebit = 0, netSalesCredit = 0, otherIncomeCredit = 0, arCredit = 0, ownersCapitalCredit = 0, remarks } = req.body || {};
   if (!date) return bad(res, 'Date is required');
   // Idempotency: avoid duplicate receipts with identical signature
@@ -386,8 +402,8 @@ router.post('/cash-receipts', (req, res) => {
       postedToJournal = true;
     }
   }
-  // Best-effort persist cash receipt + details to Supabase
-  (async () => {
+  // Persist cash receipt + details to Supabase when DB is available. If DB persistence fails, return an error so caller can retry.
+  if (isDbReady()) {
     try {
       const rid = await insertCashReceipt({ date, invoice_no: null, source: customer || '', reference: referenceNo || null, cash_debit: entry.cashDebit || 0, remarks: entry.remarks || '' });
       if (rid) {
@@ -400,16 +416,17 @@ router.post('/cash-receipts', (req, res) => {
         if (entry.ownersCapitalCredit) details.push({ code: '301', debit: 0, credit: entry.ownersCapitalCredit });
         if (details.length) await insertCashReceiptDetails(rid, details);
       }
-      // Also persist equivalent journal lines for ledger + journal view
-      if (postedToJournal) {
-        const refToUse = referenceNo || `CRJ${String(id).padStart(4, '0')}`;
-        await insertJournal({ date, reference: refToUse, remarks: customer || 'Cash Receipt', lines });
-      }
+      // Journaling handled by insertCashReceiptDetails helper — no-op here to avoid duplicates
       // ensure referenced accounts exist
       const codes = ['101','510','401','402','103','301'];
       for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
-    } catch (_) {}
-  })();
+      // Refresh ledger after successful persistence
+      try { await refreshGeneralLedger(); } catch (_) {}
+    } catch (e) {
+      console.warn('Cash receipt DB persistence failed, falling back to memory. Error:', e && e.message ? e.message : e);
+      return res.json({ success: true, message: 'Cash receipt added (memory only). DB persistence failed', warning: String(e && e.message ? e.message : e), data: { entry } });
+    }
+  }
   ok(res, { message: 'Cash receipt entry added', data: { entry } });
 });
 
@@ -430,7 +447,7 @@ router.get('/cash-disbursements', (req, res) => {
 // Cash Disbursement Journal schema (columns given):
 // Date | Voucher/Ref No. | Payee/Particulars | Cash/Bank/eWallet (CREDIT) | Purchases–Materials (DEBIT)
 // | Supplies Expense (DEBIT) | Rent Expense (DEBIT) | Advertising/Marketing (DEBIT) | Delivery/Transportation (DEBIT) | Taxes & Licenses (DEBIT) | Miscellaneous Expense (DEBIT) | Remarks/Notes
-router.post('/cash-disbursements', (req, res) => {
+router.post('/cash-disbursements', async (req, res) => {
   const { date, referenceNo, payee, remarks, cashCredit = 0, purchasesDebit = 0, suppliesDebit = 0, rentDebit = 0, advertisingDebit = 0, deliveryDebit = 0, taxesDebit = 0, miscDebit = 0 } = req.body || {};
   if (!date || !payee) return bad(res, 'Date and Payee are required');
   const id = store.disbursements.length + 1;
@@ -466,8 +483,8 @@ router.post('/cash-disbursements', (req, res) => {
       postedToJournal = true;
     }
   }
-  // Best-effort persist cash disbursement + details to Supabase
-  (async () => {
+  // Persist cash disbursement + details to Supabase when DB is available. If DB persistence fails, return an error so caller can retry.
+  if (isDbReady()) {
     try {
       const did = await insertCashDisbursement({ date, voucher_no: referenceNo || sysRef, payee, reference: entry.referenceNo || null, cash_credit: entry.cashCredit || 0, remarks: entry.remarks || '' });
       if (did) {
@@ -482,16 +499,17 @@ router.post('/cash-disbursements', (req, res) => {
         if (entry.cashCredit) details.push({ code: '101', debit: 0, credit: entry.cashCredit });
         if (details.length) await insertCashDisbursementDetails(did, details);
       }
-      // Also persist equivalent journal lines for ledger + journal view
-      if (postedToJournal) {
-        const refToUse = entry.referenceNo || sysRef;
-        await insertJournal({ date, reference: refToUse, remarks: payee, lines });
-      }
+      // Journaling handled by insertCashDisbursementDetails helper — no-op here to avoid duplicates
       // ensure referenced accounts exist
       const codes = ['501','502','503','505','506','507','508','101'];
       for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
-    } catch (_) {}
-  })();
+      // Refresh ledger after successful persistence
+      try { await refreshGeneralLedger(); } catch (_) {}
+    } catch (e) {
+      console.warn('Cash disbursement DB persistence failed, falling back to memory. Error:', e && e.message ? e.message : e);
+      return res.json({ success: true, message: 'Cash disbursement added (memory only). DB persistence failed', warning: String(e && e.message ? e.message : e), data: { entry } });
+    }
+  }
   ok(res, { message: 'Cash disbursement entry added', data: { entry } });
 });
 

@@ -1,0 +1,18 @@
+{
+  "first": {
+    "code": "101",
+    "accountTitle": "Cash on Hand",
+    "debit": 1490.62,
+    "credit": 692,
+    "balance": 798.6199999999999,
+    "balanceSide": "debit"
+  },
+  "last": {
+    "code": "501",
+    "accountTitle": "Purchases (COGS)",
+    "debit": 692,
+    "credit": 0,
+    "balance": 692,
+    "balanceSide": "debit"
+  }
+}

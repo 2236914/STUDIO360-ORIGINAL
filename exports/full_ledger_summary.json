@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "data": {
+    "summary": [
+      {
+        "code": "101",
+        "accountTitle": "Cash on Hand",
+        "debit": 1490.62,
+        "credit": 692,
+        "balance": 798.6199999999999,
+        "balanceSide": "debit"
+      },
+      {
+        "code": "510",
+        "accountTitle": "Platform Fees & Charges",
+        "debit": 264.42,
+        "credit": 0,
+        "balance": 264.42,
+        "balanceSide": "debit"
+      },
+      {
+        "code": "401",
+        "accountTitle": "Sales Revenue",
+        "debit": 0,
+        "credit": 1435.24,
+        "balance": 1435.24,
+        "balanceSide": "credit"
+      },
+      {
+        "code": "501",
+        "accountTitle": "Purchases (COGS)",
+        "debit": 692,
+        "credit": 0,
+        "balance": 692,
+        "balanceSide": "debit"
+      }
+    ]
+  }
+}

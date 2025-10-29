@@ -1,0 +1,353 @@
+{
+  "success": true,
+  "data": {
+    "entries": [
+      {
+        "id": "2024-08-27||SH-2024-08-27",
+        "date": "2024-08-27",
+        "ref": "SH-2024-08-27",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 110,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -17.76,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 130
+          }
+        ]
+      },
+      {
+        "id": "2024-08-28||SH-2024-08-28",
+        "date": "2024-08-28",
+        "ref": "SH-2024-08-28",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 83,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -13.76,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 99
+          }
+        ]
+      },
+      {
+        "id": "2024-08-30||SH-2024-08-30",
+        "date": "2024-08-30",
+        "ref": "SH-2024-08-30",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 205,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -32.76,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 240
+          }
+        ]
+      },
+      {
+        "id": "2024-08-31||SH-2024-08-31",
+        "date": "2024-08-31",
+        "ref": "SH-2024-08-31",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 222,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -35.76,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 260
+          }
+        ]
+      },
+      {
+        "id": "2025-04-06||TI-2025/04/06",
+        "date": "2025-04-06",
+        "ref": "TI-2025/04/06",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 108.78,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -21.22,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 87.56
+          }
+        ]
+      },
+      {
+        "id": "2025-04-28||TI-2025/04/28",
+        "date": "2025-04-28",
+        "ref": "TI-2025/04/28",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 70.63,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -14.37,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 56.26
+          }
+        ]
+      },
+      {
+        "id": "2025-05-16||TI-2025/05/16",
+        "date": "2025-05-16",
+        "ref": "TI-2025/05/16",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 143.2,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -26.8,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 116.4
+          }
+        ]
+      },
+      {
+        "id": "2025-06-03||TI-2025/06/03",
+        "date": "2025-06-03",
+        "ref": "TI-2025/06/03",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 70.75,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -14.25,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 56.5
+          }
+        ]
+      },
+      {
+        "id": "2025-06-10||TI-2025/06/10",
+        "date": "2025-06-10",
+        "ref": "TI-2025/06/10",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 70.7,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -14.3,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 56.4
+          }
+        ]
+      },
+      {
+        "id": "2025-06-17||TI-2025/06/17",
+        "date": "2025-06-17",
+        "ref": "TI-2025/06/17",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 406.56,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Platform Fees & Charges",
+            "debit": -73.44,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Sales Revenue",
+            "debit": 0,
+            "credit": 333.12
+          }
+        ]
+      },
+      {
+        "id": "2025-09-17||CDB-001",
+        "date": "2025-09-17",
+        "ref": "CDB-001",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Purchases (COGS)",
+            "debit": 53,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 0,
+            "credit": 53
+          }
+        ]
+      },
+      {
+        "id": "2025-09-17||CDB-002",
+        "date": "2025-09-17",
+        "ref": "CDB-002",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Purchases (COGS)",
+            "debit": 131,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 0,
+            "credit": 131
+          }
+        ]
+      },
+      {
+        "id": "2025-09-20||CDB-003",
+        "date": "2025-09-20",
+        "ref": "CDB-003",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Purchases (COGS)",
+            "debit": 426,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 0,
+            "credit": 426
+          }
+        ]
+      },
+      {
+        "id": "2025-10-07||CDB-004",
+        "date": "2025-10-07",
+        "ref": "CDB-004",
+        "particulars": "",
+        "lines": [
+          {
+            "code": null,
+            "description": "Purchases (COGS)",
+            "debit": 82,
+            "credit": 0
+          },
+          {
+            "code": null,
+            "description": "Cash on Hand",
+            "debit": 0,
+            "credit": 82
+          }
+        ]
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 100,
+      "total": 38,
+      "totalPages": 1
+    }
+  }
+}

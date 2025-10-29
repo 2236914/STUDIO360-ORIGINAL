@@ -1,0 +1,23 @@
+{
+  "first": {
+    "id": "2024-08-27||SH-2024-08-27",
+    "date": "2024-08-27",
+    "ref": "SH-2024-08-27",
+    "particulars": "",
+    "lines": [
+      { "code": null, "description": "Cash on Hand", "debit": 110, "credit": 0 },
+      { "code": null, "description": "Platform Fees & Charges", "debit": -17.76, "credit": 0 },
+      { "code": null, "description": "Sales Revenue", "debit": 0, "credit": 130 }
+    ]
+  },
+  "last": {
+    "id": "2025-10-07||CDB-004",
+    "date": "2025-10-07",
+    "ref": "CDB-004",
+    "particulars": "",
+    "lines": [
+      { "code": null, "description": "Purchases (COGS)", "debit": 82, "credit": 0 },
+      { "code": null, "description": "Cash on Hand", "debit": 0, "credit": 82 }
+    ]
+  }
+}
