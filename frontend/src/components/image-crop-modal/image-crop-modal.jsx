@@ -162,17 +162,50 @@ export function ImageCropModal({
       hasImage: !!imageFile 
     });
     
-    if (!previewCanvasRef.current || !completedCrop || !imageFile) {
+    if (!completedCrop || !imageFile) {
       console.error('Missing required elements for save');
       return;
     }
 
-    previewCanvasRef.current.toBlob((blob) => {
+    // Ensure we have a canvas with the current crop. If the preview canvas is not
+    // mounted yet, render into a temporary offscreen canvas first.
+    const ensureCanvas = () => {
+      if (previewCanvasRef.current && previewCanvasRef.current.width && previewCanvasRef.current.height) {
+        return previewCanvasRef.current;
+      }
+      if (!imgRef.current) {
+        console.error('Image element not ready');
+        return null;
+      }
+      const temp = document.createElement('canvas');
+      try {
+        canvasPreview(
+          imgRef.current,
+          temp,
+          completedCrop,
+          scale,
+          rotate,
+          imagePosition
+        );
+      } catch (e) {
+        console.error('Failed to render temp canvas', e);
+        return null;
+      }
+      return temp;
+    };
+
+    const canvasForSave = ensureCanvas();
+    if (!canvasForSave) {
+      console.error('Missing required elements for save');
+      return;
+    }
+
+    canvasForSave.toBlob((blob) => {
       if (!blob) {
         // Fallback: some browsers can return null if canvas is 0x0 or immediately after draw.
         // Use toDataURL fallback to build a Blob.
         try {
-          const dataUrl = previewCanvasRef.current.toDataURL('image/png');
+          const dataUrl = canvasForSave.toDataURL('image/png');
           const byteString = atob(dataUrl.split(',')[1] || '');
           const mimeString = dataUrl.split(',')[0].split(':')[1].split(';')[0];
           const ab = new ArrayBuffer(byteString.length);
@@ -520,7 +553,7 @@ export function ImageCropModal({
           <Button
             onClick={handleSave}
             variant="contained"
-            disabled={!completedCrop}
+            disabled={!completedCrop || !imageFile}
           >
             Save Cropped Image
           </Button>
@@ -557,17 +590,7 @@ export function ImageCropModal({
         Hidden download
       </a>
 
-      {/* Canvas preview effect */}
-      {completedCrop && (
-        <canvas
-          ref={previewCanvasRef}
-          style={{
-            position: 'absolute',
-            top: '-200vh',
-            visibility: 'hidden',
-          }}
-        />
-      )}
+      {/* Remove duplicate hidden canvas; the visible preview canvas is used */}
     </>
   );
 }
