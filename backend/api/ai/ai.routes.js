@@ -937,33 +937,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         const canonical = canonicalizeStructured({ rawText: '', structured, meta });
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        // Auto-posting on upload is disabled by default to avoid persisting during AI recognition.
-        // Only run tryAutoPostDocument when explicitly requested via ?post=1 or when the
-        // server environment enables ALLOW_AUTO_POST_UPLOAD=1 (not recommended for normal use).
-        const allowAutoPost = req.query.post === '1' || String(process.env.ALLOW_AUTO_POST_UPLOAD || '').toLowerCase() === '1';
-        let autoPostResult = { posted: false, reason: 'disabled' };
-        if (allowAutoPost) {
-          (async () => {
-            try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
-            responded = true;
-            return res.json({
-              success: true,
-              message: 'Spreadsheet parsed successfully',
-              data: {
-                id,
-                ...meta,
-                text: '',
-                structured,
-                canonical,
-                fileUrl: meta.fileUrl,
-                warnings: [],
-                diagnostics: { rows: json.length, sheet: sheetName, detectedColumns: { amountCol, dateCol, descCol, invoiceCol, sellerCol } },
-                autoPost: autoPostResult
-              }
-            });
-          })();
-        } else {
-          // Respond immediately without posting to bookkeeping
+        // Auto-post best-effort
+        let autoPostResult = { posted: false, reason: 'skipped' };
+        (async () => {
+          try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
           responded = true;
           return res.json({
             success: true,
@@ -980,7 +957,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
               autoPost: autoPostResult
             }
           });
-        }
+        })();
       } catch (e) {
         return res.status(500).json({ success: false, message: 'Spreadsheet parse failed', error: e.message });
       }
@@ -1108,32 +1085,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        // Auto-posting on upload is disabled by default to avoid persisting during AI recognition.
-        // Only run tryAutoPostDocument when explicitly requested via ?post=1 or when the
-        // server environment enables ALLOW_AUTO_POST_UPLOAD=1.
-        const allowAutoPost = req.query.post === '1' || String(process.env.ALLOW_AUTO_POST_UPLOAD || '').toLowerCase() === '1';
-        let autoPostResult = { posted: false, reason: 'disabled' };
-        if (allowAutoPost) {
-          (async () => {
-            try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
-            responded = true;
-            return res.json({
-              success: true,
-              message: 'File processed successfully',
-              data: {
-                id,
-                ...meta,
-                text: parsed.text,
-                structured: parsed.structured || null,
-                canonical,
-                fileUrl: meta.fileUrl,
-                warnings: parsed.warnings || [],
-                diagnostics: parsed.diagnostics || null,
-                autoPost: autoPostResult
-              }
-            });
-          })();
-        } else {
+        // Auto-post best-effort
+        let autoPostResult = { posted: false, reason: 'skipped' };
+        (async () => {
+          try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
           responded = true;
           return res.json({
             success: true,
@@ -1150,7 +1105,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
               autoPost: autoPostResult
             }
           });
-        }
+        })();
       } catch (e) {
         responded = true;
         const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');

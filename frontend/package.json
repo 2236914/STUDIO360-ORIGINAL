@@ -5,7 +5,7 @@
   "description": "Next Starter & JavaScript",
   "private": true,
   "scripts": {
-  "dev": "next dev -p 3033",
+    "dev": "next dev -p 3033 --webpack",
     "start": "next start -p 3033",
     "build": "next build",
     "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
