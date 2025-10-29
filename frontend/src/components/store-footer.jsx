@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -10,8 +10,10 @@ import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import Avatar from '@mui/material/Avatar';
 
 import { useRouter } from 'src/routes/hooks';
+import { storefrontApi } from 'src/utils/api/storefront';
 
 // ----------------------------------------------------------------------
 
@@ -20,6 +22,22 @@ export function StoreFooter({ storeId }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [emailError, setEmailError] = useState(false);
+  const [shopInfo, setShopInfo] = useState(null);
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (!storeId) return;
+        const resp = await storefrontApi.getShopInfo(storeId);
+        const data = resp?.data || resp;
+        if (active) setShopInfo(data || null);
+      } catch (_) {
+        if (active) setShopInfo(null);
+      }
+    })();
+    return () => { active = false; };
+  }, [storeId]);
 
   const handleEmailSubmit = (e) => {
     e.preventDefault();
@@ -44,11 +62,18 @@ export function StoreFooter({ storeId }) {
           {/* Column 1: Logo */}
           <Grid item xs={12} md={4}>
             <Stack spacing={2}>
-              <Typography variant="h5" sx={{ fontWeight: 700, color: 'text.primary' }}>
-                Store Name
-              </Typography>
+              <Stack direction="row" spacing={1.5} alignItems="center">
+                {shopInfo?.profile_photo_url ? (
+                  <Avatar src={shopInfo.profile_photo_url} alt={shopInfo.shop_name || 'Store'} sx={{ width: 40, height: 40 }} />
+                ) : (
+                  <Avatar sx={{ width: 40, height: 40 }}>{(shopInfo?.shop_name || 'S').charAt(0).toUpperCase()}</Avatar>
+                )}
+                <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                  {shopInfo?.shop_name || 'Store Name'}
+                </Typography>
+              </Stack>
               <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                Quality products for your needs.
+                {shopInfo?.shop_category ? `Category: ${shopInfo.shop_category}` : 'Quality products for your needs.'}
               </Typography>
             </Stack>
           </Grid>

@@ -20,7 +20,18 @@ async function authenticatedRequest(url, options = {}) {
       },
     };
 
-    const response = await fetch(url, { ...options, ...defaultOptions });
+    // In the browser, prefer relative '/api' to use Next.js proxy and avoid CORS/port issues
+    let finalUrl = url;
+    if (typeof window !== 'undefined') {
+      try {
+        const base = (CONFIG.site.serverUrl || '').replace(/\/$/, '');
+        if (base && url.startsWith(base)) {
+          finalUrl = url.slice(base.length);
+        }
+      } catch (_) { /* noop */ }
+    }
+
+    const response = await fetch(finalUrl, { ...options, ...defaultOptions });
     
     // If we get a 401/403, the token might be invalid
     if (response.status === 401 || response.status === 403) {
@@ -140,9 +151,15 @@ export const homepageApi = {
   },
 
   async createPlatform(platformData) {
+    // Backend validates platform_name and platform_url; send both for compatibility
+    const payload = {
+      ...platformData,
+      platform_name: platformData.name || platformData.platform_name,
+      platform_url: platformData.url || platformData.platform_url,
+    };
     const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/homepage/platforms`, {
       method: 'POST',
-      body: JSON.stringify(platformData),
+      body: JSON.stringify(payload),
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
@@ -172,6 +189,16 @@ export const homepageApi = {
     const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/homepage/announcement`, {
       method: 'PUT',
       body: JSON.stringify(announcementData),
+    });
+    const data = await response.json();
+    if (!data.success) throw new Error(data.message);
+    return data.data;
+  },
+
+  async updateWelcomePopup(popupData) {
+    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/store-pages/homepage/welcome-popup`, {
+      method: 'PUT',
+      body: JSON.stringify(popupData),
     });
     const data = await response.json();
     if (!data.success) throw new Error(data.message);

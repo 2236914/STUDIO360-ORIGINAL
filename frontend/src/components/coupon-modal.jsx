@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -23,9 +23,6 @@ export default function CouponModal({ storeId }) {
   const [revealed, setRevealed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  const storageKey = useMemo(() => `coupon_shown_${storeId}`, [storeId]);
-  const cooldownKey = useMemo(() => `coupon_cooldown_${storeId}`, [storeId]);
-
   useEffect(() => {
     let isMounted = true;
 
@@ -33,14 +30,11 @@ export default function CouponModal({ storeId }) {
       try {
         if (!storeId) return;
 
-        const alreadyShown = typeof window !== 'undefined' ? localStorage.getItem(storageKey) : '1';
-        const cooldownUntil = typeof window !== 'undefined' ? Number(localStorage.getItem(cooldownKey) || 0) : 0;
-        const now = Date.now();
         // Prefer dedicated coupon endpoint; fallback to homepage if needed
         let couponData = null;
         const couponResp = await storefrontApi.getCoupon(storeId);
-        if (couponResp?.success && couponResp?.data) {
-          couponData = couponResp.data;
+        if (couponResp?.success) {
+          couponData = couponResp.data || null;
         } else {
           const homeResp = await storefrontApi.getHomepage(storeId);
           couponData = homeResp?.data?.coupon || null;
@@ -48,9 +42,8 @@ export default function CouponModal({ storeId }) {
 
         if (isMounted) {
           setCoupon(couponData);
-          // On storefront, always treat coupon as enabled if it exists (ignore dashboard enabled flag for modal)
-          const enabled = Boolean(couponData);
-          const shouldOpen = enabled && (!alreadyShown || now > cooldownUntil);
+          // Always show modal if coupon is enabled; no cooldown
+          const shouldOpen = Boolean(couponData?.enabled);
           setOpen(shouldOpen);
         }
       } catch (err) {
@@ -64,18 +57,10 @@ export default function CouponModal({ storeId }) {
     return () => {
       isMounted = false;
     };
-  }, [storeId, storageKey]);
+  }, [storeId]);
 
   const handleClose = () => {
     setOpen(false);
-    try {
-      localStorage.setItem(storageKey, '1');
-      // Set a 7-day cooldown so it can reappear after that period
-      const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-      localStorage.setItem(cooldownKey, String(Date.now() + sevenDaysMs));
-    } catch (_) {
-      // ignore
-    }
   };
 
   const handleReveal = () => {

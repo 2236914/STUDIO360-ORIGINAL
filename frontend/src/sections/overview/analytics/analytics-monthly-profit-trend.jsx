@@ -68,7 +68,8 @@ export function AnalyticsMonthlyProfitTrend() {
             try {
               const ac = new AbortController();
               const t = setTimeout(() => ac.abort(), 2500);
-              const r = await fetch(`${base}/api/health`, { signal: ac.signal });
+              // Use backend status endpoint for detection
+              const r = await fetch(`${base}/api/status`, { signal: ac.signal });
               clearTimeout(t);
               if (r.ok) {
                 try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}

@@ -10,7 +10,8 @@ import {
   AnalyticsWidgetSummary,
   AnalyticsSalesAnalytics,
   AnalyticsMonthlyProfitTrend,
-  AnalyticsProductPerformance
+  AnalyticsProductPerformance,
+  AnalyticsTaxableIncome
 } from 'src/sections/overview/analytics';
 
 // ----------------------------------------------------------------------
@@ -70,14 +71,13 @@ export default async function Page() {
         </Grid>
       </Grid>
 
-      {/* Third Row - AI Forecast and Top Product Chart */}
+      {/* Third Row - AI Forecast and Taxable Income */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid xs={12} lg={6}>
           <AnalyticsAiForecast />
         </Grid>
         <Grid xs={12} lg={6}>
-          {/* This will render only the chart part, not the table */}
-          <AnalyticsProductPerformance hideHeader={true} showTableOnly={false} showChartOnly={true} />
+          <AnalyticsTaxableIncome />
         </Grid>
       </Grid>
 

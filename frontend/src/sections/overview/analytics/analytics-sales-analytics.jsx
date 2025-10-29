@@ -74,7 +74,8 @@ export function AnalyticsSalesAnalytics() {
             try {
               const ac = new AbortController();
               const t = setTimeout(() => ac.abort(), 2500);
-              const r = await fetch(`${base}/api/health`, { signal: ac.signal });
+              // Prefer backend status endpoint
+              const r = await fetch(`${base}/api/status`, { signal: ac.signal });
               clearTimeout(t);
               if (r.ok) {
                 try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}

@@ -573,6 +573,31 @@ router.put('/homepage/announcement', authenticateTokenHybrid, async (req, res) =
   }
 });
 
+/**
+ * @route PUT /api/store-pages/homepage/welcome-popup
+ * @desc Update welcome popup settings
+ * @access Private
+ */
+router.put('/homepage/welcome-popup', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+
+    const popupData = req.body;
+    const updated = await storePagesService.upsertWelcomePopup(userId, popupData);
+    if (!updated) {
+      return res.status(500).json({ success: false, message: 'Failed to update welcome popup' });
+    }
+
+    res.json({ success: true, data: updated, message: 'Welcome popup updated successfully' });
+  } catch (error) {
+    console.error('Error updating welcome popup:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // ============================================
 // ABOUT PAGE ROUTES
 // ============================================

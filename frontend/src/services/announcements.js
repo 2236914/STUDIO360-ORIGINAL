@@ -16,16 +16,22 @@ async function authFetch(path, options = {}) {
 // Public: Get active system announcements
 async function listSystemAnnouncements() {
   try {
-    const url = `${CONFIG.site.serverUrl}/api/announcements/system`;
+    const isBrowser = typeof window !== 'undefined';
+    const url = isBrowser
+      ? '/api/announcements/system' // Use Next.js rewrite in browser to avoid CORS
+      : `${CONFIG.site.serverUrl}/api/announcements/system`;
+
     console.log('[Announcements] Fetching from:', url);
-    
-    const res = await fetch(url, { 
+
+    const res = await fetch(url, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
+      // Avoid caching stale announcements
+      cache: 'no-store',
     });
-    
+
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json?.message || 'Request failed');
     return json?.data ?? json;

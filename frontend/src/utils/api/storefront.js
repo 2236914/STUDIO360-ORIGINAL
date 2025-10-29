@@ -1,4 +1,4 @@
-import axios from 'axios';
+import client from 'src/utils/api/client';
 
 import { CONFIG } from 'src/config-global';
 
@@ -13,10 +13,8 @@ export const storefrontApi = {
    */
   async testConnection() {
     try {
-      console.log(`Testing connection to: ${API_URL}/api/status`);
-      const response = await axios.get(`${API_URL}/api/status`, {
-        timeout: 5000,
-      });
+      console.log(`Testing connection to: /api/status (base: ${API_URL})`);
+      const response = await client.get(`/status`, { timeout: 5000 });
       console.log('Backend connection test successful:', response.data);
       return { success: true, data: response.data };
     } catch (error) {
@@ -31,12 +29,7 @@ export const storefrontApi = {
    */
   async getAboutPage(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/about`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/about`);
       return response.data;
     } catch (error) {
       console.error('Error fetching about page:', error);
@@ -50,12 +43,7 @@ export const storefrontApi = {
    */
   async getShippingPage(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/shipping`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/shipping`);
       return response.data;
     } catch (error) {
       console.error('Error fetching shipping page:', error);
@@ -69,12 +57,7 @@ export const storefrontApi = {
    */
   async getFAQs(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/faqs`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/faqs`);
       return response.data;
     } catch (error) {
       console.error('Error fetching FAQs:', error);
@@ -88,12 +71,7 @@ export const storefrontApi = {
    */
   async getShopInfo(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/info`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/info`);
       return response.data;
     } catch (error) {
       console.error('Error fetching shop info:', error);
@@ -107,14 +85,7 @@ export const storefrontApi = {
    */
   async getFeaturedProducts(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/featured-products`, {
-        timeout: 10000,
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/featured-products`);
       return response.data;
     } catch (error) {
       console.error('Error fetching featured products:', error);
@@ -128,20 +99,13 @@ export const storefrontApi = {
    */
   async getProducts(shopName) {
     try {
-      console.log(`Fetching products from: ${API_URL}/api/public/storefront/${shopName}/products`);
+      console.log(`Fetching products from: /api/public/storefront/${shopName}/products`);
       console.log(`API_URL is: ${API_URL}`);
       
       // Add a small delay to ensure backend is ready
       await new Promise(resolve => setTimeout(resolve, 100));
       
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/products`, {
-        timeout: 10000, // 10 second timeout
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/products`);
       console.log('Products response:', response.data);
       return response.data;
     } catch (error) {
@@ -167,12 +131,7 @@ export const storefrontApi = {
    */
   async getCategories(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/categories`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/categories`);
       return response.data;
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -186,12 +145,7 @@ export const storefrontApi = {
    */
   async getEvents(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/events`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/events`);
       return response.data;
     } catch (error) {
       console.error('Error fetching events:', error);
@@ -205,12 +159,7 @@ export const storefrontApi = {
    */
   async getPartners(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/partners`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/partners`);
       return response.data;
     } catch (error) {
       console.error('Error fetching partners:', error);
@@ -224,12 +173,7 @@ export const storefrontApi = {
    */
   async getHomepage(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/homepage`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/homepage`);
       return response.data;
     } catch (error) {
       console.error('Error fetching homepage data:', error);
@@ -242,13 +186,8 @@ export const storefrontApi = {
    */
   async getCoupon(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/coupon`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
-      return response.data;
+      const response = await client.get(`/public/storefront/${shopName}/coupon`);
+      return { success: true, data: response.data };
     } catch (error) {
       console.error('Error fetching coupon data:', error);
       return { success: false, data: null };
@@ -260,13 +199,9 @@ export const storefrontApi = {
    */
   async subscribeNewsletter(shopName, { email, name }) {
     try {
-      const response = await axios.post(`${API_URL}/api/assistant/subscribe/${shopName}`, {
+      const response = await client.post(`/assistant/subscribe/${shopName}`, {
         email,
         name,
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-        },
       });
       return response.data;
     } catch (error) {
@@ -281,12 +216,7 @@ export const storefrontApi = {
    */
   async getSplitFeature(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/split-feature`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/split-feature`);
       return response.data;
     } catch (error) {
       console.error('Error fetching split feature:', error);
@@ -295,22 +225,33 @@ export const storefrontApi = {
   },
 
   /**
-   * Fetch coupon settings for a store
-   * @param {string} shopName - The shop name/slug (e.g., 'kitschstudio')
+   * Fetch welcome popup for a store (public)
    */
-  async getCoupon(shopName) {
+  async getWelcomePopup(shopName) {
     try {
-      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/coupon`, {
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      });
+      const response = await client.get(`/public/storefront/${shopName}/welcome-popup`);
       return response.data;
     } catch (error) {
-      console.error('Error fetching coupon:', error);
+      console.error('Error fetching welcome popup:', error);
       throw error;
     }
   },
+
+  /**
+   * Validate voucher code publicly for a storefront
+   */
+  async validateVoucher(shopName, code, cartTotal = 0) {
+    try {
+      const response = await client.get(`/public/storefront/${shopName}/voucher/validate`, {
+        params: { code, cart_total: cartTotal },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error validating voucher:', error);
+      return { success: false, data: { is_valid: false } };
+    }
+  },
+
+  // (duplicate getCoupon removed; consolidated above)
 };
 

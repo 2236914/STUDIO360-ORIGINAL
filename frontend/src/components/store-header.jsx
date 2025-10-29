@@ -8,12 +8,14 @@ import Badge from '@mui/material/Badge';
 import Button from '@mui/material/Button';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
+import Avatar from '@mui/material/Avatar';
 import IconButton from '@mui/material/IconButton';
 
 import { useRouter } from 'src/routes/hooks';
 
 import { Iconify } from 'src/components/iconify';
 import { HydrationBoundary } from 'src/components/hydration-boundary';
+import { storefrontApi } from 'src/utils/api/storefront';
 
 import { useCheckoutContext } from 'src/sections/checkout/context';
 
@@ -48,6 +50,7 @@ function StoreIdExtractor({ propStoreId, onStoreIdChange }) {
 export function StoreHeader({ storeId: propStoreId }) {
   const router = useRouter();
   const [storeId, setStoreId] = useState(propStoreId || 'kitschstudio');
+  const [shopInfo, setShopInfo] = useState(null);
   
   // Get cart count from checkout context
   let cartCount = 0;
@@ -66,6 +69,22 @@ export function StoreHeader({ storeId: propStoreId }) {
       setStoreId(propStoreId);
     }
   }, [propStoreId]);
+
+  // Load shop info (logo + name) for dynamic header branding
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        if (!storeId) return;
+        const resp = await storefrontApi.getShopInfo(storeId);
+        const data = resp?.data || resp;
+        if (active) setShopInfo(data || null);
+      } catch (_) {
+        if (active) setShopInfo(null);
+      }
+    })();
+    return () => { active = false; };
+  }, [storeId]);
 
   const handleProductsClick = () => {
     router.push(`/${storeId}/products`);
@@ -100,19 +119,20 @@ export function StoreHeader({ storeId: propStoreId }) {
       }}>
         <Container maxWidth="lg">
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={4}>
-            {/* Logo */}
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                fontWeight: 700, 
-                color: 'text.primary',
-                cursor: 'pointer',
-                '&:hover': { color: 'primary.main' }
-              }}
-              onClick={() => router.push(`/${storeId}`)}
-            >
-              Logo
-            </Typography>
+            {/* Logo / Brand */}
+            <Stack direction="row" spacing={1.5} alignItems="center" sx={{ cursor: 'pointer' }} onClick={() => router.push(`/${storeId}`)}>
+              {shopInfo?.profile_photo_url ? (
+                <Avatar src={shopInfo.profile_photo_url} alt={shopInfo.shop_name || 'Store'} sx={{ width: 40, height: 40 }} />
+              ) : (
+                <Avatar sx={{ width: 40, height: 40 }}>{(shopInfo?.shop_name || storeId || 'S').charAt(0).toUpperCase()}</Avatar>
+              )}
+              <Typography 
+                variant="h6" 
+                sx={{ fontWeight: 700, color: 'text.primary', '&:hover': { color: 'primary.main' } }}
+              >
+                {shopInfo?.shop_name || 'Store'}
+              </Typography>
+            </Stack>
 
           {/* Navigation */}
           <Stack direction="row" spacing={4} alignItems="center">

@@ -13,8 +13,14 @@ const nextConfig = {
   },
   // Enable subdomain routing
   async rewrites() {
+    const backend = process.env.INTERNAL_API_URL || 'http://localhost:3001';
     return {
-      beforeFiles: [],
+      beforeFiles: [
+        {
+          source: '/api/:path*',
+          destination: `${backend}/api/:path*`,
+        },
+      ],
       afterFiles: [],
       fallback: [],
     };

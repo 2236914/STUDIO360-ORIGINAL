@@ -110,10 +110,12 @@ export const StyledToaster = styled(Toaster)(({ theme }) => {
       margin: 0,
       width: 36,
       height: 36,
+      display: 'inline-flex',
       alignItems: 'center',
       borderRadius: 8,
       justifyContent: 'center',
       flexShrink: 0,
+      lineHeight: 0,
       [`& .${toasterClasses.iconSvg}`]: {
         width: 20,
         height: 20,

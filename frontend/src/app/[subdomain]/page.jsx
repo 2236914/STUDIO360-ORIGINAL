@@ -34,6 +34,7 @@ import { ChatWidget } from 'src/components/chat-widget/chat-widget';
 import { HydrationBoundary } from 'src/components/hydration-boundary';
 import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreFooter as ReusableStoreFooter } from 'src/components/store-footer';
+import WelcomePopup from 'src/components/welcome-popup';
 
 import { storefrontApi } from 'src/utils/api/storefront';
 import { isStoreSubdomain } from 'src/utils/subdomain';
@@ -981,6 +982,7 @@ function PromotionalSection({ storeId }) {
 function DiscountOfferSection({ storeId }) {
   const [email, setEmail] = useState('');
   const [couponRevealed, setCouponRevealed] = useState(false);
+  const [validation, setValidation] = useState(null); // { is_valid, reason }
   const [inView, setInView] = useState(false);
   const [couponData, setCouponData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -991,11 +993,20 @@ function DiscountOfferSection({ storeId }) {
     async function fetchCoupon() {
       try {
         setLoading(true);
-        const response = await storefrontApi.getCoupon(storeId);
-        
-        if (response.success && response.data) {
-          setCouponData(response.data);
+        let payload = null;
+        const direct = await storefrontApi.getCoupon(storeId);
+        if (direct?.success && direct.data) {
+          payload = direct.data;
+        } else {
+          // Fallback: read from homepage aggregate in case direct coupon is not set up yet
+          try {
+            const home = await storefrontApi.getHomepage(storeId);
+            if (home?.success && home.data?.coupon) {
+              payload = home.data.coupon;
+            }
+          } catch (_) {}
         }
+        if (payload) setCouponData(payload);
       } catch (err) {
         console.error('Error fetching coupon:', err);
       } finally {
@@ -1027,9 +1038,21 @@ function DiscountOfferSection({ storeId }) {
     };
   }, []);
 
-  const handleRevealCoupon = () => {
-    if (email.trim()) {
-      setCouponRevealed(true);
+  const handleRevealCoupon = async () => {
+    if (!email.trim()) return;
+    setCouponRevealed(true);
+    try {
+      const code = (couponData?.button_text || '').trim();
+      if (code) {
+        const resp = await storefrontApi.validateVoucher(storeId, code, 0);
+        const payload = resp?.data || resp;
+        setValidation(payload);
+        if (payload?.is_valid) {
+          try { sessionStorage.setItem('storefront_voucher_code', code); } catch (_) {}
+        }
+      }
+    } catch (_) {
+      setValidation({ is_valid: false, reason: 'network_error' });
     }
   };
 
@@ -1154,6 +1177,14 @@ function DiscountOfferSection({ storeId }) {
                   <Iconify icon="eva:copy-fill" width={20} />
                 </IconButton>
               </Box>
+              {validation && (
+                <Typography
+                  variant="body2"
+                  sx={{ color: validation.is_valid ? 'success.main' : 'error.main' }}
+                >
+                  {validation.is_valid ? 'Voucher is valid and will be applied at checkout.' : 'Voucher is not valid.'}
+                </Typography>
+              )}
               
               {/* Instruction Text */}
               <Typography
@@ -1910,7 +1941,33 @@ function RetailerPartnershipsSection({ storeId }) {
         const response = await storefrontApi.getPartners(storeId);
         
         if (response.success) {
-          setPlatforms(response.data || []);
+          const raw = Array.isArray(response.data) ? response.data : [];
+          // Normalize field names and remove duplicates/inactive
+          const toAbsoluteUrl = (value) => {
+            const input = String(value || '').trim();
+            if (!input) return '';
+            // If already absolute, return as-is
+            if (/^https?:\/\//i.test(input)) return input;
+            // Prepend https by default when protocol is missing
+            return `https://${input.replace(/^\/*/, '')}`;
+          };
+
+          const normalized = raw
+            .filter((p) => p && p.is_active !== false)
+            .map((p) => ({
+              ...p,
+              url: toAbsoluteUrl(p.platform_url || p.url || ''),
+              name: p.platform_name || p.name || '',
+              icon: p.icon_name || p.icon || '',
+            }))
+            .filter((p) => Boolean(p.url || p.name));
+
+          const dedupedMap = new Map();
+          normalized.forEach((p) => {
+            const key = (p.url || p.name || '').toLowerCase();
+            if (!dedupedMap.has(key)) dedupedMap.set(key, p);
+          });
+          setPlatforms(Array.from(dedupedMap.values()));
         } else {
           setError('Failed to load platforms');
         }
@@ -2009,46 +2066,58 @@ function RetailerPartnershipsSection({ storeId }) {
             </Box>
           ) : (
             <Grid container spacing={4} justifyContent="center">
-              {platforms.map((platform) => (
-                <Grid item xs={6} sm={4} md={2.4} key={platform.id}>
-                  <Link
-                    href={platform.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    underline="none"
-                    sx={{ display: 'block' }}
+              {platforms.map((platform) => {
+                const content = (
+                  <Box
+                    sx={{
+                      height: 100,
+                      bgcolor: 'background.neutral',
+                      borderRadius: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      gap: 1.5,
+                      px: 2,
+                      cursor: platform.url ? 'pointer' : 'default',
+                      transition: 'all 0.3s ease',
+                      '&:hover': platform.url ? {
+                        transform: 'translateY(-4px)',
+                        boxShadow: (theme) => theme.shadows[4],
+                        borderColor: 'primary.main',
+                      } : {},
+                    }}
                   >
-                    <Box
-                      sx={{
-                        height: 100,
-                        bgcolor: 'background.neutral',
-                        borderRadius: 2,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        gap: 1.5,
-                        px: 2,
-                        cursor: 'pointer',
-                        transition: 'all 0.3s ease',
-                        '&:hover': {
-                          transform: 'translateY(-4px)',
-                          boxShadow: (theme) => theme.shadows[4],
-                          borderColor: 'primary.main',
-                        }
-                      }}
-                    >
-                      {platform.icon && (
+                    {platform.logo_url ? (
+                      <Box component="img" src={platform.logo_url} sx={{ width: 32, height: 32, objectFit: 'contain' }} />
+                    ) : (
+                      platform.icon ? (
                         <Iconify icon={platform.icon} width={32} sx={{ color: 'primary.main' }} />
-                      )}
-                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                        {platform.name}
-                      </Typography>
-                    </Box>
-                  </Link>
-                </Grid>
-              ))}
+                      ) : null
+                    )}
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                      {platform.name}
+                    </Typography>
+                  </Box>
+                );
+
+                return (
+                  <Grid item xs={6} sm={4} md={2.4} key={platform.id || platform.url || platform.name}>
+                    {platform.url ? (
+                      <Link
+                        href={platform.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        underline="none"
+                        sx={{ display: 'block' }}
+                      >
+                        {content}
+                      </Link>
+                    ) : content}
+                  </Grid>
+                );
+              })}
             </Grid>
           )}
         </Stack>
@@ -2308,6 +2377,9 @@ export default function SubdomainPage({ params }) {
 
         {/* Header */}
         <StoreHeader storeId={subdomain} />
+
+        {/* Welcome Popup (once per session) */}
+        <WelcomePopup storeId={subdomain} />
 
         {/* Hero Section */}
         <HeroSection storeId={subdomain} />

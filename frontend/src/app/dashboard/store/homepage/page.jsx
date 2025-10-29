@@ -122,6 +122,15 @@ export default function HomepageEditorPage() {
         });
       }
       
+      // Populate welcome popup
+      if (data.welcomePopup) {
+        setWelcomePopup({
+          enabled: data.welcomePopup.enabled || false,
+          title: data.welcomePopup.title || '',
+          subtitle: data.welcomePopup.subtitle || '',
+        });
+      }
+      
       // Populate events block
       if (data.eventsBlock) {
         setEventsBlock({
@@ -192,6 +201,13 @@ export default function HomepageEditorPage() {
     headline: '',
     subtext: '',
     buttonText: '',
+  });
+
+  // Welcome Popup
+  const [welcomePopup, setWelcomePopup] = useState({
+    enabled: false,
+    title: '',
+    subtitle: '',
   });
 
   // Events block
@@ -349,6 +365,17 @@ export default function HomepageEditorPage() {
         }),
       ]);
 
+      // Save welcome popup separately
+      try {
+        await homepageApi.updateWelcomePopup({
+          enabled: welcomePopup.enabled,
+          title: welcomePopup.title,
+          subtitle: welcomePopup.subtitle,
+        });
+      } catch (e) {
+        console.warn('Welcome popup save failed:', e?.message || e);
+      }
+
       // Save platforms
       const savedPlatforms = await homepageApi.getPlatforms();
       
@@ -362,22 +389,29 @@ export default function HomepageEditorPage() {
         }
       }
       
-      // Create or update platforms
+      // Create or update platforms (skip incomplete rows)
       for (const platform of platforms) {
+        const nameTrimmed = String(platform.name || '').trim();
+        const urlTrimmed = String(platform.url || '').trim();
+        if (!nameTrimmed || !urlTrimmed) {
+          continue; // skip rows without required fields
+        }
         if (platform.id && typeof platform.id === 'number' && platform.id.toString().length < 13) {
           // Existing platform from database
           await homepageApi.updatePlatform(platform.id, {
-            name: platform.name,
-            url: platform.url,
+            name: nameTrimmed,
+            url: urlTrimmed,
             icon: platform.icon,
+            logo_url: platform.logo_url || '',
             is_active: true,
           });
         } else {
           // New platform (has temp ID from Date.now())
           await homepageApi.createPlatform({
-            name: platform.name,
-            url: platform.url,
+            name: nameTrimmed,
+            url: urlTrimmed,
             icon: platform.icon,
+            logo_url: platform.logo_url || '',
             is_active: true,
             display_order: 0,
           });
@@ -784,6 +818,33 @@ export default function HomepageEditorPage() {
                   </Stack>
                 </Stack>
               </Form>
+            </AccordionDetails>
+          </Accordion>
+
+          {/* Section 5.5: Welcome Popup */}
+          <Accordion 
+            expanded={expanded === 'welcomePopup'} 
+            onChange={handleAccordionChange('welcomePopup')}
+            sx={{ mb: 2 }}
+          >
+            <AccordionSummary expandIcon={<Iconify icon="eva:arrow-down-fill" />}>
+              <Stack direction="row" alignItems="center" spacing={2}>
+                <Iconify icon="eva:person-add-fill" width={24} sx={{ color: 'success.main' }} />
+                <Typography variant="h6">Welcome Popup</Typography>
+              </Stack>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Stack spacing={2}>
+                <FormControlLabel
+                  control={<Switch checked={welcomePopup.enabled} onChange={(e) => setWelcomePopup((p) => ({ ...p, enabled: e.target.checked }))} />}
+                  label="Enable welcome popup"
+                />
+                <TextField label="Title" value={welcomePopup.title} onChange={(e) => setWelcomePopup((p) => ({ ...p, title: e.target.value }))} fullWidth />
+                <TextField label="Subtitle" value={welcomePopup.subtitle} onChange={(e) => setWelcomePopup((p) => ({ ...p, subtitle: e.target.value }))} fullWidth />
+                <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                  This popup is shown once per session on the storefront when enabled.
+                </Typography>
+              </Stack>
             </AccordionDetails>
           </Accordion>
 
@@ -1275,7 +1336,7 @@ export default function HomepageEditorPage() {
                 <Button
                   variant="outlined"
                   startIcon={<Iconify icon="eva:plus-fill" />}
-                  onClick={() => setPlatforms((p) => [...p, { id: Date.now(), name: '', url: '', icon: '' }])}
+                  onClick={() => setPlatforms((p) => [...p, { id: Date.now(), name: '', url: '', icon: '', logo_url: '' }])}
                   sx={{ alignSelf: 'flex-start' }}
                 >
                   Add Platform
@@ -1287,7 +1348,7 @@ export default function HomepageEditorPage() {
                         <Stack spacing={2}>
                           <TextField label="Name" value={p.name} onChange={(e) => setPlatforms((arr) => arr.map((x) => (x.id === p.id ? { ...x, name: e.target.value } : x)))} fullWidth />
                           <TextField label="URL" value={p.url} onChange={(e) => setPlatforms((arr) => arr.map((x) => (x.id === p.id ? { ...x, url: e.target.value } : x)))} fullWidth />
-                          <TextField label="Icon (iconify name)" value={p.icon} onChange={(e) => setPlatforms((arr) => arr.map((x) => (x.id === p.id ? { ...x, icon: e.target.value } : x)))} fullWidth />
+                          <TextField label="Logo URL (image)" value={p.logo_url || ''} onChange={(e) => setPlatforms((arr) => arr.map((x) => (x.id === p.id ? { ...x, logo_url: e.target.value } : x)))} fullWidth />
                           <Stack direction="row" spacing={1}>
                             <Button size="small" color="error" onClick={() => setPlatforms((arr) => arr.filter((x) => x.id !== p.id))}>Remove</Button>
                           </Stack>
@@ -1445,7 +1506,20 @@ export default function HomepageEditorPage() {
                 <Typography variant="subtitle2" sx={{ mb: 1, fontSize: 12 }}>Platforms</Typography>
                 <Stack direction="row" spacing={1} justifyContent="center" flexWrap="wrap">
                   {platforms.map((p) => (
-                    <Button key={p.id} size="small" variant="outlined" startIcon={<Iconify icon={p.icon || 'eva:external-link-fill'} />}>{p.name || 'Platform'}</Button>
+                    <Button
+                      key={p.id}
+                      size="small"
+                      variant="outlined"
+                      startIcon={
+                        p.logo_url ? (
+                          <Box component="img" src={p.logo_url} sx={{ width: 20, height: 20, objectFit: 'contain' }} />
+                        ) : (
+                          <Iconify icon={p.icon || 'eva:external-link-fill'} />
+                        )
+                      }
+                    >
+                      {p.name || 'Platform'}
+                    </Button>
                   ))}
                 </Stack>
               </Box>

@@ -339,6 +339,64 @@ class StorePagesService {
   }
 
   /**
+   * Get welcome popup settings
+   */
+  async getWelcomePopup(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('store_welcome_popup')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      // If table doesn't exist yet (42P01) or no rows (PGRST116), treat as no data
+      if (error && error.code !== 'PGRST116' && error.code !== '42P01') {
+        console.error('Error fetching welcome popup:', error);
+        return null;
+      }
+
+      return data || null;
+    } catch (error) {
+      console.error('Error in getWelcomePopup:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Update welcome popup settings
+   */
+  async upsertWelcomePopup(userId, popupData) {
+    try {
+      const { data, error } = await supabase
+        .from('store_welcome_popup')
+        .upsert([
+          {
+            user_id: userId,
+            ...popupData,
+          },
+        ], {
+          onConflict: 'user_id',
+        })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '42P01') {
+          // Table missing in this environment; act as no-op so the rest of the page still saves.
+          return null;
+        }
+        console.error('Error upserting welcome popup:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in upsertWelcomePopup:', error);
+      return null;
+    }
+  }
+
+  /**
    * Update coupon
    */
   async upsertCoupon(userId, couponData) {
@@ -445,12 +503,20 @@ class StorePagesService {
    */
   async createPlatform(userId, platformData) {
     try {
+      // Map incoming fields to DB columns explicitly to avoid unknown columns
+      const payload = {
+        user_id: userId,
+        platform_name: platformData.platform_name || platformData.name || '',
+        platform_url: platformData.platform_url || platformData.url || '',
+        icon_name: platformData.icon_name || platformData.icon || '',
+        logo_url: platformData.logo_url || '',
+        display_order: platformData.display_order ?? 0,
+        is_active: platformData.is_active !== false,
+      };
+
       const { data, error } = await supabase
         .from('store_platforms')
-        .insert([{
-          user_id: userId,
-          ...platformData
-        }])
+        .insert([payload])
         .select()
         .single();
 
@@ -471,9 +537,19 @@ class StorePagesService {
    */
   async updatePlatform(platformId, updateData) {
     try {
+      // Only allow known columns to be updated
+      const payload = {
+        platform_name: updateData.platform_name || updateData.name,
+        platform_url: updateData.platform_url || updateData.url,
+        icon_name: updateData.icon_name || updateData.icon,
+        logo_url: updateData.logo_url,
+        display_order: updateData.display_order,
+        is_active: updateData.is_active,
+      };
+
       const { data, error } = await supabase
         .from('store_platforms')
-        .update(updateData)
+        .update(payload)
         .eq('id', platformId)
         .select()
         .single();
@@ -575,6 +651,7 @@ class StorePagesService {
         categories,
         splitFeature,
         coupon,
+        welcomePopup,
         eventsBlock,
         platforms,
         announcement
@@ -585,6 +662,7 @@ class StorePagesService {
         this.getCategories(userId),
         this.getSplitFeature(userId),
         this.getCoupon(userId),
+        this.getWelcomePopup(userId),
         this.getEventsBlock(userId),
         this.getPlatforms(userId),
         this.getAnnouncement(userId)
@@ -599,6 +677,7 @@ class StorePagesService {
         categories,
         splitFeature,
         coupon,
+        welcomePopup,
         eventsBlock,
         platforms,
         announcement

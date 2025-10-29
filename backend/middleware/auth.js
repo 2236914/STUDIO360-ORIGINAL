@@ -124,8 +124,9 @@ const authenticateSupabaseToken = async (req, res, next) => {
 };
 
 /**
- * Hybrid Authentication Middleware
- * Tries Supabase first, falls back to custom JWT
+ * Supabase-only Authentication Middleware (hybrid name retained for compatibility)
+ * Verifies the Supabase access token from the Authorization header and does NOT
+ * fall back to custom JWT. Keeps the same export used across routes.
  */
 const authenticateTokenHybrid = async (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -137,75 +138,31 @@ const authenticateTokenHybrid = async (req, res, next) => {
       message: 'Access token required' 
     });
   }
-
-  // Try Supabase authentication first
-  if (supabase) {
-    try {
-      console.log('Hybrid auth: Attempting Supabase token verification...');
-      
-      // Create a client with the user's token for auth
-      const { createClient } = require('@supabase/supabase-js');
-      const userSupabase = createClient(
-        process.env.SUPABASE_URL,
-        process.env.SUPABASE_ANON_KEY,
-        {
-          global: {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        }
-      );
-      
-      const { data: { user }, error } = await userSupabase.auth.getUser(token);
-      
-      console.log('Hybrid auth: Supabase verification result:', { 
-        hasUser: !!user, 
-        userId: user?.id, 
-        email: user?.email, 
-        error: error?.message 
-      });
-      
-      if (!error && user) {
-        // Supabase token is valid
-        console.log('✅ Hybrid auth: Supabase token valid for user:', user.id);
-        req.user = {
-          id: user.id,
-          email: user.email,
-          role: user.user_metadata?.role || 'user'
-        };
-        return next();
-      } else {
-        console.log('⚠️ Supabase auth failed:', error?.message);
-      }
-    } catch (error) {
-      // Supabase verification failed, try custom JWT
-      console.log('Hybrid auth: Supabase token verification error:', error.message);
+  try {
+    if (!supabase) {
+      console.error('Supabase client not configured');
+      return res.status(500).json({ success: false, message: 'Server configuration error' });
     }
-  }
 
-  // Fall back to custom JWT verification
-  const jwtSecret = process.env.JWT_SECRET;
-  if (!jwtSecret || jwtSecret === 'your-super-secret-jwt-key-here') {
-    console.error('⚠️ JWT_SECRET not configured properly');
-    console.log('Attempting to use Supabase auth only...');
-    return res.status(401).json({ 
-      success: false, 
-      message: 'JWT_SECRET not configured. Please set JWT_SECRET in backend/.env' 
-    });
-  }
+    // Create a client with the user's token for auth and verify
+    const { createClient } = require('@supabase/supabase-js');
+    const userSupabase = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      { global: { headers: { Authorization: `Bearer ${token}` } } }
+    );
 
-  jwt.verify(token, jwtSecret, (err, user) => {
-    if (err) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
-      });
+    const { data: { user }, error } = await userSupabase.auth.getUser(token);
+    if (error || !user) {
+      return res.status(403).json({ success: false, message: 'Invalid or expired token' });
     }
-    
-    req.user = user;
-    next();
-  });
+
+    req.user = { id: user.id, email: user.email, role: user.user_metadata?.role || 'user' };
+    return next();
+  } catch (error) {
+    console.error('Supabase token verification error:', error);
+    return res.status(403).json({ success: false, message: 'Invalid or expired token' });
+  }
 };
 
 /**
