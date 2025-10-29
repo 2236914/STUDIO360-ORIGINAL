@@ -167,6 +167,13 @@ export const paths = {
     analytics: `${ROOTS.ADMIN}/analytics`,
     reports: `${ROOTS.ADMIN}/reports`,
     support: `${ROOTS.ADMIN}/support`,
+    // IT Maintenance
+    itMaintenance: {
+      root: `${ROOTS.ADMIN}/it-maintenance`,
+      supportTickets: `${ROOTS.ADMIN}/it-maintenance/support-tickets`,
+      announcements: `${ROOTS.ADMIN}/it-maintenance/announcements`,
+      accountHistory: `${ROOTS.ADMIN}/it-maintenance/account-history`,
+    },
     // Subdomain-aware admin URLs
     subdomain: {
       root: () => buildAdminUrl(),

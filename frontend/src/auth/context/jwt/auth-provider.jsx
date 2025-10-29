@@ -7,6 +7,7 @@ import { useSetState } from 'src/hooks/use-set-state';
 import accountHistoryService from 'src/services/accountHistoryService';
 
 import { removeSession } from './utils';
+import { CONFIG } from 'src/config-global';
 import { STORAGE_KEY } from './constant';
 import { AuthContext } from '../auth-context';
 
@@ -24,12 +25,12 @@ export function AuthProvider({ children }) {
   const checkUserSession = useCallback(async () => {
     console.log('checkUserSession called');
     
-    try {
-      setState(prev => ({ ...prev, loading: true }));
-      // Backend bootId check to detect server restarts
-      let backendBootId = null;
       try {
-        const resp = await fetch('/api/health', { cache: 'no-store' });
+        setState(prev => ({ ...prev, loading: true }));
+        // Backend bootId check to detect server restarts
+        let backendBootId = null;
+        try {
+        const resp = await fetch(`${CONFIG.site.serverUrl}/api/health`, { cache: 'no-store' });
         if (resp.ok) {
           const j = await resp.json();
           backendBootId = j?.bootId || null;

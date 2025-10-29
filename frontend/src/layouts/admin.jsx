@@ -13,6 +13,7 @@ import { varAlpha, stylesMode } from 'src/theme/styles';
 
 import { bulletColor } from 'src/components/nav-section';
 import { WelcomePopup } from 'src/components/welcome-popup';
+import { SystemAnnouncementBanner } from 'src/components/system-announcement-banner';
 import { useSettingsContext } from 'src/components/settings';
 
 import { Main } from './dashboard/main';
@@ -51,6 +52,8 @@ export function AdminLayout({ sx, children, data }) {
     <>
       <WelcomePopup />
       
+      <SystemAnnouncementBanner />
+      
       <NavMobile
         data={navData}
         open={mobileNavOpen.value}
@@ -80,6 +83,7 @@ export function AdminLayout({ sx, children, data }) {
               helpLink: false,
               localization: false,
               contacts: false,
+              notifications: false,
             }}
             slots={{
               topArea: (

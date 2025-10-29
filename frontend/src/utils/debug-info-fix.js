@@ -1,7 +1,7 @@
-// Global fix for _debugInfo property redefinition errors
+// Global fix for _debugInfo property redefinition errors (Next.js 16 compatible)
 // This should be imported as early as possible in the application
 
-if (typeof window !== 'undefined') {
+if (typeof window !== 'undefined' && !window.__debugInfoFixApplied) {
   // Store the original defineProperty method
   const originalDefineProperty = Object.defineProperty;
   
@@ -13,14 +13,13 @@ if (typeof window !== 'undefined') {
         // Check if the property already exists
         const existingDescriptor = Object.getOwnPropertyDescriptor(obj, prop);
         
-        if (existingDescriptor) {
-          // If it exists and is not configurable, skip the redefinition
-          if (!existingDescriptor.configurable) {
-            console.warn('_debugInfo property already exists and is non-configurable. Skipping redefinition.');
-            return obj;
-          }
-          
-          // If it exists but is configurable, delete it first
+        if (existingDescriptor && !existingDescriptor.configurable) {
+          // Property exists and is not configurable - skip redefinition silently
+          return obj;
+        }
+        
+        if (existingDescriptor && existingDescriptor.configurable) {
+          // Delete the existing property first to avoid redefinition issues
           delete obj[prop];
         }
         
@@ -32,8 +31,8 @@ if (typeof window !== 'undefined') {
         
         return originalDefineProperty.call(this, obj, prop, safeDescriptor);
       } catch (error) {
+        // Silently handle redefinition errors (expected in Next.js 16)
         if (error.message && error.message.includes('Cannot redefine property')) {
-          console.warn('Prevented _debugInfo redefinition error. This is expected in Next.js 15.x development mode.');
           return obj;
         }
         // Re-throw other errors
@@ -44,6 +43,8 @@ if (typeof window !== 'undefined') {
     // For all other properties, use the original method
     return originalDefineProperty.call(this, obj, prop, descriptor);
   };
+  
+  window.__debugInfoFixApplied = true;
   
   // Also add a global error handler for uncaught defineProperty errors
   const originalErrorHandler = window.onerror;

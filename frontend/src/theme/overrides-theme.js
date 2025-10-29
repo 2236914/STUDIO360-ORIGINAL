@@ -20,6 +20,6 @@ export const overridesTheme = {
    * },
    */
   
-  // Active theme overrides (kept minimal to avoid deep merge issues)
-  // shape is now handled in create-theme.js from settings
+  // Active theme overrides intentionally minimal.
+  // Avoid any references like theme.components.MuiX inside style functions.
 };

@@ -1,4 +1,6 @@
 const { supabase } = require('./supabaseClient');
+const emailService = require('./emailService');
+const emailPreferencesService = require('./emailPreferencesService');
 
 class UserService {
 
@@ -77,6 +79,28 @@ class UserService {
       if (error) {
         console.error('Error creating user:', error);
         return null;
+      }
+
+      // Send welcome email to the new user
+      try {
+        const emailData = {
+          customerName: userData.name,
+          accountEmail: userData.email
+        };
+        await emailService.sendWelcomeEmail(data.id, emailData);
+        console.log('✅ Welcome email sent to:', userData.email);
+      } catch (emailError) {
+        console.error('Error sending welcome email:', emailError);
+        // Don't fail user creation if email fails
+      }
+
+      // Initialize default email preferences for the new user
+      try {
+        await emailPreferencesService.initializeDefaults(data.id);
+        console.log('✅ Email preferences initialized for user:', data.id);
+      } catch (prefError) {
+        console.error('Error initializing email preferences:', prefError);
+        // Don't fail user creation if preferences init fails
       }
 
       return data;

@@ -13,6 +13,7 @@ import { varAlpha, stylesMode } from 'src/theme/styles';
 
 import { bulletColor } from 'src/components/nav-section';
 import { WelcomePopup } from 'src/components/welcome-popup';
+import { SystemAnnouncementBanner } from 'src/components/system-announcement-banner';
 import { useSettingsContext } from 'src/components/settings';
 
 import { Main } from './main';
@@ -49,6 +50,8 @@ export function DashboardLayout({ sx, children, data }) {
   return (
     <>
       <WelcomePopup />
+      
+      <SystemAnnouncementBanner />
       
       <NavMobile
         data={navData}

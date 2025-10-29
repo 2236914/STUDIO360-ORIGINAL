@@ -1,4 +1,40 @@
 /**
+ * Minimal LLM client shim to keep AI routes functional without a real LLM.
+ * If LLM_API_KEY is not provided, chatComplete returns a concise fallback.
+ */
+
+function getConfig() {
+  return {
+    apiKey: process.env.LLM_API_KEY || '',
+    provider: process.env.LLM_PROVIDER || 'openai',
+    baseUrl: process.env.LLM_BASE_URL || '',
+  };
+}
+
+/**
+ * Trivial chat completion stub. Replace with real provider integration when ready.
+ * @param {{system?: string, messages: Array<{role: string, content: string}>, temperature?: number, maxTokens?: number}} opts
+ * @returns {Promise<string>}
+ */
+async function chatComplete(opts = {}) {
+  const cfg = getConfig();
+  const userMsg = Array.isArray(opts.messages)
+    ? opts.messages.filter(m => m && m.role === 'user').slice(-1)[0]?.content || ''
+    : '';
+
+  if (!cfg.apiKey) {
+    return 'LLM is not configured on the server. You can still upload files in Upload Process, and I\'ll help with categorization and posting to your books.';
+  }
+
+  // Placeholder echo-style response to avoid external dependency
+  const trimmed = String(userMsg).trim();
+  if (!trimmed) return 'How can I help with your bookkeeping today?';
+  return `I read: "${trimmed.slice(0, 240)}". (LLM integration placeholder)`;
+}
+
+module.exports = { getConfig, chatComplete };
+
+/**
  * Minimal OpenAI-compatible LLM client using native fetch (Node >= 18)
  * Supports providers that expose an OpenAI-compatible Chat Completions API.
  * Configure via env:

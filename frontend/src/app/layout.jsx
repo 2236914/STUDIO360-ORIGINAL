@@ -42,6 +42,34 @@ export default async function RootLayout({ children }) {
       <head>
         {getInitColorSchemeScript}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              // Apply _debugInfo fix immediately - must run before any React/Next code
+              (function() {
+                if (typeof window === 'undefined') return;
+                if (window.__debugInfoFixed) return;
+                
+                const originalDefineProperty = Object.defineProperty;
+                Object.defineProperty = function(obj, prop, descriptor) {
+                  if (prop === '_debugInfo') {
+                    const existing = Object.getOwnPropertyDescriptor(obj, prop);
+                    if (existing && !existing.configurable) return obj;
+                    if (existing && existing.configurable) delete obj[prop];
+                    
+                    try {
+                      return originalDefineProperty(obj, prop, {...descriptor, configurable: true});
+                    } catch(e) {
+                      return obj;
+                    }
+                  }
+                  return originalDefineProperty(obj, prop, descriptor);
+                };
+                window.__debugInfoFixed = true;
+              })();
+            `,
+          }}
+        />
       </head>
       <body suppressHydrationWarning>
         <React19Compatibility />

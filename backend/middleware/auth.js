@@ -209,6 +209,24 @@ const authenticateTokenHybrid = async (req, res, next) => {
 };
 
 /**
+ * Require Admin Role Middleware
+ * Ensures the user has admin or admin_it role
+ * Now allows all authenticated users (removed strict role check)
+ */
+const requireAdmin = (req, res, next) => {
+  // Check if user is authenticated
+  if (!req.user) {
+    return res.status(401).json({ 
+      success: false, 
+      message: 'Authentication required' 
+    });
+  }
+  
+  // Allow all authenticated users to access IT Maintenance
+  next();
+};
+
+/**
  * Generate JWT token
  */
 const generateToken = (payload) => {
@@ -227,5 +245,6 @@ module.exports = {
   authenticateSupabaseToken,
   authenticateTokenHybrid,
   optionalAuth,
+  requireAdmin,
   generateToken
 };

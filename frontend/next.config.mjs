@@ -3,6 +3,9 @@ const isStaticExport = 'false';
 const nextConfig = {
   trailingSlash: true,
   basePath: process.env.NEXT_PUBLIC_BASE_PATH,
+  // Turbopack config (Next.js 16 uses Turbopack by default in dev)
+  // Using empty config to silence warnings since we have a webpack config
+  turbopack: {},
   env: {
     BUILD_STATIC_EXPORT: isStaticExport,
     // Disable React DevTools to prevent _debugInfo errors
@@ -27,11 +30,9 @@ const nextConfig = {
     optimizeCss: true,
     // React 19 compatibility
     forceSwcTransforms: true,
-    // Improve hydration stability
-    serverComponentsHmrCache: false,
-    // Note: 'turbo' can be experimental and may expect an object in newer Next versions.
-    // Removed boolean assignment to avoid config validation errors.
-    // Disable server components debugging features that cause conflicts
+    // Disable problematic development features that cause _debugInfo errors
+    // Note: In Next.js 16, turbo flag is deprecated
+    // Turbopack is only enabled when running with --turbo flag
     serverSourceMaps: false,
   },
   compiler: {

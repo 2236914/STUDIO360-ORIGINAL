@@ -87,9 +87,28 @@ export function JwtSignInView() {
       return;
     }
 
-    // Update the auth state and redirect
+    // Update the auth state and redirect based on role
     await checkUserSession?.();
-    router.push(paths.dashboard.root);
+    
+    // Get user role to determine redirect path
+    const { data: sessionData2 } = await supabase.auth.getSession();
+    if (sessionData2?.session) {
+      const { data: userModel } = await supabase
+        .from('user_model')
+        .select('role')
+        .eq('id', sessionData2.session.user.id)
+        .single();
+      
+      // Redirect based on role
+      const userRole = userModel?.role || '';
+      if (userRole === 'admin_it') {
+        router.push(paths.admin.itMaintenance.root);
+      } else {
+        router.push(paths.dashboard.root);
+      }
+    } else {
+      router.push(paths.dashboard.root);
+    }
   });
 
   const renderHead = (

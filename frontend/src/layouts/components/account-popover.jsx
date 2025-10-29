@@ -65,7 +65,7 @@ export function AccountPopover({ sx, ...other }) {
             sx: {
               mt: 1.5,
               ml: 0.75,
-              width: 200,
+              width: 280,
               p: 0,
             },
           },
@@ -73,32 +73,51 @@ export function AccountPopover({ sx, ...other }) {
       >
         <Box sx={{ p: 2 }}>
           {/* User Info */}
-          <Typography variant="subtitle2" noWrap sx={{ fontWeight: 600 }}>
-            {user?.displayName || 'Kitsch Studio'}
+          <Typography 
+            variant="subtitle2" 
+            sx={{ 
+              fontWeight: 600,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            {user?.role === 'admin_it' ? 'IT Maintenance' : (user?.displayName || 'Kitsch Studio')}
           </Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary', mt: 0.5 }}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              color: 'text.secondary', 
+              mt: 0.5,
+              wordBreak: 'break-all',
+              overflowWrap: 'break-word'
+            }}
+          >
             {user?.email || 'studio360@demo.com'}
           </Typography>
         </Box>
 
         <Divider sx={{ borderStyle: 'dashed' }} />
 
-        {/* Account Option */}
-        <MenuItem
-          onClick={() => handleClickItem(paths.dashboard.account)}
-          sx={{
-            p: 2,
-            typography: 'body2',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-          }}
-        >
-          <Iconify icon="eva:settings-2-outline" width={18} />
-          Account settings
-        </MenuItem>
-
-        <Divider sx={{ borderStyle: 'dashed' }} />
+        {/* Account Option - Hide for IT Maintenance */}
+        {user?.role !== 'admin_it' && (
+          <>
+            <MenuItem
+              onClick={() => handleClickItem(paths.dashboard.account)}
+              sx={{
+                p: 2,
+                typography: 'body2',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+              }}
+            >
+              <Iconify icon="eva:settings-2-outline" width={18} />
+              Account settings
+            </MenuItem>
+            <Divider sx={{ borderStyle: 'dashed' }} />
+          </>
+        )}
 
         {/* Logout Option */}
         <Box sx={{ p: 1.5 }}>

@@ -20,35 +20,30 @@ export function updateCoreWithSettings(theme, settings) {
   // Instead, explicitly copy only what we need
   return {
     colorSchemes: {
-      ...colorSchemes,
       light: {
         palette: {
-          ...colorSchemes?.light?.palette,
-          /** [1] Update primary color */
           primary: getPalettePrimary(settings.primaryColor),
-          /** [2] Update background contrast */
           background: {
             ...colorSchemes?.light?.palette?.background,
             default: getBackgroundDefault(settings.contrast),
             defaultChannel: hexToRgbChannel(getBackgroundDefault(settings.contrast)),
           },
+          ...colorSchemes?.light?.palette,
         },
       },
       dark: {
         palette: {
-          ...colorSchemes?.dark?.palette,
-          /** [1] Update primary color for dark mode */
           primary: getPalettePrimary(settings.primaryColor),
+          ...colorSchemes?.dark?.palette,
         },
       },
     },
     customShadows: {
-      ...customShadows,
-      /** [1] Update primary shadow color */
       primary:
         settings.primaryColor === 'default'
           ? coreCustomShadows('light').primary
           : createShadowColor(getPalettePrimary(settings.primaryColor).mainChannel),
+      ...customShadows,
     },
     /** [3] Update border radius from settings */
     shape: {

@@ -11,106 +11,6 @@ const multer = require('multer');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
 const { chatComplete, getConfig: getLLMConfig } = require('../../services/llmClient');
-// bookkeeping helpers will be required lazily where needed to avoid startup cycles
-
-async function tryAutoPostDocument(canonical, meta) {
-  try {
-    if (!canonical || !meta) return { posted: false, reason: 'missing_data' };
-    const { amounts = {}, paymentBreakdown = {}, fields = {} } = canonical;
-    const total = Number(amounts.grandTotal || paymentBreakdown.grandTotal || amounts.total || 0);
-    if (!total || Number.isNaN(total) || total === 0) return { posted: false, reason: 'no_total' };
-    // Heuristics: buyerName => sales (we sold to buyer). sellerName without buyer => expense (we paid seller)
-    const isSale = Boolean(fields.buyerName && !fields.sellerName) || Boolean(fields.orderSummaryNo || fields.invoiceNumber);
-    const isExpense = !isSale && Boolean(fields.sellerName);
-
-    const bk = require('../../services/bookkeepingRepo');
-    // Ensure core accounts exist
-    try { await bk.upsertAccount({ code: '101', title: 'Cash on Hand', type: 'asset' }); } catch (_) {}
-    try { await bk.upsertAccount({ code: '401', title: 'Sales Revenue', type: 'income' }); } catch (_) {}
-    try { await bk.upsertAccount({ code: '501', title: 'Purchases (COGS)', type: 'expense' }); } catch (_) {}
-    try { await bk.upsertAccount({ code: '510', title: 'Platform Fees & Charges', type: 'expense' }); } catch (_) {}
-
-    // Normalize date formats. Many receipts use DD/MM/YYYY which Postgres may reject when
-    // inserting into a date field. Convert common DD/MM/YYYY or DD-MM-YYYY into ISO YYYY-MM-DD.
-    const rawDate = (canonical.orderSummary && canonical.orderSummary.dateIssued) || (canonical.fields && canonical.fields.dateIssued) || null;
-    const normalizeDate = (d) => {
-      if (!d) return new Date().toISOString().slice(0,10);
-      const s = String(d).trim();
-      // Match DD/MM/YYYY or D/M/YYYY or DD-MM-YYYY
-      const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
-      if (m) {
-        let day = m[1].padStart(2,'0');
-        let month = m[2].padStart(2,'0');
-        let year = m[3];
-        if (year.length === 2) {
-          // naive 2-digit year handling: treat 20xx
-          year = '20' + year;
-        }
-        // Basic validation
-        const y = Number(year), mo = Number(month), da = Number(day);
-        if (y > 1900 && mo >=1 && mo <=12 && da >=1 && da <=31) {
-          return `${year}-${month}-${day}`;
-        }
-      }
-      // Try Date parse fallback; if invalid, use today
-      const dt = new Date(s);
-      if (!isNaN(dt.getTime())) {
-        return dt.toISOString().slice(0,10);
-      }
-      return new Date().toISOString().slice(0,10);
-    };
-    const date = normalizeDate(rawDate);
-    const reference = meta.originalName || (canonical.orderSummary && canonical.orderSummary.orderSummaryNo) || null;
-
-    if (isSale) {
-      // Post as cash receipt: cash debit and sales credit
-      try {
-        const rid = await bk.insertCashReceipt({ date, invoice_no: reference, source: fields.buyerName || 'Customer', reference, cash_debit: total, remarks: meta.originalName || 'Uploaded sales' });
-        if (rid) {
-          const details = [];
-          // fees / tax if present
-          const fees = Number(amounts.serviceCharge || paymentBreakdown.serviceCharge || 0) || 0;
-          const tax = Number(amounts.tax || 0) || 0;
-          if (fees) details.push({ code: '510', debit: fees, credit: 0 });
-          if (tax) details.push({ code: '109', debit: tax, credit: 0 });
-          // sales credit
-          details.push({ code: '401', debit: 0, credit: total });
-          if (details.length) await bk.insertCashReceiptDetails(rid, details);
-        }
-        return { posted: true, type: 'sale', reference, id: rid || null };
-      } catch (e) {
-        return { posted: false, reason: 'sale_post_failed', error: String(e && e.message ? e.message : e) };
-      }
-    }
-
-    if (isExpense) {
-      // Post as cash disbursement: expense debits and cash credit
-      try {
-        const did = await bk.insertCashDisbursement({ date, voucher_no: reference, payee: fields.sellerName || 'Supplier', reference, cash_credit: total, remarks: meta.originalName || 'Uploaded expense' });
-        if (did) {
-          const details = [];
-          // Default to purchases (COGS) for expenses lacking detailed mapping
-          details.push({ code: '501', debit: total, credit: 0 });
-          await bk.insertCashDisbursementDetails(did, details);
-        }
-        return { posted: true, type: 'expense', reference, id: did || null };
-      } catch (e) {
-        return { posted: false, reason: 'expense_post_failed', error: String(e && e.message ? e.message : e) };
-      }
-    }
-
-    // Unknown: just attempt to create a journal entry
-    try {
-      const lines = [ { code: '101', debit: total, credit: 0, description: 'Auto-posted upload (debit)' }, { code: '401', debit: 0, credit: total, description: 'Auto-posted upload (credit)' } ];
-      await bk.insertJournal({ date, reference: reference || `UPL-${Date.now()}`, remarks: meta.originalName || 'Uploaded document', lines });
-      return { posted: true, type: 'journal', reference };
-    } catch (e) {
-      return { posted: false, reason: 'journal_post_failed', error: String(e && e.message ? e.message : e) };
-    }
-  } catch (err) {
-    return { posted: false, reason: 'unexpected', error: String(err && err.message ? err.message : err) };
-  }
-}
 
 // In-memory KPI stats (can be replaced with DB later)
 function freshKPI() {
@@ -126,7 +26,27 @@ function freshKPI() {
   };
 }
 let kpiStats = freshKPI();
-// Note: DB-backed KPI snapshots removed (kpi_stats table deleted). Using in-memory only.
+// On module load, try to hydrate in-memory KPI from DB snapshot
+try {
+  const { getMonth } = require('../../services/kpiRepo');
+  (async () => {
+    try {
+      const { data } = await getMonth();
+      if (data) {
+        kpiStats = {
+          processed: Number(data.transactions_processed || 0),
+          accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
+          timeSavedMinutes: Number(data.time_saved_minutes || 0),
+          costSavings: Number(data.cost_savings || 0),
+          docsCount: Number(data.docs_count || 0),
+          txCount: Number(kpiStats.txCount || 0),
+          transferred: Number(kpiStats.transferred || 0),
+          updatedAt: Date.now(),
+        };
+      }
+    } catch (_) {}
+  })();
+} catch (_) { /* supabase not configured or repo missing */ }
 
 // In-memory processed invoice/receipt JSON store (ephemeral)
 const processedStore = []; // { id, originalName, storedPath, size, mimetype, extractedAt, canonical }
@@ -364,6 +284,111 @@ function resolvePythonExecutable() {
   return process.env.PYTHON || 'python';
 }
 
+// NEW: Auto-post helper (no LLM/n8n). Decides CRJ vs CDB and posts via bookkeepingRepo
+async function tryAutoPostDocument(canonical, meta) {
+  try {
+    if (!canonical || !meta) return { posted: false, reason: 'missing_data' };
+    const amounts = canonical.amounts || {};
+    const breakdown = canonical.paymentBreakdown || {};
+    const fields = canonical.fields || {};
+    const total = Number(amounts.grandTotal || breakdown.grandTotal || amounts.total || 0);
+    if (!total || Number.isNaN(total) || total === 0) return { posted: false, reason: 'no_total' };
+
+    // Heuristics: buyerName => sale; sellerName (no buyer) => expense
+    const isSale = Boolean(fields.buyerName && !fields.sellerName) || Boolean(fields.orderSummaryNo || fields.invoiceNumber);
+    const isExpense = !isSale && Boolean(fields.sellerName);
+
+    const bk = require('../../services/bookkeepingRepo');
+    // Ensure core accounts exist (best-effort)
+    try { await bk.upsertAccount({ code: '101', title: 'Cash on Hand', type: 'asset' }); } catch (_) {}
+    try { await bk.upsertAccount({ code: '401', title: 'Sales Revenue', type: 'income' }); } catch (_) {}
+    try { await bk.upsertAccount({ code: '501', title: 'Purchases (COGS)', type: 'expense' }); } catch (_) {}
+    try { await bk.upsertAccount({ code: '510', title: 'Platform Fees & Charges', type: 'expense' }); } catch (_) {}
+
+    // Normalize date to YYYY-MM-DD
+    const rawDate = (canonical.orderSummary && canonical.orderSummary.dateIssued) || fields.dateIssued || null;
+    const normalizeDate = (d) => {
+      if (!d) return new Date().toISOString().slice(0,10);
+      const s = String(d).trim();
+      const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+      if (m) {
+        let day = m[1].padStart(2,'0');
+        let month = m[2].padStart(2,'0');
+        let year = m[3];
+        if (year.length === 2) year = '20' + year;
+        const y = Number(year), mo = Number(month), da = Number(day);
+        if (y > 1900 && mo >=1 && mo <=12 && da >=1 && da <=31) return `${year}-${month}-${day}`;
+      }
+      const dt = new Date(s);
+      if (!isNaN(dt.getTime())) return dt.toISOString().slice(0,10);
+      return new Date().toISOString().slice(0,10);
+    };
+    const date = normalizeDate(rawDate);
+    const reference = meta.originalName || (canonical.orderSummary && canonical.orderSummary.orderSummaryNo) || fields.invoiceNumber || null;
+
+    if (isSale) {
+      try {
+        const rid = await bk.insertCashReceipt({
+          date,
+          invoice_no: reference,
+          source: fields.buyerName || 'Customer',
+          reference,
+          cash_debit: total,
+          remarks: meta.originalName || 'Uploaded sales'
+        });
+        if (rid) {
+          const details = [];
+          const fees = Number(amounts.serviceCharge || breakdown.serviceCharge || 0) || 0;
+          const tax = Number(amounts.tax || 0) || 0;
+          if (fees) details.push({ code: '510', debit: fees, credit: 0 });
+          if (tax) details.push({ code: '109', debit: tax, credit: 0 });
+          details.push({ code: '401', debit: 0, credit: total });
+          if (details.length) await bk.insertCashReceiptDetails(rid, details);
+        }
+        return { posted: true, type: 'sale', reference };
+      } catch (e) {
+        return { posted: false, reason: 'sale_post_failed', error: String(e && e.message ? e.message : e) };
+      }
+    }
+
+    if (isExpense) {
+      try {
+        const did = await bk.insertCashDisbursement({
+          date,
+          voucher_no: reference,
+          payee: fields.sellerName || 'Supplier',
+          reference,
+          cash_credit: total,
+          remarks: meta.originalName || 'Uploaded expense'
+        });
+        if (did) {
+          const details = [];
+          details.push({ code: '501', debit: total, credit: 0 });
+          await bk.insertCashDisbursementDetails(did, details);
+        }
+        return { posted: true, type: 'expense', reference };
+      } catch (e) {
+        return { posted: false, reason: 'expense_post_failed', error: String(e && e.message ? e.message : e) };
+      }
+    }
+
+    // Fallback to a simple journal
+    try {
+      const lines = [
+        { code: '101', debit: total, credit: 0, description: 'Auto-posted upload (debit)' },
+        { code: '401', debit: 0, credit: total, description: 'Auto-posted upload (credit)' }
+      ];
+      const bk2 = require('../../services/bookkeepingRepo');
+      await bk2.insertJournal({ date, reference: reference || `UPL-${Date.now()}`, remarks: meta.originalName || 'Uploaded document', lines });
+      return { posted: true, type: 'journal', reference };
+    } catch (e) {
+      return { posted: false, reason: 'journal_post_failed', error: String(e && e.message ? e.message : e) };
+    }
+  } catch (err) {
+    return { posted: false, reason: 'unexpected', error: String(err && err.message ? err.message : err) };
+  }
+}
+
 // Ensure uploads directory exists (relative to backend working dir)
 const uploadsDir = path.join(process.cwd(), 'uploads');
 try {
@@ -421,11 +446,24 @@ router.post('/stats', express.json(), (req, res) => {
 
     for (const key of allowed) {
       if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
-      const val = body[key];
-      if (accumulate && key !== 'accuracyRate' && typeof val === 'number') {
-        kpiStats[key] = (Number(kpiStats[key]) || 0) + Number(val);
+      const raw = body[key];
+      // Coerce numeric-like values defensively
+      const asNum = (v) => {
+        if (typeof v === 'number' && isFinite(v)) return v;
+        if (typeof v === 'string' && v.trim() !== '' && !isNaN(Number(v))) return Number(v);
+        return null;
+      };
+      if (accumulate && key !== 'accuracyRate') {
+        const n = asNum(raw);
+        if (n !== null) kpiStats[key] = (Number(kpiStats[key]) || 0) + n;
+        // ignore non-numeric in accumulate mode
+      } else if (key === 'accuracyRate') {
+        const n = asNum(raw);
+        if (n !== null) kpiStats[key] = n; // set only if numeric
       } else {
-        kpiStats[key] = val;
+        // direct set for non-accumulate mode with safe coercion for numbers
+        const n = asNum(raw);
+        kpiStats[key] = n !== null ? n : raw;
       }
     }
     // ensure updatedAt
@@ -433,7 +471,8 @@ router.post('/stats', express.json(), (req, res) => {
     // Persistence disabled (kpi_stats removed). In-memory only.
     return res.json({ success: true, data: kpiStats });
   } catch (e) {
-    return res.status(400).json({ success: false, message: e.message });
+    // Never crash client UX for stats; respond with current memory snapshot
+    return res.status(200).json({ success: true, data: kpiStats, warning: String(e && e.message ? e.message : e) });
   }
 });
 
@@ -481,15 +520,23 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
         const XLSX = require('xlsx');
         const wb = XLSX.readFile(filePath, { cellDates: true });
 
-        const sigShopee = ['original price', 'total released amount', 'platform fees', 'withholding'];
+        const sigShopee = ['original price', 'original product price', 'total released amount', 'platform fees', 'withholding', 'commission fee', 'service fee', 'payout completed'];
         const sigTikTok = ['settlement amount', 'adjustment amount', 'total fees', 'released amount'];
 
         const parseWorksheet = (ws) => {
           // First attempt: default sheet_to_json
           let json = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
           let headerIdxUsed = null;
+          const allKeys = Object.keys(json[0] || {}).map(k => String(k).toLowerCase());
+          const signatureHits = (() => {
+            const joined = allKeys.join(' ');
+            let hits = 0;
+            for (const s of [...sigShopee, ...sigTikTok]) { if (joined.includes(s)) hits++; }
+            return hits;
+          })();
           const looksEmpty = !json.length || Object.keys(json[0] || {}).every(k => /^__EMPTY/.test(String(k)) || String(k).startsWith('Unnamed'));
-          if (looksEmpty) {
+          // If first-row header doesn't look like the sales table, scan for a better header row
+          if (looksEmpty || signatureHits < 2) {
             const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, blankrows: false });
             let headerIdx = -1;
             const maxScan = Math.min(rows.length, 20);
@@ -525,13 +572,25 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
           if (!ws) continue;
           const { json, headerIdxUsed } = parseWorksheet(ws);
           if (!json || !json.length) continue;
+          // Robust column matching: normalize to alnum and tolerate truncation/extra tokens
           const lowerCols = Object.fromEntries(Object.keys(json[0] || {}).map(c => [c.toLowerCase(), c]));
+          const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const keys = Object.keys(lowerCols);
+          const keyNormPairs = keys.map(k => ({ raw: k, normed: norm(k) }));
           const pick = (...alts) => {
-            const keys = Object.keys(lowerCols);
             for (const a of alts) {
-              const needle = String(a).toLowerCase();
-              const hit = keys.find(k => k.includes(needle));
-              if (hit) return lowerCols[hit];
+              const needle = String(a || '').toLowerCase();
+              const n2 = norm(needle);
+              let hit = keyNormPairs.find(p => p.normed.includes(n2) || n2.includes(p.normed));
+              if (!hit && n2.length >= 10) {
+                // tolerate truncated headers like 'total released amoun'
+                hit = keyNormPairs.find(p => p.normed.startsWith(n2) || n2.startsWith(p.normed));
+              }
+              if (!hit) {
+                // last chance: plain includes on raw lower keys
+                hit = keyNormPairs.find(p => p.raw.includes(needle));
+              }
+              if (hit) return lowerCols[hit.raw];
             }
             return null;
           };
@@ -543,8 +602,8 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
               'payout completed date','payout completion date','payout date','order settled time','order settled date','settlement date','settled date',
               'release date','order date','transaction date','date'
             );
-            // Revenue: include "original product price" for Shopee
-            const revenueField = pick('total revenue','original product price','original price','gross sales');
+            // Revenue: include "original product price" for Shopee (exact column name from your Excel)
+            const revenueField = pick('total revenue','original product price','original price','gross sales','item original amount','product price');
             // Fees: prefer holistic columns; if absent and platform is Shopee, sum individual fee columns
             let feesVal = Number(String(r[pick('total fees','platform fees','fees & charges')] || '').replace(/[^0-9.-]/g,'')) || 0;
             if (!feesVal && platform === 'Shopee') {
@@ -557,15 +616,29 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
                 }
               }
             }
-            const row = {
+          let row = {
               date: (r[dateField] || '').toString(),
               platform,
               order_id: (r[pick('order id','orderid','order no','order number')] || '').toString(),
               total_revenue: Number(String(r[revenueField] || '').replace(/[^0-9.-]/g,'')) || 0,
               fees: feesVal,
-              withholding_tax: Number(String(r[pick('withholding tax','adjustment amount','adjustment amount (withholding)')] || '').replace(/[^0-9.-]/g,'')) || 0,
-              cash_received: Number(String(r[pick('total settlement amount','total released amount','released amount')] || '').replace(/[^0-9.-]/g,'')) || 0,
+              withholding_tax: Number(String(r[pick('withholding tax','withhold','adjustment amount','adjustment amount (withholding)','tax withheld')] || '').replace(/[^0-9.-]/g,'')) || 0,
+              cash_received: Number(String(r[pick('total settlement amount','total released amount','total released amoun','released amount','net payout','net payout amount')] || '').replace(/[^0-9.-]/g,'')) || 0,
             };
+            // Extra header-token fallback for cash_received
+            if (!row.cash_received) {
+              const tokenHit = keyNormPairs.find(p => (p.normed.includes('released') && p.normed.includes('amount')) || p.normed.includes('settlementamount'));
+              if (tokenHit) {
+                const v = r[lowerCols[tokenHit.raw]];
+                const n = Number(String(v ?? '').replace(/[^0-9.-]/g,'')) || 0;
+                if (n) row.cash_received = n;
+              }
+            }
+            // If Shopee and revenue missing, reconstruct from cash+fees+tax
+            if (platform === 'Shopee' && !row.total_revenue) {
+              const candidate = (row.cash_received || 0) + (row.fees || 0) + (row.withholding_tax || 0);
+              if (candidate) row.total_revenue = candidate;
+            }
             if (row.total_revenue || row.cash_received) rows.push(row);
           }
           const journalEntries = rows.map(o => {
@@ -603,16 +676,14 @@ router.post('/sales-ingest', upload.single('file'), async (req, res) => {
       if (fb.success) return res.json(fb);
       return res.status(500).json({ success: false, message: 'sales_ingest_failed', error: err.message, stderr, fallbackError: fb.error });
     });
-  py.on('close', async (code) => {
+    py.on('close', (code) => {
       if (responded) return; responded = true;
   try {
         const parsed = JSON.parse(stdout || '{}');
         if (!parsed.success) {
-          // If openpyxl or pandas dependency missing -> fallback
-          if (/openpyxl/i.test(parsed.error || '') || /openpyxl/i.test(stderr) || /openpyxl/i.test(stdout)) {
-            const fb = performNodeFallback();
-            if (fb.success) return res.json(fb);
-          }
+          // Try resilient Node fallback for ANY python failure first
+          const fb = performNodeFallback();
+          if (fb && fb.success) return res.json(fb);
           return res.status(500).json({ success: false, message: 'Sales ingest script error', stderr, stdout });
         }
         // If Python succeeded but returned zero rows, try Node fallback for resilience
@@ -801,7 +872,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     const isSpreadsheet = ['xlsx','xls','csv'].includes(ext);
 
     // Helper to respond for spreadsheet by converting to a simplified canonical schema
-  const handleSpreadsheet = async () => {
+    const handleSpreadsheet = () => {
       try {
         const XLSX = require('xlsx');
         const wb = XLSX.readFile(req.file.path, { cellDates: true });
@@ -820,11 +891,11 @@ router.post('/upload', upload.single('file'), async (req, res) => {
           }
           return null;
         };
-        const amountCol = pickCol(['amount','total','gross','net','grand']);
-        const dateCol = pickCol(['date','txn','trans','issued']);
-        const descCol = pickCol(['description','desc','details','particular','item']);
-        const invoiceCol = pickCol(['invoice','inv','ref','reference']);
-        const sellerCol = pickCol(['seller','supplier','vendor','customer','client']);
+        const amountCol = pickCol(['amount','total','gross','net','grand','price','cost','subtotal','linetotal','value','sum']);
+        const dateCol = pickCol(['date','txn','trans','issued','order','purchase']);
+        const descCol = pickCol(['description','desc','details','particular','item','product','name','title','service']);
+        const invoiceCol = pickCol(['invoice','inv','ref','reference','order','receipt','transaction']);
+        const sellerCol = pickCol(['seller','supplier','vendor','customer','client','merchant','store','shop']);
         // Build items list (limit 200 rows for safety)
         const items = [];
         let grandTotal = 0;
@@ -866,24 +937,27 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         const canonical = canonicalizeStructured({ rawText: '', structured, meta });
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        // Attempt to auto-post into bookkeeping (best-effort)
+        // Auto-post best-effort
         let autoPostResult = { posted: false, reason: 'skipped' };
-        try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
-        return res.json({
-          success: true,
-          message: 'Spreadsheet parsed successfully',
-          data: {
-            id,
-            ...meta,
-            text: '',
-            structured,
-            canonical,
-            fileUrl: meta.fileUrl,
-            warnings: [],
-            diagnostics: { rows: json.length, sheet: sheetName, detectedColumns: { amountCol, dateCol, descCol, invoiceCol, sellerCol } },
-            autoPost: autoPostResult
-          }
-        });
+        (async () => {
+          try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
+          responded = true;
+          return res.json({
+            success: true,
+            message: 'Spreadsheet parsed successfully',
+            data: {
+              id,
+              ...meta,
+              text: '',
+              structured,
+              canonical,
+              fileUrl: meta.fileUrl,
+              warnings: [],
+              diagnostics: { rows: json.length, sheet: sheetName, detectedColumns: { amountCol, dateCol, descCol, invoiceCol, sellerCol } },
+              autoPost: autoPostResult
+            }
+          });
+        })();
       } catch (e) {
         return res.status(500).json({ success: false, message: 'Spreadsheet parse failed', error: e.message });
       }
@@ -976,11 +1050,11 @@ router.post('/upload', upload.single('file'), async (req, res) => {
       return res.json({
         success: true,
         message: 'Processed with fallback (Python not available)',
-        data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['python_not_found', err.message] }
+        data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['python_not_found', err.message], autoPost: { posted: false, reason: 'skipped' } }
       });
     });
 
-  py.on('close', async (code) => {
+    py.on('close', (code) => {
       if (responded) return;
       try {
         const parsed = JSON.parse(stdout || '{}');
@@ -1000,7 +1074,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
           return res.json({
             success: true,
             message: 'Processed with fallback (python reported failure)',
-            data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['python_success_false', parsed.error || 'unknown_error', stderr] }
+            data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['python_success_false', parsed.error || 'unknown_error', stderr], autoPost: { posted: false, reason: 'skipped' } }
           });
         }
         const canonical = canonicalizeStructured({
@@ -1011,25 +1085,27 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        // Attempt to auto-post into bookkeeping (best-effort)
+        // Auto-post best-effort
         let autoPostResult = { posted: false, reason: 'skipped' };
-        try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
-        responded = true;
-        return res.json({
-          success: true,
-          message: 'File processed successfully',
-          data: {
-            id,
-            ...meta,
-            text: parsed.text,
-            structured: parsed.structured || null,
-            canonical,
-            fileUrl: meta.fileUrl,
-            warnings: parsed.warnings || [],
-            diagnostics: parsed.diagnostics || null,
-            autoPost: autoPostResult
-          }
-        });
+        (async () => {
+          try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
+          responded = true;
+          return res.json({
+            success: true,
+            message: 'File processed successfully',
+            data: {
+              id,
+              ...meta,
+              text: parsed.text,
+              structured: parsed.structured || null,
+              canonical,
+              fileUrl: meta.fileUrl,
+              warnings: parsed.warnings || [],
+              diagnostics: parsed.diagnostics || null,
+              autoPost: autoPostResult
+            }
+          });
+        })();
       } catch (e) {
         responded = true;
         const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');
@@ -1045,7 +1121,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         return res.json({
           success: true,
           message: 'Processed with fallback (output parse failed)',
-          data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['parse_failed', String(e), stderr] }
+          data: { id: crypto.randomUUID(), ...meta, text: '', structured: null, canonical, warnings: ['parse_failed', String(e), stderr], autoPost: { posted: false, reason: 'skipped' } }
         });
       }
     });

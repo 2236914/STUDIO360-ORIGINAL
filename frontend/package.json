@@ -5,7 +5,7 @@
   "description": "Next Starter & JavaScript",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3033",
+    "dev": "next dev -p 3033 --webpack",
     "start": "next start -p 3033",
     "build": "next build",
     "lint": "eslint \"src/**/*.{js,jsx,ts,tsx}\"",
@@ -79,7 +79,7 @@
     "lowlight": "^3.3.0",
     "mapbox-gl": "^3.14.0",
     "mui-one-time-password-input": "^5.0.0",
-    "next": "^15.4.5",
+    "next": "^16.0.1",
     "nprogress": "^0.2.0",
     "prop-types": "^15.8.1",
     "react": "^18.3.1",

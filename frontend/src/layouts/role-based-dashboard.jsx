@@ -2,7 +2,8 @@
 
 import { useEffect } from 'react';
 
-import { useRouter } from 'src/routes/hooks';
+import { useRouter, usePathname } from 'src/routes/hooks';
+import { paths } from 'src/routes/paths';
 
 import { useAuthContext } from 'src/auth/hooks';
 
@@ -14,25 +15,24 @@ import { DashboardLayout } from './dashboard';
 export function RoleBasedDashboardLayout({ children }) {
   const { user } = useAuthContext();
   const router = useRouter();
+  const pathname = usePathname();
 
-  // Redirect based on role
+  // Redirect based on role if user tries to access wrong section
   useEffect(() => {
-    if (user) {
-      const currentPath = window.location.pathname;
-      
-      // If user is admin IT and not on admin route, redirect to admin dashboard
-      if (user.role === 'admin_it' && !currentPath.startsWith('/admin')) {
-        router.push('/admin/dashboard');
-        return;
-      }
-      
-      // If user is seller and on admin route, redirect to seller dashboard
-      if (user.role === 'seller' && currentPath.startsWith('/admin')) {
-        router.push('/dashboard');
-        
-      }
+    if (!user) return;
+
+    // If admin tries to access dashboard routes, redirect to admin dashboard
+    if (user.role === 'admin_it' && pathname?.startsWith('/dashboard')) {
+      router.replace(paths.admin.itMaintenance.root);
+      return;
     }
-  }, [user, router]);
+
+    // If seller tries to access admin routes, redirect to seller dashboard
+    if (user.role === 'seller' && pathname?.startsWith('/admin')) {
+      router.replace(paths.dashboard.root);
+      return;
+    }
+  }, [user, pathname, router]);
 
   // Render appropriate layout based on role
   if (user?.role === 'admin_it') {

@@ -3,6 +3,8 @@ const router = express.Router();
 const xenditService = require('../services/xenditService');
 const { authenticateTokenHybrid } = require('../middleware/auth');
 const supabase = require('../services/supabaseClient');
+const emailService = require('../services/emailService');
+const ordersService = require('../services/ordersService');
 
 // ============================================
 // XENDIT PAYMENT ROUTES
@@ -421,6 +423,33 @@ router.post('/callback', async (req, res) => {
 
       if (orderError) {
         console.error('Error updating order status:', orderError);
+      } else {
+        // Send order confirmation email to customer
+        try {
+          const { data: orderData } = await supabase
+            .from('orders')
+            .select('*, order_items(*)')
+            .eq('id', updatedPayment.order_id)
+            .single();
+
+          if (orderData && orderData.customer_email) {
+            const emailData = {
+              orderId: orderData.id,
+              orderNumber: orderData.order_number,
+              customerName: orderData.customer_name,
+              customerEmail: orderData.customer_email,
+              orderDate: new Date(orderData.order_date || orderData.created_at).toLocaleDateString(),
+              orderItems: orderData.order_items || [],
+              orderTotal: `$${orderData.total?.toFixed(2) || '0.00'}`,
+              shippingAddress: `${orderData.shipping_street || ''}, ${orderData.shipping_city || ''}, ${orderData.shipping_province || ''} ${orderData.shipping_zip_code || ''}`.trim()
+            };
+            await emailService.sendOrderConfirmation(orderData.user_id, emailData);
+            console.log('✅ Order confirmation email sent');
+          }
+        } catch (emailError) {
+          console.error('Error sending order confirmation email:', emailError);
+          // Don't fail webhook processing if email fails
+        }
       }
     }
 

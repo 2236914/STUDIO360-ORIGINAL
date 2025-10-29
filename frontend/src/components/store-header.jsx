@@ -134,7 +134,7 @@ export function StoreHeader({ storeId: propStoreId }) {
               About
             </Button>
 
-            {/* Products Link */}
+            {/* Collection Link (renamed from Products) */}
             <Button
               onClick={handleProductsClick}
               sx={{
@@ -149,44 +149,9 @@ export function StoreHeader({ storeId: propStoreId }) {
                 }
               }}
             >
-              Products
+              Collection
             </Button>
 
-            {/* FAQ Link */}
-            <Button
-              onClick={handleFAQClick}
-              sx={{
-                color: 'text.primary',
-                textTransform: 'none',
-                fontWeight: 500,
-                fontSize: '1rem',
-                px: 1,
-                '&:hover': {
-                  color: 'primary.main',
-                  bgcolor: 'transparent'
-                }
-              }}
-            >
-              FAQ
-            </Button>
-
-            {/* Shipping Link */}
-            <Button
-              onClick={() => router.push(`/${storeId}/shipping`)}
-              sx={{
-                color: 'text.primary',
-                textTransform: 'none',
-                fontWeight: 500,
-                fontSize: '1rem',
-                px: 1,
-                '&:hover': {
-                  color: 'primary.main',
-                  bgcolor: 'transparent'
-                }
-              }}
-            >
-              Shipping
-            </Button>
 
             {/* Search Icon */}
             <IconButton

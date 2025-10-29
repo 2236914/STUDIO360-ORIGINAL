@@ -304,6 +304,64 @@ router.post('/message', express.json(), async (req, res) => {
   }
 });
 
+/**
+ * POST /api/assistant/subscribe/:subdomain
+ * Public: capture newsletter subscription for a storefront by subdomain
+ */
+router.post('/subscribe/:subdomain', express.json(), async (req, res) => {
+  try {
+    const { subdomain } = req.params;
+    const { email, name } = req.body || {};
+
+    if (!subdomain) {
+      return res.status(400).json({ success: false, message: 'Subdomain is required' });
+    }
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, message: 'Valid email is required' });
+    }
+
+    const { supabase } = require('../../services/supabaseClient');
+    const { data: shopInfo, error: shopError } = await supabase
+      .from('shop_info')
+      .select('user_id')
+      .eq('shop_name', subdomain)
+      .single();
+
+    if (shopError || !shopInfo?.user_id) {
+      return res.status(404).json({ success: false, message: 'Store not found' });
+    }
+
+    // Store as a mail item for now so seller can see subscribers; can be moved to a dedicated table later
+    const mailPayload = {
+      from_name: name || 'Newsletter Subscriber',
+      from_email: email,
+      to_email: `newsletter@${subdomain}.store`,
+      subject: 'New newsletter subscription',
+      message: `${name || 'A visitor'} subscribed via storefront modal. Email: ${email}`,
+      type: 'received',
+      source: 'newsletter',
+      status: 'pending',
+      labels: ['newsletter', 'inbox'],
+      metadata: {
+        subdomain,
+        email,
+        name: name || null,
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    const result = await mailService.createMail(shopInfo.user_id, mailPayload);
+    if (result?.error) {
+      return res.status(500).json({ success: false, message: result.error });
+    }
+
+    return res.json({ success: true, data: { id: result?.id }, message: 'Subscribed' });
+  } catch (error) {
+    console.error('Error in subscribe:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
 
 

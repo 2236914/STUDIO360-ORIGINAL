@@ -1,7 +1,6 @@
 import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 
 import { setFont } from './styles/utils';
-import { overridesTheme } from './overrides-theme';
 import { shadows, typography, components, colorSchemes, customShadows } from './core';
 import { updateCoreWithSettings, updateComponentsWithSettings } from './with-settings/update-theme';
 
@@ -15,12 +14,14 @@ export function createTheme(settings) {
 
   // 1. Get settings-specific component overrides
   const settingsComponents = updateComponentsWithSettings(settings).components || {};
-  
-  // 2. Manually merge components (shallow merge only specific components)
-  const mergedComponents = { ...components };
-  Object.keys(settingsComponents).forEach(key => {
+
+  // 2. Manually merge components (top-level only, no object spreading)
+  const mergedComponents = {};
+  Object.keys(components || {}).forEach((key) => {
+    mergedComponents[key] = components[key];
+  });
+  Object.keys(settingsComponents || {}).forEach((key) => {
     if (settingsComponents[key]) {
-      // Only override if settings has this component
       mergedComponents[key] = settingsComponents[key];
     }
   });
@@ -31,11 +32,16 @@ export function createTheme(settings) {
     customShadows: customShadows(settings.colorScheme),
     direction: settings.direction,
     shape: { borderRadius: settings.borderRadius || 8 },
-    components: mergedComponents,  // Pre-merged components
-    typography: {
-      ...typography,
-      fontFamily: setFont(settings.fontFamily),
-    },
+    components: mergedComponents,
+    typography: (() => {
+      const t = {};
+      // Avoid object spread to prevent any deep-merge side effects
+      Object.keys(typography || {}).forEach((key) => {
+        t[key] = typography[key];
+      });
+      t.fontFamily = setFont(settings.fontFamily);
+      return t;
+    })(),
     cssVarPrefix: 'studio',
     shouldSkipGeneratingVar,
   };
@@ -43,13 +49,13 @@ export function createTheme(settings) {
   /**
    * 1.Update values from settings before creating theme.
    */
-  const updateTheme = updateCoreWithSettings(initialTheme, settings);
+  const themeConfig = updateCoreWithSettings(initialTheme, settings);
 
   /**
-   * 2.Create theme WITHOUT passing components again
-   * (they're already in updateTheme)
+   * 2. Create theme using a SINGLE argument to avoid deep-merge across
+   *    multiple config objects. Any overrides should be pre-merged above.
    */
-  const theme = extendTheme(updateTheme, overridesTheme);
+  const theme = extendTheme(themeConfig);
 
   return theme;
 }

@@ -1,4 +1,5 @@
 const { supabase } = require('./supabaseClient');
+const emailService = require('./emailService');
 
 class InventoryService {
   // ============================================
@@ -147,6 +148,36 @@ class InventoryService {
           reference_type: 'manual',
           notes: quantityDiff > 0 ? 'Stock increased' : 'Stock decreased',
         });
+      }
+
+      // Check for low stock and send alert if needed
+      if (data && data.stock_quantity !== undefined && data.low_stock_threshold) {
+        if (data.stock_quantity <= data.low_stock_threshold) {
+          try {
+            // Get user info for email
+            const { data: userInfo } = await supabase
+              .from('user_model')
+              .select('email, name')
+              .eq('id', userId)
+              .single();
+
+            if (userInfo) {
+              const emailData = {
+                productId: data.id,
+                productName: data.name,
+                currentStock: data.stock_quantity,
+                minStockLevel: data.low_stock_threshold,
+                ownerEmail: userInfo.email,
+                ownerName: userInfo.name
+              };
+              await emailService.sendLowStockAlert(userId, emailData);
+              console.log(`📧 Low stock alert sent for product: ${data.name}`);
+            }
+          } catch (emailError) {
+            console.error('Error sending low stock alert:', emailError);
+            // Don't fail product update if email fails
+          }
+        }
       }
 
       return data;

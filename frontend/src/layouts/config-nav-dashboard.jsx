@@ -122,13 +122,4 @@ export const navData = [
       { title: 'Account', path: paths.dashboard.account, icon: ICONS.account },
     ],
   },
-  /**
-   * Misc
-   */
-  {
-    subheader: 'MISC',
-    items: [
-      { title: 'Announcement', path: paths.dashboard.announcement, icon: ICONS.announcement },
-    ],
-  },
 ];

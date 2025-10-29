@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { isStoreSubdomain, getCurrentStoreId } from 'src/utils/subdomain';
 import { CheckoutProvider } from 'src/sections/checkout/context';
 import { Snackbar } from 'src/components/snackbar';
+import CouponModal from 'src/components/coupon-modal';
 
 // ----------------------------------------------------------------------
 
@@ -31,6 +32,9 @@ export default function SubdomainLayout({ children }) {
   return (
     <CheckoutProvider>
       <Snackbar />
+      {subdomain && isStoreSubdomain() ? (
+        <CouponModal storeId={subdomain} />
+      ) : null}
       {children}
     </CheckoutProvider>
   );

@@ -1,4 +1,5 @@
 const { supabase } = require('./supabaseClient');
+const emailService = require('./emailService');
 
 class OrdersService {
   // ============================================
@@ -177,7 +178,46 @@ class OrdersService {
       }
 
       // Fetch complete order with items
-      return await this.getOrderById(order.id, userId);
+      const completeOrder = await this.getOrderById(order.id, userId);
+      
+      // Send order confirmation email to customer
+      try {
+        const emailData = {
+          orderId: order.id,
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          customerEmail: order.customer_email,
+          orderDate: new Date(order.order_date || order.created_at).toLocaleDateString(),
+          orderItems: await this.getOrderItems(order.id, userId),
+          orderTotal: `$${order.total?.toFixed(2) || '0.00'}`,
+          shippingAddress: `${order.shipping_street}, ${order.shipping_city}, ${order.shipping_province} ${order.shipping_zip_code}`
+        };
+        await emailService.sendOrderConfirmation(userId, emailData);
+      } catch (emailError) {
+        console.error('Error sending order confirmation email:', emailError);
+        // Don't fail order creation if email fails
+      }
+      
+      // Send new order alert to seller
+      try {
+        const emailData = {
+          orderId: order.id,
+          orderNumber: order.order_number,
+          customerName: order.customer_name,
+          customerEmail: order.customer_email,
+          orderDate: new Date(order.order_date || order.created_at).toLocaleDateString(),
+          orderItems: await this.getOrderItems(order.id, userId),
+          orderTotal: `$${order.total?.toFixed(2) || '0.00'}`,
+          sellerEmail: order.seller_email,
+          sellerName: order.seller_name || 'Seller'
+        };
+        await emailService.sendNewOrderAlert(userId, emailData);
+      } catch (emailError) {
+        console.error('Error sending new order alert:', emailError);
+        // Don't fail order creation if email fails
+      }
+      
+      return completeOrder;
     } catch (error) {
       console.error('Error in createOrder:', error);
       return null;
@@ -237,6 +277,25 @@ class OrdersService {
           note: notes,
           is_internal: true,
         });
+      }
+
+      // Send order status update email to customer
+      try {
+        const customerInfo = await this.getOrderById(orderId, userId);
+        if (customerInfo) {
+          const emailData = {
+            orderNumber: customerInfo.order_number,
+            customerName: customerInfo.customer_name,
+            customerEmail: customerInfo.customer_email,
+            orderStatus: newStatus,
+            trackingNumber: customerInfo.tracking_number,
+            notes: notes
+          };
+          await emailService.sendOrderStatusUpdate(userId, emailData);
+        }
+      } catch (emailError) {
+        console.error('Error sending order status update email:', emailError);
+        // Don't fail status update if email fails
       }
 
       return data;

@@ -1,5 +1,6 @@
 import accountHistoryService from 'src/services/accountHistoryService';
 
+import { CONFIG } from 'src/config-global';
 import { supabase } from './supabaseClient';
 import { setSession, removeSession } from './utils';
 
@@ -86,28 +87,27 @@ export const signInWithPassword = async ({ email, password }) => {
     if (error) {
       const friendly = normalizeAuthError(error);
       
-      // Log failed login attempt to account history
+      // Log failed login attempt to account history (via public endpoint)
       try {
-        await accountHistoryService.logActivity({
-          activityType: 'login',
-          status: 'failed',
-          ipAddress: await getClientIP(),
-          userAgent: navigator.userAgent,
-          device: getDeviceInfo(),
-          location: 'Unknown',
-          timestamp: new Date().toISOString(),
-          details: error.message || 'Login failed'
+        await fetch(`${CONFIG.site.serverUrl}/api/account/log-failed-login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email,
+            activityType: 'login',
+            status: 'failed',
+            ipAddress: await getClientIP(),
+            userAgent: navigator.userAgent,
+            deviceType: getDeviceInfo(),
+            location: 'Unknown',
+            details: error.message || 'Login failed'
+          })
         });
-        console.log('Failed login activity logged successfully');
-      } catch (historyError) {
-        console.error('Failed to log failed login activity:', historyError);
-        console.error('History error details:', {
-          message: historyError.message,
-          stack: historyError.stack,
-          device: getDeviceInfo(),
-          userAgent: navigator.userAgent
-        });
+      } catch (logError) {
         // Don't fail the login flow if history logging fails
+        console.error('Failed to log failed login attempt:', logError);
       }
       
       return { ok: false, ...friendly };

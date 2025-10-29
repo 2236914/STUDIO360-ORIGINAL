@@ -238,6 +238,44 @@ export const storefrontApi = {
   },
 
   /**
+   * Fetch coupon block directly (public)
+   */
+  async getCoupon(shopName) {
+    try {
+      const response = await axios.get(`${API_URL}/api/public/storefront/${shopName}/coupon`, {
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching coupon data:', error);
+      return { success: false, data: null };
+    }
+  },
+
+  /**
+   * Subscribe an email to the store's newsletter (public)
+   */
+  async subscribeNewsletter(shopName, { email, name }) {
+    try {
+      const response = await axios.post(`${API_URL}/api/assistant/subscribe/${shopName}`, {
+        email,
+        name,
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error subscribing to newsletter:', error);
+      return { success: false, error: error?.response?.data?.message || error.message };
+    }
+  },
+
+  /**
    * Fetch split feature for a store
    * @param {string} shopName - The shop name/slug (e.g., 'kitschstudio')
    */

@@ -668,7 +668,7 @@ export default function UploadProcessPage() {
         if (txns.length >= 50) break; // safety cap
       }
     });
-  return txns.length ? txns : steps[2].content.mockData.transactions;
+  return txns.length ? txns : [];
   };
 
   const handleUploadFiles = async () => {
@@ -862,9 +862,7 @@ export default function UploadProcessPage() {
                   Connected Platforms:
                 </Typography>
                 <Stack direction="row" spacing={1}>
-                  {content.mockData.platforms.map((platform) => (
-                    <Chip key={platform} label={platform} variant="outlined" />
-                  ))}
+                  {/* removed mock platforms */}
                 </Stack>
               </Box>
 
@@ -872,25 +870,10 @@ export default function UploadProcessPage() {
               {uploadedFiles.length === 0 && (
                 <Box>
                   <Typography variant="subtitle2" sx={{ mb: 2 }}>
-                    Sample Files (Demo):
+                    {/* removed sample files heading */}
                   </Typography>
                   <Stack spacing={1}>
-                    {content.mockData.files.map((file, index) => (
-                      <Card key={index} sx={{ p: 2, bgcolor: 'grey.50' }}>
-                        <Stack direction="row" alignItems="center" spacing={2}>
-                          <Iconify icon="eva:file-fill" width={20} />
-                          <Box sx={{ flex: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                              {file.name}
-                            </Typography>
-                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                              {file.type} • {file.size}
-                            </Typography>
-                          </Box>
-                          <Chip label="Sample" color="info" size="small" />
-                        </Stack>
-                      </Card>
-                    ))}
+                    {/* removed mock sample files list */}
                   </Stack>
                 </Box>
               )}

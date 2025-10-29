@@ -16,26 +16,39 @@ const crypto = require('crypto');
 dotenv.config({ path: path.join(__dirname, '.env') });
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 const BOOT_ID = crypto.randomUUID();
 
-// Security middleware
-app.use(helmet());
+// Security middleware - configure helmet to not interfere with CORS
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  crossOriginEmbedderPolicy: false,
+}));
 
-// Rate limiting
+// Rate limiting - exclude announcements endpoint from strict rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.'
 });
-app.use('/api/', limiter);
+
+// Skip rate limiting for announcement endpoints
+app.use('/api/', (req, res, next) => {
+  // Skip rate limiting for announcement endpoints (public access)
+  if (req.path.startsWith('/api/announcements')) {
+    return next();
+  }
+  return limiter(req, res, next);
+});
 
 // CORS configuration (allow multiple origins in dev)
 const defaultAllowedOrigins = [
   'http://localhost:3000',
+  'http://localhost:3001',
   'http://localhost:3033',
   'http://localhost:3034',
   'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
   'http://127.0.0.1:3033',
   'http://127.0.0.1:3034',
 ];
@@ -65,6 +78,10 @@ app.use(cors({
     return callback(new Error(`CORS blocked for origin: ${origin}`));
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  maxAge: 86400, // 24 hours for preflight cache
 }));
 
 // Compression middleware
@@ -98,12 +115,15 @@ try { app.use('/api/orders', require('./api/orders/orders.routes')); } catch (_)
 try { app.use('/api/assistant', require('./api/assistant/assistant.routes')); } catch (_) { console.warn('Assistant routes missing'); }
 try { app.use('/api/ai', require('./api/ai/ai.routes')); } catch (_) { console.warn('AI routes missing'); }
 try { app.use('/api/invoices', require('./api/invoices/invoices.routes')); } catch (_) { console.warn('Invoice routes missing'); }
+try { app.use('/api/notifications', require('./api/notifications/notifications.routes')); } catch (_) { console.warn('Notifications routes missing'); }
 try { app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes')); } catch (_) { console.warn('Bookkeeping routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/analytics.routes')); } catch (_) { console.warn('Analytics routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/product-forecasting.routes')); } catch (_) { console.warn('Product forecasting routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/financial-forecasting.routes')); } catch (_) { console.warn('Financial forecasting routes missing'); }
 try { app.use('/api/vouchers', require('./api/vouchers/vouchers.routes')); } catch (_) { console.warn('Voucher routes missing'); }
 try { app.use('/api/mail', require('./api/mail/mail.routes')); } catch (_) { console.warn('Mail routes missing'); }
+try { app.use('/api/support', require('./api/support/support.routes')); } catch (_) { console.warn('Support routes missing'); }
+try { app.use('/api/announcements', require('./api/announcements/announcements.routes')); } catch (_) { console.warn('Announcements routes missing'); }
 try { app.use('/api/account', require('./api/account/account-history.routes')); } catch (_) { console.warn('Account history routes missing'); }
 try { app.use('/api/public/storefront', require('./api/public/public-storefront.routes')); } catch (_) { console.warn('Public storefront routes missing'); }
 try { app.use('/api/upload', require('./api/upload/upload.routes')); } catch (_) { console.warn('Upload routes missing'); }

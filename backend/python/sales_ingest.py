@@ -62,7 +62,8 @@ class NormalizedSale:
 
 
 def detect_platform(df: pd.DataFrame) -> str:
-    joined_cols = ' '.join(df.columns.str.lower())
+    # Be defensive: some exports use numeric column headers
+    joined_cols = ' '.join([str(c).lower() for c in df.columns])
     if any('tiktok' in str(v).lower() for v in df.columns):
         return 'TikTok'
     if 'settlement amount' in joined_cols or 'adjustment amount' in joined_cols:
@@ -77,7 +78,7 @@ def detect_platform(df: pd.DataFrame) -> str:
 
 def _find_column(df: pd.DataFrame, aliases: List[str]) -> Optional[str]:
     for col in df.columns:
-        norm = col.strip().lower().replace('\n',' ').replace('  ',' ')
+        norm = str(col).strip().lower().replace('\n',' ').replace('  ',' ')
         for a in aliases:
             pattern = a.lower()
             if pattern in norm:
