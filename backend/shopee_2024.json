@@ -1,0 +1,53 @@
+[
+  {
+    "item_id": 22476841972,
+    "product_name": "WAVE TO EARTH Bracelets | kitsch.studio | INSPIRED BEADED BRACELET [read description]",
+    "product_sku": "w2e-ver1",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 6161,
+      "add_to_cart_units": 645,
+      "confirmed_units": 86,
+      "sales_amount": 10766.0
+    },
+    "conversion_rate": 1.3958772926472975,
+    "import_date": "2024-01-15",
+    "month": 1,
+    "year": 2024
+  },
+  {
+    "item_id": 22555781568,
+    "product_name": "seasons - wave to earth beaded bracelet 2.0 | kitsch.studio",
+    "product_sku": "seasons-ver2",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 152,
+      "add_to_cart_units": 6,
+      "confirmed_units": 2,
+      "sales_amount": 565.0
+    },
+    "conversion_rate": 1.3157894736842104,
+    "import_date": "2024-01-20",
+    "month": 1,
+    "year": 2024
+  },
+  {
+    "item_id": 21883208141,
+    "product_name": "bad - wave to earth beaded bracelet 2.0 | kitsch.studio",
+    "product_sku": "W2EBAD",
+    "variation_name": "",
+    "platform": "Shopee",
+    "metrics": {
+      "page_views": 272,
+      "add_to_cart_units": 43,
+      "confirmed_units": 1,
+      "sales_amount": 135.0
+    },
+    "conversion_rate": 0.3676470588235294,
+    "import_date": "2024-01-25",
+    "month": 1,
+    "year": 2024
+  }
+]

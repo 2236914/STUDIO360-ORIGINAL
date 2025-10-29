@@ -1,20 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import NProgress from 'nprogress';
+
 import Box from '@mui/material/Box';
+import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
 import Container from '@mui/material/Container';
 import Typography from '@mui/material/Typography';
-import Divider from '@mui/material/Divider';
-import Link from '@mui/material/Link';
 import { alpha, useTheme } from '@mui/material/styles';
 
-import { useRouter } from 'src/routes/hooks';
 import { paths } from 'src/routes/paths';
+import { useRouter } from 'src/routes/hooks';
 
 import { Iconify } from 'src/components/iconify';
-import NProgress from 'nprogress';
 
 // ----------------------------------------------------------------------
 

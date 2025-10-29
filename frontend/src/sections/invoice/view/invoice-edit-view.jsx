@@ -1,127 +1,51 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+
 import Box from '@mui/material/Box';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
 import Card from '@mui/material/Card';
+import Chip from '@mui/material/Chip';
+import Menu from '@mui/material/Menu';
 import Table from '@mui/material/Table';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
+import Avatar from '@mui/material/Avatar';
 import Divider from '@mui/material/Divider';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
 import TableRow from '@mui/material/TableRow';
 import Checkbox from '@mui/material/Checkbox';
-import Avatar from '@mui/material/Avatar';
-import ListItemText from '@mui/material/ListItemText';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import Chip from '@mui/material/Chip';
-import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import ListItemText from '@mui/material/ListItemText';
+import InputAdornment from '@mui/material/InputAdornment';
 
 import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
+
+import { fDate } from 'src/utils/format-time';
+import { fCurrencyPHPSymbol } from 'src/utils/format-number';
+
 import { DashboardContent } from 'src/layouts/dashboard';
-import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
-import { Iconify } from 'src/components/iconify';
+
 import { Label } from 'src/components/label';
+import { Iconify } from 'src/components/iconify';
 import { Scrollbar } from 'src/components/scrollbar';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 import {
   useTable,
   emptyRows,
   rowInPage,
   TableNoData,
-  getComparator,
   TableEmptyRows,
   TableHeadCustom,
   TablePaginationCustom,
 } from 'src/components/table';
 
-import { fCurrencyPHPSymbol } from 'src/utils/format-number';
-import { fDate } from 'src/utils/format-time';
-
-// Mock data matching the prototype design
-const _invoices = [
-  {
-    id: 'INV-19919',
-    invoiceNumber: 'INV-19919',
-    createDate: new Date('2025-08-01'),
-    dueDate: new Date('2025-09-24'),
-    invoiceTo: {
-      name: 'Amiah Pruitt',
-      email: 'amiah.pruitt@example.com',
-      address: '123 Main St, City, State',
-      phone: '+1 555-0123',
-    },
-    totalAmount: 2331.63,
-    status: 'paid',
-    sent: 9,
-  },
-  {
-    id: 'INV-19918',
-    invoiceNumber: 'INV-19918',
-    createDate: new Date('2025-08-02'),
-    dueDate: new Date('2025-09-23'),
-    invoiceTo: {
-      name: 'Ariana Lang',
-      email: 'ariana.lang@example.com',
-      address: '456 Oak Ave, City, State',
-      phone: '+1 555-0124',
-    },
-    totalAmount: 2372.93,
-    status: 'overdue',
-    sent: 4,
-  },
-  {
-    id: 'INV-19917',
-    invoiceNumber: 'INV-19917',
-    createDate: new Date('2025-08-03'),
-    dueDate: new Date('2025-09-22'),
-    invoiceTo: {
-      name: 'John Smith',
-      email: 'john.smith@example.com',
-      address: '789 Pine St, City, State',
-      phone: '+1 555-0125',
-    },
-    totalAmount: 1850.00,
-    status: 'pending',
-    sent: 2,
-  },
-  {
-    id: 'INV-19916',
-    invoiceNumber: 'INV-19916',
-    createDate: new Date('2025-08-04'),
-    dueDate: new Date('2025-09-21'),
-    invoiceTo: {
-      name: 'Sarah Connor',
-      email: 'sarah.connor@example.com',
-      address: '321 Elm St, City, State',
-      phone: '+1 555-0126',
-    },
-    totalAmount: 3200.50,
-    status: 'paid',
-    sent: 7,
-  },
-  {
-    id: 'INV-19915',
-    invoiceNumber: 'INV-19915',
-    createDate: new Date('2025-08-05'),
-    dueDate: new Date('2025-09-20'),
-    invoiceTo: {
-      name: 'Mike Johnson',
-      email: 'mike.johnson@example.com',
-      address: '654 Maple Ave, City, State',
-      phone: '+1 555-0127',
-    },
-    totalAmount: 1750.25,
-    status: 'draft',
-    sent: 0,
-  },
-];
+// Empty invoices data - will be populated from database
+const _invoices = [];
 
 const TABLE_HEAD = [
   { id: 'customer', label: 'Customer' },

@@ -30,11 +30,11 @@ def main():
     df = pd.DataFrame({"ds": pd.to_datetime(ds), "y": y})
     m = Prophet(yearly_seasonality=True, weekly_seasonality=False, daily_seasonality=False)
     m.fit(df)
-    # Forecast next 6 months
-    future = m.make_future_dataframe(periods=6, freq='MS')
+    # Forecast next 3 months
+    future = m.make_future_dataframe(periods=3, freq='MS')
     fcst = m.predict(future)
-    # Take last 6 months forecast values (yhat)
-    tail = fcst.tail(6)
+    # Take last 3 months forecast values (yhat)
+    tail = fcst.tail(3)
     out = {
         "forecast": [float(v) for v in tail['yhat'].tolist()],
         "dates": [d.strftime('%Y-%m-%d') for d in tail['ds'].dt.to_pydatetime()],

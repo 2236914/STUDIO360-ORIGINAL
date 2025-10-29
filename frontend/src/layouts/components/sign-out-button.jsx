@@ -1,11 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useState, useCallback } from 'react';
 
 import Button from '@mui/material/Button';
 
 import { useRouter } from 'src/routes/hooks';
 
-import { useAuthContext } from 'src/auth/hooks';
 import { LogoutDialog } from 'src/components/logout-dialog';
+
+import { useAuthContext } from 'src/auth/hooks';
 
 // ----------------------------------------------------------------------
 

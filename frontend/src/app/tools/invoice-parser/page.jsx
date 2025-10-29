@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState } from "react";
 
 // Minimal UI using native elements to reduce coupling
@@ -196,7 +197,7 @@ export default function InvoiceParserPage() {
                     <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: 6 }}>Qty</th>
                     <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: 6 }}>Price</th>
                     <th style={{ textAlign: "right", borderBottom: "1px solid #ddd", padding: 6 }}>Subtotal</th>
-                    <th style={{ borderBottom: "1px solid #ddd" }}></th>
+                    <th style={{ borderBottom: "1px solid #ddd" }} />
                   </tr>
                 </thead>
                 <tbody>

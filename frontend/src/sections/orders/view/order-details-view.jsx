@@ -1,147 +1,122 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
+import Timeline from '@mui/lab/Timeline';
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import TimelineDot from '@mui/lab/TimelineDot';
+import TimelineItem from '@mui/lab/TimelineItem';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-import Grid from '@mui/material/Grid';
-import Timeline from '@mui/lab/Timeline';
-import TimelineItem from '@mui/lab/TimelineItem';
+import TimelineContent from '@mui/lab/TimelineContent';
 import TimelineSeparator from '@mui/lab/TimelineSeparator';
 import TimelineConnector from '@mui/lab/TimelineConnector';
-import TimelineContent from '@mui/lab/TimelineContent';
-import TimelineDot from '@mui/lab/TimelineDot';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { paths } from 'src/routes/paths';
-import { getOrderById } from 'src/services/ordersLocalService';
 import { useRouter as useRouterHook } from 'src/routes/hooks';
 
 import { fCurrency } from 'src/utils/format-number';
 import { fDate, fTime } from 'src/utils/format-time';
 
+import { ordersApi } from 'src/services/ordersService';
 import { DashboardContent } from 'src/layouts/dashboard';
 
+import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
-import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
-
-// Fallback sample order (used if not found in storage)
-const ORDER_DATA_FALLBACK = {
-  id: '#6010',
-  customer: {
-    name: 'Jayvion Simon',
-    email: 'nannie.abernathy70@yahoo.com',
-    avatar: '/assets/images/avatar/avatar_1.jpg',
-    ip: '192.158.1.38',
-  },
-  date: new Date('2025-08-06'),
-  time: '4:07 pm',
-  status: 'refunded',
-  items: 6,
-  price: 484.15,
-  orderItems: [
-    {
-      id: '16H9UR0',
-      name: 'Urban Explorer Sneakers',
-      image: '/assets/images/products/sneakers-green.jpg',
-      quantity: 1,
-      price: 83.74,
-    },
-    {
-      id: '16H9UR1',
-      name: 'Classic Leather Loafers',
-      image: '/assets/images/products/loafers-black.jpg',
-      quantity: 2,
-      price: 97.14,
-    },
-    {
-      id: '16H9UR2',
-      name: 'Mountain Trekking Boots',
-      image: '/assets/images/products/boots-orange.jpg',
-      quantity: 3,
-      price: 68.71,
-    },
-  ],
-  delivery: {
-    method: 'DHL',
-    speed: 'Standard',
-    trackingNo: 'SPX037739199373',
-  },
-  shipping: {
-    address: '19034 Verna Unions Apt. 164 -Honolulu, RI / 87535',
-    phone: '365-374-4961',
-  },
-  payment: {
-    cardNumber: '**** **** **** 5678',
-    cardType: 'Mastercard',
-  },
-  summary: {
-    subtotal: 484.15,
-    shipping: -10,
-    discount: -10,
-    taxes: 10,
-    total: 474.15,
-  },
-  history: [
-    {
-      id: 1,
-      event: 'Delivery successful',
-      time: '05 Aug 2025 3:07 pm',
-      status: 'completed',
-    },
-    {
-      id: 2,
-      event: 'Transporting to [2]',
-      time: '05 Aug 2025 2:30 pm',
-      status: 'pending',
-    },
-    {
-      id: 3,
-      event: 'Transporting to [1]',
-      time: '05 Aug 2025 1:45 pm',
-      status: 'pending',
-    },
-    {
-      id: 4,
-      event: 'The shipping unit has picked up the goods',
-      time: '05 Aug 2025 1:00 pm',
-      status: 'pending',
-    },
-    {
-      id: 5,
-      event: 'Order has been created',
-      time: '05 Aug 2025 12:30 pm',
-      status: 'pending',
-    },
-  ],
-  keyTimes: {
-    orderTime: '05 Aug 2025 3:07 pm',
-    paymentTime: '05 Aug 2025 3:07 pm',
-    deliveryTime: '05 Aug 2025 3:07 pm',
-    completionTime: '05 Aug 2025 3:07 pm',
-  },
-};
 
 // ----------------------------------------------------------------------
 
-export function OrderDetailsView() {
+export function OrderDetailsView({ id: idProp, inDialog = false, onClose }) {
   const router = useRouterHook();
   const params = useParams();
-  const orderId = params?.id || '#6010';
+  const orderId = idProp || params?.id || '#6010';
 
-  const stored = getOrderById(orderId.toString());
-  const ORDER_DATA = stored || ORDER_DATA_FALLBACK;
+  const [ORDER_DATA, setOrderData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Load order from database
+  useEffect(() => {
+    const loadOrder = async () => {
+      try {
+        setLoading(true);
+        const order = await ordersApi.getOrderByNumber(`#${orderId}`);
+        
+        if (!order) {
+          toast.error('Order not found');
+          return;
+        }
+
+        // Transform database data to match component format
+        const transformedOrder = {
+          id: order.order_number,
+          date: order.order_date,
+          time: fTime(order.order_date),
+          customer: {
+            name: order.customer_name,
+            email: order.customer_email,
+            phone: order.customer_phone || '',
+            avatarUrl: order.customer_avatar_url || '',
+          },
+          total: parseFloat(order.total || 0),
+          subtotal: parseFloat(order.subtotal || 0),
+          shippingFee: parseFloat(order.shipping_fee || 0),
+          tax: parseFloat(order.tax || 0),
+          discount: parseFloat(order.discount || 0),
+          status: order.status,
+          paymentStatus: order.payment_status,
+          paymentMethod: order.payment_method,
+          items: (order.order_items || []).map(item => ({
+            id: item.id,
+            name: item.product_name,
+            sku: item.product_sku,
+            quantity: item.quantity,
+            price: parseFloat(item.unit_price || 0),
+            total: parseFloat(item.total || 0),
+            imageUrl: item.product_image_url,
+          })),
+          shippingAddress: order.shipping_address_line1 ? {
+            line1: order.shipping_address_line1,
+            line2: order.shipping_address_line2,
+            city: order.shipping_city,
+            state: order.shipping_state,
+            postalCode: order.shipping_postal_code,
+            country: order.shipping_country,
+          } : null,
+          trackingNumber: order.tracking_number,
+          courier: order.courier,
+          customerNotes: order.customer_notes,
+        };
+
+        setOrderData(transformedOrder);
+      } catch (error) {
+        console.error('Error loading order:', error);
+        toast.error('Failed to load order');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (orderId) {
+      loadOrder();
+    }
+  }, [orderId]);
 
   const handleBack = useCallback(() => {
+    if (inDialog && typeof onClose === 'function') {
+      onClose();
+      return;
+    }
     router.push(paths.dashboard.orders.root);
-  }, [router]);
+  }, [router, inDialog, onClose]);
 
   const handleEdit = useCallback(() => {
     console.log('Edit order:', orderId);
@@ -155,10 +130,56 @@ export function OrderDetailsView() {
     console.log('Add customer to blacklist');
   }, []);
 
+  // Show loading state
+  if (loading) {
+    return (
+      <DashboardContent>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+          <IconButton onClick={handleBack} sx={{ color: 'text.secondary' }}>
+            <Iconify icon="eva:arrow-back-fill" />
+          </IconButton>
+          <Typography variant="h4">Order Details</Typography>
+        </Stack>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+          <CircularProgress />
+        </Box>
+      </DashboardContent>
+    );
+  }
+
+  // Show empty state if no order data
+  if (!ORDER_DATA) {
+    return (
+      <DashboardContent>
+        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+          <IconButton onClick={handleBack} sx={{ color: 'text.secondary' }}>
+            <Iconify icon="eva:arrow-back-fill" />
+          </IconButton>
+          <Typography variant="h4">Order Details</Typography>
+        </Stack>
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            Order not found
+          </Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 3 }}>
+            The order you\'re looking for doesn\'t exist or has been removed.
+          </Typography>
+          <Button
+            variant="contained"
+            startIcon={<Iconify icon="eva:arrow-back-fill" />}
+            onClick={handleBack}
+          >
+            Back to Orders
+          </Button>
+        </Box>
+      </DashboardContent>
+    );
+  }
+
   return (
     <DashboardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
         <Stack direction="row" alignItems="center" spacing={2}>
           <IconButton onClick={handleBack} sx={{ color: 'text.secondary' }}>
             <Iconify icon="eva:arrow-back-fill" />
@@ -390,10 +411,7 @@ export function OrderDetailsView() {
                         width: 56,
                         height: 56,
                         borderRadius: 2,
-                        background: item.name.includes('Urban Explorer') ? 'linear-gradient(135deg, #4CAF50, #45a049)' :
-                                 item.name.includes('Classic Leather') ? 'linear-gradient(135deg, #424242, #212121)' :
-                                 item.name.includes('Mountain Trekking') ? 'linear-gradient(135deg, #FF9800, #F57C00)' :
-                                 'linear-gradient(135deg, #BDBDBD, #9E9E9E)',
+                        background: 'linear-gradient(135deg, #BDBDBD, #9E9E9E)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

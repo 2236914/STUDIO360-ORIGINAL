@@ -360,6 +360,60 @@ router.get('/cash-receipts', (req, res) => {
 });
 
 /**
+ * @route   GET /api/bookkeeping/quarterly-sales
+ * @desc    Get quarterly sales totals for tax calculation
+ * @access  Private
+ */
+router.get('/quarterly-sales', async (req, res) => {
+  try {
+    const { quarter = 1, year = 2025 } = req.query;
+    
+    // Get all cash receipts from database
+    const receipts = await getCashReceiptsAll();
+    
+    // Filter by quarter
+    const quarterStart = new Date(year, (quarter - 1) * 3, 1);
+    const quarterEnd = new Date(year, quarter * 3, 0);
+    
+    const quarterlyReceipts = receipts.filter(receipt => {
+      const receiptDate = new Date(receipt.date);
+      return receiptDate >= quarterStart && receiptDate <= quarterEnd;
+    });
+    
+    // Calculate total sales (cr_sales column)
+    const totalSales = quarterlyReceipts.reduce((sum, receipt) => {
+      return sum + (receipt.cr_sales || 0);
+    }, 0);
+    
+    // Calculate total cash received (dr_cash column)
+    const totalCash = quarterlyReceipts.reduce((sum, receipt) => {
+      return sum + (receipt.dr_cash || 0);
+    }, 0);
+    
+    // Calculate total fees
+    const totalFees = quarterlyReceipts.reduce((sum, receipt) => {
+      return sum + (receipt.dr_fees || 0);
+    }, 0);
+    
+    ok(res, { 
+      message: 'Quarterly sales retrieved', 
+      data: { 
+        quarter: parseInt(quarter),
+        year: parseInt(year),
+        totalSales,
+        totalCash,
+        totalFees,
+        receiptCount: quarterlyReceipts.length,
+        receipts: quarterlyReceipts
+      } 
+    });
+  } catch (error) {
+    console.error('Error getting quarterly sales:', error);
+    res.status(500).json({ success: false, message: 'Error retrieving quarterly sales', error: error.message });
+  }
+});
+
+/**
  * @route   POST /api/bookkeeping/cash-receipts
  * @desc    Add cash receipt entry
  * @access  Private
@@ -567,6 +621,42 @@ router.post('/reset', (req, res) => {
 
 module.exports = router; 
 
+// Utility: force-persist in-memory journal entries into DB (ignore in-memory duplicate guard)
+// This is intended as an admin/dev helper when DB migrations are applied after entries were written to memory.
+async function flushMemoryToDb() {
+  if (!isDbReady()) throw new Error('Database not configured');
+  try {
+    // Build set of refs already in DB
+    const { entries: dbEntries } = await getJournalEntries({ page: 1, limit: 10000 });
+    const dbRefs = new Set((dbEntries || []).map(e => String(e.ref || '').trim()).filter(Boolean));
+    let persisted = 0;
+    for (const e of store.journal) {
+      const ref = String(e.ref || '').trim();
+      if (ref && dbRefs.has(ref)) continue; // already in DB
+      // Prepare normalized lines for DB insert
+      const normLines = (e.lines || []).map((ln) => ({ code: ln.code, description: ln.description || '', debit: Number(ln.debit||0), credit: Number(ln.credit||0) }));
+      // Ensure referenced accounts exist
+      const codes = Array.from(new Set(normLines.map(l => String(l.code))));
+      for (const c of codes) { try { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); } catch(_){} }
+      // Attempt DB insert
+      try {
+        await insertJournal({ date: e.date, reference: ref || null, remarks: e.particulars || null, lines: normLines });
+        persisted++;
+      } catch (err) {
+        // bubble up so caller can see which entry failed
+        throw new Error(`Failed to persist ref=${ref} date=${e.date}: ${err && err.message ? err.message : err}`);
+      }
+    }
+    // Refresh ledger after sync
+    try { await refreshGeneralLedger(); } catch (_) {}
+    return { persisted };
+  } catch (e) {
+    throw e;
+  }
+}
+
+module.exports.flushMemoryToDb = flushMemoryToDb;
+
 // --- Read-only DB endpoints (non-breaking) ---
 // Expose Supabase-backed reads without altering existing routes.
 router.get('/db/journal', async (req, res) => {
@@ -597,6 +687,21 @@ router.post('/db/ledger/refresh', async (req, res) => {
     if (!isDbReady()) return res.status(503).json({ success: false, message: 'Database not configured' });
     const okRefresh = await refreshGeneralLedger();
     return res.json({ success: okRefresh, message: okRefresh ? 'general_ledger refreshed' : 'refresh failed (function missing?)' });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// Manual: force-persist in-memory journal entries into DB (admin helper)
+router.post('/db/flush-memory', async (req, res) => {
+  try {
+    if (!isDbReady()) return res.status(503).json({ success: false, message: 'Database not configured' });
+    try {
+      const result = await flushMemoryToDb();
+      return res.json({ success: true, message: 'Flushed memory to DB', data: result });
+    } catch (e) {
+      return res.status(500).json({ success: false, message: e && e.message ? e.message : String(e) });
+    }
   } catch (e) {
     return res.status(500).json({ success: false, message: e.message });
   }

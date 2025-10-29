@@ -1,14 +1,13 @@
 import Box from '@mui/material/Box';
-import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Avatar from '@mui/material/Avatar';
+import Typography from '@mui/material/Typography';
 import ListItemText from '@mui/material/ListItemText';
 import LinearProgress from '@mui/material/LinearProgress';
 
-import { fCurrency, fCurrencyPHPSymbol } from 'src/utils/format-number';
-import { fTime, fDate } from 'src/utils/format-time';
-
-import { Label } from 'src/components/label';
+import { Label } from '../../components/label';
+import { fTime, fDate } from '../../utils/format-time';
+import { fCurrencyPHPSymbol } from '../../utils/format-number';
 
 // ----------------------------------------------------------------------
 
@@ -26,8 +25,6 @@ export function RenderCellStatus({ params }) {
     </Label>
   );
 }
-
-// ----------------------------------------------------------------------
 
 export function RenderCellCreatedAt({ params }) {
   return (
@@ -62,23 +59,22 @@ export function RenderCellStock({ params }) {
 
 // ----------------------------------------------------------------------
 
-export function RenderCellProduct({ params, onViewRow }) {
+export function RenderCellProduct({ params }) {
   return (
     <Stack direction="row" alignItems="center" spacing={2} sx={{ py: 2 }}>
       <Avatar
         alt={params.row.name}
         src={params.row.coverUrl}
         variant="rounded"
-        sx={{ width: 64, height: 64, cursor: 'pointer' }}
-        onClick={onViewRow}
+        sx={{ width: 64, height: 64 }}
       />
 
       <ListItemText
         disableTypography
         primary={
-          <Link color="inherit" onClick={onViewRow} sx={{ cursor: 'pointer' }}>
+          <Typography color="inherit" sx={{ fontWeight: 500 }}>
             {params.row.name}
-          </Link>
+          </Typography>
         }
         secondary={
           <Box component="span" sx={{ typography: 'body2', color: 'text.secondary' }}>

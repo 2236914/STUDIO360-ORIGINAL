@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Button from '@mui/material/Button';
@@ -6,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import { alpha, useTheme } from '@mui/material/styles';
 
 import { useAuthContext } from 'src/auth/hooks';
+
 import { SplashScreen } from './loading-screen/splash-screen';
 
 // ----------------------------------------------------------------------
@@ -17,11 +19,22 @@ export function WelcomePopup() {
   const theme = useTheme();
 
   useEffect(() => {
-    // Show loading screen first
+    // Only show splash + welcome once per session after login
+    // Guard: if we've already shown it this session, skip entirely
+    if (typeof window !== 'undefined') {
+      const alreadyShown = sessionStorage.getItem('welcomeShown');
+      if (alreadyShown === '1') {
+        setIsLoading(false);
+        setOpen(false);
+        return undefined;
+      }
+    }
+
+    // If not shown yet, display splash briefly then welcome
     const loadingTimer = setTimeout(() => {
       setIsLoading(false);
       setOpen(true);
-    }, 2000); // Show loading for 2 seconds
+    }, 1200); // shorter splash
 
     return () => clearTimeout(loadingTimer);
   }, []);
@@ -56,6 +69,14 @@ export function WelcomePopup() {
 
   const handleClose = () => {
     setOpen(false);
+    // Mark as shown for the current session so refresh doesn't show again
+    if (typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('welcomeShown', '1');
+      } catch (_) {
+        /* ignore storage errors */
+      }
+    }
   };
 
   // Show loading screen

@@ -1,4 +1,4 @@
-import { ScaleControl, GeolocateControl, NavigationControl, FullscreenControl } from 'react-map-gl';
+import { ScaleControl, GeolocateControl, NavigationControl, FullscreenControl } from 'react-map-gl/mapbox';
 
 // ----------------------------------------------------------------------
 

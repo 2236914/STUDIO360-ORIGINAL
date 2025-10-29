@@ -1,18 +1,16 @@
+
 import Grid from '@mui/material/Unstable_Grid2';
 import Typography from '@mui/material/Typography';
 
-import { CONFIG } from 'src/config-global';
 import { DashboardContent } from 'src/layouts/dashboard';
-import { _analyticsWidgets } from 'src/_mock/_overview';
-import { cookies } from 'next/headers';
 
 import { 
+  AnalyticsKpiCards,
+  AnalyticsAiForecast,
   AnalyticsWidgetSummary,
   AnalyticsSalesAnalytics,
-  AnalyticsTaxableIncome,
-  AnalyticsAiForecast,
   AnalyticsMonthlyProfitTrend,
-  AnalyticsKpiCards
+  AnalyticsProductPerformance
 } from 'src/sections/overview/analytics';
 
 // ----------------------------------------------------------------------
@@ -20,11 +18,6 @@ import {
 export const metadata = { title: `Dashboard - Kitsch Studio` };
 
 export default async function Page() {
-  const c = cookies();
-  const kpiYear = (() => {
-    try { const v = c.get('kpiYear')?.value; return v ? parseInt(v, 10) : undefined; } catch { return undefined; }
-  })();
-  const widgets = await _analyticsWidgets(kpiYear);
   return (
     <DashboardContent maxWidth="xl">
       <Typography variant="h4" sx={{ mb: { xs: 3, md: 5 } }}>
@@ -33,39 +26,65 @@ export default async function Page() {
 
       {/* Top Row - Summary Cards */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        {widgets.map((widget) => (
-          <Grid key={widget.id} xs={12} sm={6} lg={3} md={6}>
-            <AnalyticsWidgetSummary
-              title={widget.title}
-              percent={widget.percent}
-              total={widget.total}
-              chart={widget.chart}
-            />
-          </Grid>
-        ))}
+        <Grid xs={12} sm={6} lg={3} md={6}>
+          <AnalyticsWidgetSummary
+            title="Total Sales"
+            percent={0}
+            total={0}
+            chart={{ categories: [], series: [], colors: ['#22c55e'] }}
+          />
+        </Grid>
+        <Grid xs={12} sm={6} lg={3} md={6}>
+          <AnalyticsWidgetSummary
+            title="Total Expenses"
+            percent={0}
+            total={0}
+            chart={{ categories: [], series: [], colors: ['#ef4444'] }}
+          />
+        </Grid>
+        <Grid xs={12} sm={6} lg={3} md={6}>
+          <AnalyticsWidgetSummary
+            title="Total Orders"
+            percent={0}
+            total={0}
+            chart={{ categories: [], series: [], colors: ['#3b82f6'] }}
+          />
+        </Grid>
+        <Grid xs={12} sm={6} lg={3} md={6}>
+          <AnalyticsWidgetSummary
+            title="Net Profit"
+            percent={0}
+            total={0}
+            chart={{ categories: [], series: [], colors: ['#f59e0b'] }}
+          />
+        </Grid>
       </Grid>
 
-      {/* Second Row - Sales Analytics (full width) */}
+      {/* Second Row - Sales Analytics and Monthly Profit Trend */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid xs={12}>
+        <Grid xs={12} lg={6}>
           <AnalyticsSalesAnalytics />
         </Grid>
+        <Grid xs={12} lg={6}>
+          <AnalyticsMonthlyProfitTrend />
+        </Grid>
       </Grid>
 
-      {/* Third Row - AI Forecast and Taxable Income */}
+      {/* Third Row - AI Forecast and Top Product Chart */}
       <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid xs={12} lg={8}>
+        <Grid xs={12} lg={6}>
           <AnalyticsAiForecast />
         </Grid>
-        <Grid xs={12} lg={4}>
-          <AnalyticsTaxableIncome />
+        <Grid xs={12} lg={6}>
+          {/* This will render only the chart part, not the table */}
+          <AnalyticsProductPerformance hideHeader={true} showTableOnly={false} showChartOnly={true} />
         </Grid>
       </Grid>
 
-      {/* Fourth Row - Monthly Profit Trend and KPI Cards */}
+      {/* Fourth Row - Top Products Performance and KPI Cards */}
       <Grid container spacing={3}>
         <Grid xs={12} lg={8}>
-          <AnalyticsMonthlyProfitTrend />
+          <AnalyticsProductPerformance hideHeader={true} showTableOnly={true} />
         </Grid>
         <Grid xs={12} lg={4}>
           <AnalyticsKpiCards />

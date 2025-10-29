@@ -11,7 +11,8 @@ import { useBoolean } from 'src/hooks/use-boolean';
 import { useResponsive } from 'src/hooks/use-responsive';
 
 import { Iconify } from 'src/components/iconify';
-import { AddressListDialog } from '../address';
+
+import { AddressListDialog, AddressNewForm } from '../address';
 
 // ----------------------------------------------------------------------
 
@@ -29,8 +30,35 @@ export function InvoiceNewEditAddress({ methods, addressBooks }) {
   const { invoiceFrom, invoiceTo } = values;
 
   const from = useBoolean();
-
   const to = useBoolean();
+  const newAddress = useBoolean();
+
+  const handleCreateAddress = (addressData) => {
+    // Create a properly formatted address object
+    const newAddressWithId = {
+      id: Date.now(), // Simple ID generation
+      name: addressData.name,
+      company: addressData.name, // Use name as company for now
+      address: addressData.fullAddress,
+      phone: addressData.phoneNumber,
+      email: '', // Not collected in the form
+      fullAddress: addressData.fullAddress,
+      phoneNumber: addressData.phoneNumber,
+      addressType: addressData.addressType,
+      primary: addressData.primary,
+    };
+    
+    // Set the address in the appropriate field
+    if (from.value) {
+      setValue('invoiceFrom', newAddressWithId);
+      from.onFalse();
+    } else if (to.value) {
+      setValue('invoiceTo', newAddressWithId);
+      to.onFalse();
+    }
+    
+    newAddress.onFalse();
+  };
 
   return (
     <>
@@ -106,8 +134,7 @@ export function InvoiceNewEditAddress({ methods, addressBooks }) {
             variant="contained"
             startIcon={<Iconify icon="mingcute:add-line" />}
             onClick={() => {
-              // TODO: Open new address form
-              console.log('Add new address');
+              newAddress.onTrue();
             }}
           >
             + New
@@ -131,19 +158,35 @@ export function InvoiceNewEditAddress({ methods, addressBooks }) {
             variant="contained"
             startIcon={<Iconify icon="mingcute:add-line" />}
             onClick={() => {
-              // TODO: Open new address form
-              console.log('Add new address');
+              newAddress.onTrue();
             }}
           >
             + New
           </Button>
         }
       />
+
+      {/* New Address Form */}
+      <AddressNewForm
+        open={newAddress.value}
+        onClose={newAddress.onFalse}
+        onCreate={handleCreateAddress}
+      />
     </>
   );
 }
 
 InvoiceNewEditAddress.propTypes = {
-  methods: PropTypes.object,
-  addressBooks: PropTypes.array,
+  methods: PropTypes.shape({
+    watch: PropTypes.func,
+    setValue: PropTypes.func,
+  }),
+  addressBooks: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    name: PropTypes.string,
+    company: PropTypes.string,
+    address: PropTypes.string,
+    phone: PropTypes.string,
+    email: PropTypes.string,
+  })),
 };

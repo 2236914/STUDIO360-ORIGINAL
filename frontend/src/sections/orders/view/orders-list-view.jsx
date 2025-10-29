@@ -1,30 +1,25 @@
 'use client';
 
-import { useState, useCallback, useMemo } from 'react';
-import { Collapse } from '@mui/material';
+import { useMemo, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Chip from '@mui/material/Chip';
+import Menu from '@mui/material/Menu';
 import Stack from '@mui/material/Stack';
+import { Collapse } from '@mui/material';
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
-import Divider from '@mui/material/Divider';
+import Dialog from '@mui/material/Dialog';
 import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
 import InputAdornment from '@mui/material/InputAdornment';
-import TextField from '@mui/material/TextField';
-import Menu from '@mui/material/Menu';
 import {
-  DataGrid,
-  gridClasses,
-  GridToolbarExport,
   GridActionsCellItem,
-  GridToolbarContainer,
-  GridToolbarQuickFilter,
-  GridToolbarFilterButton,
-  GridToolbarColumnsButton,
 } from '@mui/x-data-grid';
 
 import { paths } from 'src/routes/paths';
@@ -36,17 +31,15 @@ import { useSetState } from 'src/hooks/use-set-state';
 import { fCurrency } from 'src/utils/format-number';
 import { fDate, fTime } from 'src/utils/format-time';
 
+import { ordersApi } from 'src/services/ordersService';
 import { DashboardContent } from 'src/layouts/dashboard';
-import { getOrders } from 'src/services/ordersLocalService';
 
 import { Label } from 'src/components/label';
+import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
-import { EmptyContent } from 'src/components/empty-content';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
-import Dialog from '@mui/material/Dialog';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
+import { OrderDetailsView } from './order-details-view';
 
 // ----------------------------------------------------------------------
 
@@ -63,263 +56,18 @@ const HIDE_COLUMNS_TOGGLABLE = ['category', 'actions'];
 
 const SYSTEM_LOGO = '/assets/logo/system-logo.png'; // Adjust path as needed
 
-// Initial sample orders data (used only if no saved orders yet)
-const ORDERS_DATA = [
-  {
-    id: '#6010',
-    customer: {
-      name: 'Jayvion Simon',
-      email: 'nannie.abernathy70@yahoo.com',
-      avatar: '/assets/images/avatar/avatar_1.jpg',
-    },
-    date: new Date('2025-08-06'),
-    time: '6:54 am',
-    items: 6,
-    price: 484.15,
-    status: 'refunded',
-    orderItems: [
-      {
-        id: '16H9UR0',
-        name: 'Urban Explorer Sneakers',
-        image: '/assets/images/products/sneakers-green.jpg',
-        quantity: 1,
-        price: 83.74,
-      },
-      {
-        id: '16H9UR1',
-        name: 'Classic Leather Loafers',
-        image: '/assets/images/products/loafers-black.jpg',
-        quantity: 2,
-        price: 97.14,
-      },
-      {
-        id: '16H9UR2',
-        name: 'Mountain Trekking Boots',
-        image: '/assets/images/products/boots-orange.jpg',
-        quantity: 3,
-        price: 68.71,
-      },
-    ],
-  },
-  {
-    id: '#6011',
-    customer: {
-      name: 'Lucian Obrien',
-      email: 'ashlynn.ohara62@gmail.com',
-      avatar: '/assets/images/avatar/avatar_2.jpg',
-    },
-    date: new Date('2025-08-05'),
-    time: '8:54 am',
-    items: 1,
-    price: 83.74,
-    status: 'completed',
-    orderItems: [
-      {
-        id: '16H9UR3',
-        name: 'Casual Canvas Sneakers',
-        image: '/assets/images/products/sneakers-white.jpg',
-        quantity: 1,
-        price: 83.74,
-      },
-    ],
-  },
-  {
-    id: '#6012',
-    customer: {
-      name: 'Soren Durham',
-      email: 'vergie.block2@hotmail.com',
-      avatar: '/assets/images/avatar/avatar_3.jpg',
-    },
-    date: new Date('2025-07-26'),
-    time: '11:54 pm',
-    items: 5,
-    price: 400.41,
-    status: 'pending',
-    orderItems: [
-      {
-        id: '16H9UR4',
-        name: 'Premium Leather Jacket',
-        image: '/assets/images/products/jacket-brown.jpg',
-        quantity: 1,
-        price: 199.99,
-      },
-      {
-        id: '16H9UR5',
-        name: 'Denim Jeans',
-        image: '/assets/images/products/jeans-blue.jpg',
-        quantity: 2,
-        price: 89.99,
-      },
-      {
-        id: '16H9UR6',
-        name: 'Cotton T-Shirt',
-        image: '/assets/images/products/tshirt-white.jpg',
-        quantity: 2,
-        price: 29.99,
-      },
-    ],
-  },
-  {
-    id: '#6013',
-    customer: {
-      name: 'Cortez Herring',
-      email: 'vito.hudson@hotmail.com',
-      avatar: '/assets/images/avatar/avatar_4.jpg',
-    },
-    date: new Date('2025-07-25'),
-    time: '10:54 pm',
-    items: 1,
-    price: 83.74,
-    status: 'completed',
-    orderItems: [
-      {
-        id: '16H9UR7',
-        name: 'Wireless Headphones',
-        image: '/assets/images/products/headphones-black.jpg',
-        quantity: 1,
-        price: 83.74,
-      },
-    ],
-  },
-  {
-    id: '#6014',
-    customer: {
-      name: 'Brycen Jimenez',
-      email: 'tyrel.greenholt@gmail.com',
-      avatar: '/assets/images/avatar/avatar_5.jpg',
-    },
-    date: new Date('2025-07-24'),
-    time: '8:54 pm',
-    items: 6,
-    price: 484.15,
-    status: 'refunded',
-    orderItems: [
-      {
-        id: '16H9UR8',
-        name: 'Running Shoes',
-        image: '/assets/images/products/running-shoes.jpg',
-        quantity: 2,
-        price: 129.99,
-      },
-      {
-        id: '16H9UR9',
-        name: 'Sports Socks',
-        image: '/assets/images/products/socks.jpg',
-        quantity: 4,
-        price: 15.99,
-      },
-    ],
-  },
-  {
-    id: '#6015',
-    customer: {
-      name: 'Giana Brandt',
-      email: 'dejon.block5@yahoo.com',
-      avatar: '/assets/images/avatar/avatar_6.jpg',
-    },
-    date: new Date('2025-07-23'),
-    time: '8:54 pm',
-    items: 1,
-    price: 83.74,
-    status: 'completed',
-    orderItems: [
-      {
-        id: '16H9UR10',
-        name: 'Designer Handbag',
-        image: '/assets/images/products/handbag.jpg',
-        quantity: 1,
-        price: 83.74,
-      },
-    ],
-  },
-  {
-    id: '#6016',
-    customer: {
-      name: 'Aspen Schmitt',
-      email: 'revoya73@hotmail.com',
-      avatar: '/assets/images/avatar/avatar_7.jpg',
-    },
-    date: new Date('2025-07-22'),
-    time: '7:54 am',
-    items: 5,
-    price: 400.41,
-    status: 'pending',
-    orderItems: [
-      {
-        id: '16H9UR11',
-        name: 'Smartphone',
-        image: '/assets/images/products/smartphone.jpg',
-        quantity: 1,
-        price: 299.99,
-      },
-      {
-        id: '16H9UR12',
-        name: 'Phone Case',
-        image: '/assets/images/products/phone-case.jpg',
-        quantity: 2,
-        price: 19.99,
-      },
-      {
-        id: '16H9UR13',
-        name: 'Screen Protector',
-        image: '/assets/images/products/screen-protector.jpg',
-        quantity: 2,
-        price: 15.99,
-      },
-    ],
-  },
-  {
-    id: '#6017',
-    customer: {
-      name: 'Colten Aguilar',
-      email: 'dasia.jenkins@hotmail.com',
-      avatar: '/assets/images/avatar/avatar_8.jpg',
-    },
-    date: new Date('2025-07-21'),
-    time: '6:54 pm',
-    items: 1,
-    price: 83.74,
-    status: 'completed',
-  },
-  {
-    id: '#6018',
-    customer: {
-      name: 'Angelique Morse',
-      email: 'bonny89@yahoo.com',
-      avatar: '/assets/images/avatar/avatar_9.jpg',
-    },
-    date: new Date('2025-07-20'),
-    time: '5:54 pm',
-    items: 5,
-    price: 400.41,
-    status: 'pending',
-  },
-  {
-    id: '#6019',
-    customer: {
-      name: 'Selina Boyer',
-      email: 'dawn.goyette@gmail.com',
-      avatar: '/assets/images/avatar/avatar_10.jpg',
-    },
-    date: new Date('2025-07-19'),
-    time: '4:54 pm',
-    items: 1,
-    price: 83.74,
-    status: 'completed',
-  },
-];
-
 // ----------------------------------------------------------------------
 
 export function OrdersListView() {
   const confirmRows = useBoolean();
+  const confirmDelete = useBoolean();
+  const [deleteId, setDeleteId] = useState(null);
   const router = useRouter();
 
   const filters = useSetState({ status: [] });
-  const [tableData, setTableData] = useState(() => {
-    const saved = getOrders();
-    return (saved && saved.length) ? saved : ORDERS_DATA;
-  });
+  const [tableData, setTableData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
   const [filterButtonEl, setFilterButtonEl] = useState(null);
   const [columnVisibilityModel, setColumnVisibilityModel] = useState(HIDE_COLUMNS);
@@ -335,6 +83,61 @@ export function OrdersListView() {
   const [invoiceModalOpen, setInvoiceModalOpen] = useState(false);
   const [orderForInvoice, setOrderForInvoice] = useState(null);
   const [bulkStatusMenuAnchor, setBulkStatusMenuAnchor] = useState(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewOrderId, setViewOrderId] = useState(null);
+
+  // Load orders from database
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const orders = await ordersApi.getOrders();
+      
+      // Transform database data to match component format
+      const transformedOrders = orders.map(order => ({
+        id: order.id,
+        orderNumber: order.order_number,
+        date: order.order_date,
+        time: fTime(order.order_date),
+        customer: {
+          name: order.customer_name,
+          email: order.customer_email,
+          phone: order.customer_phone || '',
+          avatarUrl: order.customer_avatar_url || '',
+        },
+        total: parseFloat(order.total || 0),
+        status: order.status,
+        paymentStatus: order.payment_status,
+        items: order.order_items || [],
+        shippingAddress: order.shipping_address_line1 ? {
+          line1: order.shipping_address_line1,
+          line2: order.shipping_address_line2,
+          city: order.shipping_city,
+          state: order.shipping_state,
+          postalCode: order.shipping_postal_code,
+          country: order.shipping_country,
+        } : null,
+        paymentMethod: order.payment_method,
+        trackingNumber: order.tracking_number,
+      }));
+      
+      setTableData(transformedOrders);
+      setInitialLoad(false);
+      
+      if (transformedOrders.length > 0) {
+        toast.success(`${transformedOrders.length} order(s) loaded successfully!`);
+      }
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      toast.error('Failed to load orders');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Filter data based on search and status
   const dataFiltered = useMemo(() => {
@@ -367,27 +170,63 @@ export function OrdersListView() {
 
   const handleDeleteRow = useCallback(
     (id) => {
-      const deleteRow = tableData.filter((row) => row.id !== id);
-      setTableData(deleteRow);
+      setDeleteId(id);
+      confirmDelete.onTrue();
     },
-    [tableData]
+    []
   );
 
-  const handleDeleteRows = useCallback(() => {
-    const deleteRows = tableData.filter((row) => !selectedRowIds.includes(row.id));
-    setTableData(deleteRows);
-  }, [selectedRowIds, tableData]);
+  const confirmDeleteRow = async () => {
+    try {
+      setLoading(true);
+      await ordersApi.deleteOrder(deleteId);
+      
+      const deleteRow = tableData.filter((row) => row.id !== deleteId);
+      setTableData(deleteRow);
+      
+      toast.success('Order deleted successfully!');
+      confirmDelete.onFalse();
+      setDeleteId(null);
+    } catch (error) {
+      console.error('Error deleting order:', error);
+      toast.error('Failed to delete order');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRows = useCallback(async () => {
+    try {
+      setLoading(true);
+      await ordersApi.deleteOrders(selectedRowIds);
+      
+      const deleteRows = tableData.filter((row) => !selectedRowIds.includes(row.id));
+      setTableData(deleteRows);
+      
+      toast.success(`${selectedRowIds.length} order(s) deleted successfully!`);
+      confirmRows.onFalse();
+      setSelectedRowIds([]);
+    } catch (error) {
+      console.error('Error deleting orders:', error);
+      toast.error('Failed to delete orders');
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedRowIds, tableData, confirmRows]);
 
   const handleViewRow = useCallback(
     (id) => {
-      router.push(`/dashboard/orders/${id.toString().replace('#', '')}`);
+      setViewOrderId(id.toString().replace('#', ''));
+      setViewDialogOpen(true);
     },
-    [router]
+    []
   );
 
   const handleEditRow = useCallback(
     (id) => {
-      console.log('Edit order:', id);
+      // Open the same modal for now; edit flow can be wired inside the details view
+      setViewOrderId(id.toString().replace('#', ''));
+      setViewDialogOpen(true);
     },
     []
   );
@@ -491,10 +330,11 @@ export function OrdersListView() {
 
   const handleViewOrder = useCallback(() => {
     if (selectedOrderForAction) {
-      router.push(`/dashboard/orders/${selectedOrderForAction.id.replace('#', '')}`);
+      setViewOrderId(selectedOrderForAction.id.replace('#', ''));
+      setViewDialogOpen(true);
     }
     handleActionMenuClose();
-  }, [selectedOrderForAction, handleActionMenuClose, router]);
+  }, [selectedOrderForAction, handleActionMenuClose]);
 
   const handleDeleteOrder = useCallback(() => {
     if (selectedOrderForAction) {
@@ -519,16 +359,28 @@ export function OrdersListView() {
   }, []);
 
   // Bulk status update handlers
-  const handleBulkStatusChange = useCallback((newStatus) => {
-    setTableData(prevData => 
-      prevData.map(order => 
-        selectedRowIds.includes(order.id) 
-          ? { ...order, status: newStatus }
-          : order
-      )
-    );
-    setSelectedRowIds([]);
-    setBulkStatusMenuAnchor(null);
+  const handleBulkStatusChange = useCallback(async (newStatus) => {
+    try {
+      setLoading(true);
+      await ordersApi.updateOrdersStatus(selectedRowIds, newStatus);
+      
+      setTableData(prevData => 
+        prevData.map(order => 
+          selectedRowIds.includes(order.id) 
+            ? { ...order, status: newStatus }
+            : order
+        )
+      );
+      
+      toast.success(`${selectedRowIds.length} order(s) status updated to ${newStatus}!`);
+      setSelectedRowIds([]);
+      setBulkStatusMenuAnchor(null);
+    } catch (error) {
+      console.error('Error updating orders status:', error);
+      toast.error('Failed to update orders status');
+    } finally {
+      setLoading(false);
+    }
   }, [selectedRowIds]);
 
 
@@ -912,7 +764,7 @@ export function OrdersListView() {
                   Status
                 </Typography>
               </Box>
-              <Box sx={{ width: 40 }}></Box>
+              <Box sx={{ width: 40 }} />
             </Stack>
           </Box>
 
@@ -952,9 +804,7 @@ export function OrdersListView() {
                         sx={{
                           width: dense ? 32 : 40,
                           height: dense ? 32 : 40,
-                          bgcolor: order.customer.name === 'Soren Durham' ? 'warning.main' :
-                                  order.customer.name === 'Cortez Herring' ? 'primary.main' :
-                                  'grey.400',
+                          bgcolor: 'grey.400',
                           fontSize: dense ? '0.875rem' : '1rem',
                           fontWeight: 'bold'
                         }}
@@ -1047,7 +897,6 @@ export function OrdersListView() {
                      sx={{ 
                        bgcolor: 'white',
                        borderBottom: 1, 
-                       borderColor: 'divider',
                        borderTop: 1,
                        borderColor: 'divider',
                        borderRadius: '0 0 12px 12px',
@@ -1082,21 +931,7 @@ export function OrdersListView() {
                                  width: 48,
                                  height: 48,
                                  borderRadius: 2,
-                                 background: item.name.includes('Urban Explorer') ? 'linear-gradient(135deg, #4CAF50, #45a049)' :
-                                          item.name.includes('Classic Leather') ? 'linear-gradient(135deg, #424242, #212121)' :
-                                          item.name.includes('Mountain Trekking') ? 'linear-gradient(135deg, #FF9800, #F57C00)' :
-                                          item.name.includes('Casual Canvas') ? 'linear-gradient(135deg, #2196F3, #1976D2)' :
-                                          item.name.includes('Premium Leather') ? 'linear-gradient(135deg, #795548, #5D4037)' :
-                                          item.name.includes('Denim') ? 'linear-gradient(135deg, #3F51B5, #303F9F)' :
-                                          item.name.includes('Cotton T-Shirt') ? 'linear-gradient(135deg, #9C27B0, #7B1FA2)' :
-                                          item.name.includes('Wireless Headphones') ? 'linear-gradient(135deg, #607D8B, #455A64)' :
-                                          item.name.includes('Running Shoes') ? 'linear-gradient(135deg, #E91E63, #C2185B)' :
-                                          item.name.includes('Sports Socks') ? 'linear-gradient(135deg, #00BCD4, #0097A7)' :
-                                          item.name.includes('Designer Handbag') ? 'linear-gradient(135deg, #FF5722, #D84315)' :
-                                          item.name.includes('Smartphone') ? 'linear-gradient(135deg, #9E9E9E, #757575)' :
-                                          item.name.includes('Phone Case') ? 'linear-gradient(135deg, #FFC107, #FF8F00)' :
-                                          item.name.includes('Screen Protector') ? 'linear-gradient(135deg, #8BC34A, #689F38)' :
-                                          'linear-gradient(135deg, #BDBDBD, #9E9E9E)',
+                        background: 'linear-gradient(135deg, #BDBDBD, #9E9E9E)',
                                  display: 'flex',
                                  alignItems: 'center',
                                  justifyContent: 'center',
@@ -1106,20 +941,7 @@ export function OrdersListView() {
                                }}
                              >
                                <Iconify 
-                                 icon={item.name.includes('Sneakers') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Loafers') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Boots') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Jacket') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Jeans') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('T-Shirt') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Headphones') ? "eva:headphones-fill" :
-                                      item.name.includes('Running') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Socks') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Handbag') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Smartphone') ? "eva:smartphone-fill" :
-                                      item.name.includes('Case') ? "eva:shopping-bag-fill" :
-                                      item.name.includes('Protector') ? "eva:shopping-bag-fill" :
-                                      "eva:shopping-bag-fill"} 
+                                 icon="eva:shopping-bag-fill"
                                  width={28} 
                                  sx={{ color: 'white' }}
                                />
@@ -1278,28 +1100,45 @@ export function OrdersListView() {
          </MenuItem>
        </Menu>
 
-       <ConfirmDialog
-         open={confirmRows.value}
-         onClose={confirmRows.onFalse}
-         title="Delete"
-         content={
-           <>
-             Are you sure want to delete <strong> {selectedRowIds.length} </strong> items?
-           </>
-         }
-         action={
-           <Button
-             variant="contained"
-             color="error"
-             onClick={() => {
-               handleDeleteRows();
-               confirmRows.onFalse();
-             }}
-           >
-             Delete
-           </Button>
-         }
-       />
+      {/* Delete Multiple Orders Confirmation */}
+      <ConfirmDialog
+        open={confirmRows.value}
+        onClose={confirmRows.onFalse}
+        title="Delete Orders"
+        content={
+          <>
+            Are you sure you want to delete <strong>{selectedRowIds.length}</strong> order(s)? This action cannot be undone.
+          </>
+        }
+        action={
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleDeleteRows}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        }
+      />
+
+      {/* Delete Single Order Confirmation */}
+      <ConfirmDialog
+        open={confirmDelete.value}
+        onClose={confirmDelete.onFalse}
+        title="Delete Order"
+        content="Are you sure you want to delete this order? This action cannot be undone."
+        action={
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteRow}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        }
+      />
 
        <Dialog open={invoiceModalOpen} onClose={handleCloseInvoiceModal} maxWidth="md" fullWidth>
          <DialogContent sx={{ p: 0 }}>
@@ -1328,6 +1167,24 @@ export function OrdersListView() {
            <Button onClick={handlePrintInvoice} variant="contained" startIcon={<Iconify icon="eva:printer-fill" />}>Print</Button>
          </DialogActions>
        </Dialog>
+
+      {/* View / Edit Dialog */}
+      <Dialog
+        open={viewDialogOpen}
+        onClose={() => setViewDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogContent sx={{ p: 0 }}>
+          {viewOrderId && (
+            <OrderDetailsView
+              id={viewOrderId}
+              inDialog
+              onClose={() => setViewDialogOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
     </>
   );

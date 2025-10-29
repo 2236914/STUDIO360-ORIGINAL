@@ -1,5 +1,57 @@
+import accountHistoryService from 'src/services/accountHistoryService';
+
 import { supabase } from './supabaseClient';
 import { setSession, removeSession } from './utils';
+
+// Helper function to get client IP (simplified)
+async function getClientIP() {
+  try {
+    // In a real app, you might get this from your backend
+    // For now, return a placeholder
+    return '127.0.0.1';
+  } catch {
+    return 'Unknown';
+  }
+}
+
+// Helper function to get device info
+function getDeviceInfo() {
+  try {
+    const {userAgent} = navigator;
+    
+    // More comprehensive device detection
+    if (/iPad/.test(userAgent)) {
+      return 'iPad';
+    }
+    if (/iPhone|iPod/.test(userAgent)) {
+      return 'iPhone';
+    }
+    if (/Android/.test(userAgent)) {
+      return /Mobile/.test(userAgent) ? 'Android Mobile' : 'Android Tablet';
+    }
+    if (/Windows Phone/.test(userAgent)) {
+      return 'Windows Phone';
+    }
+    if (/BlackBerry/.test(userAgent)) {
+      return 'BlackBerry';
+    }
+    if (/Windows/.test(userAgent)) {
+      return 'Windows';
+    }
+    if (/Mac/.test(userAgent)) {
+      return 'Mac';
+    }
+    if (/Linux/.test(userAgent)) {
+      return 'Linux';
+    }
+    
+    // Fallback for unknown devices
+    return 'Unknown Device';
+  } catch (error) {
+    console.warn('Error detecting device info:', error);
+    return 'Unknown Device';
+  }
+}
 
 // Map Supabase/Gotrue auth errors to a stable, user-friendly shape
 function normalizeAuthError(err) {
@@ -20,7 +72,12 @@ function normalizeAuthError(err) {
 export const signInWithPassword = async ({ email, password }) => {
   if (process.env.NODE_ENV !== 'production') {
     // eslint-disable-next-line no-console
-    console.log('signInWithPassword()', { email });
+    console.log('signInWithPassword()', { 
+      email,
+      device: getDeviceInfo(),
+      userAgent: navigator.userAgent,
+      timestamp: new Date().toISOString()
+    });
   }
 
   try {
@@ -28,6 +85,31 @@ export const signInWithPassword = async ({ email, password }) => {
 
     if (error) {
       const friendly = normalizeAuthError(error);
+      
+      // Log failed login attempt to account history
+      try {
+        await accountHistoryService.logActivity({
+          activityType: 'login',
+          status: 'failed',
+          ipAddress: await getClientIP(),
+          userAgent: navigator.userAgent,
+          device: getDeviceInfo(),
+          location: 'Unknown',
+          timestamp: new Date().toISOString(),
+          details: error.message || 'Login failed'
+        });
+        console.log('Failed login activity logged successfully');
+      } catch (historyError) {
+        console.error('Failed to log failed login activity:', historyError);
+        console.error('History error details:', {
+          message: historyError.message,
+          stack: historyError.stack,
+          device: getDeviceInfo(),
+          userAgent: navigator.userAgent
+        });
+        // Don't fail the login flow if history logging fails
+      }
+      
       return { ok: false, ...friendly };
     }
 
@@ -66,6 +148,26 @@ export const signInWithPassword = async ({ email, password }) => {
       await setSession(accessToken);
     }
 
+    // Log successful login to account history (after session is established)
+    // Use setTimeout to ensure the session is fully propagated
+    setTimeout(async () => {
+      try {
+        await accountHistoryService.logActivity({
+          activityType: 'login',
+          status: 'successful',
+          ipAddress: await getClientIP(),
+          userAgent: navigator.userAgent,
+          device: getDeviceInfo(),
+          location: 'Unknown', // Could be enhanced with IP geolocation
+          timestamp: new Date().toISOString()
+        });
+        console.log('Login activity logged successfully');
+      } catch (error) {
+        console.error('Failed to log login activity:', error);
+        // Don't fail the login if history logging fails
+      }
+    }, 100);
+
     return { ok: true, user, session: data.session, userData };
   } catch (error) {
     // Ensure we clean up on unexpected errors
@@ -85,7 +187,7 @@ export const signUpWithPassword = async ({ email, password, name, role = 'user' 
     // Sign up with Supabase Auth
     const { data, error } = await supabase.auth.signUp({ email, password });
     if (error) throw new Error(error.message);
-    const user = data.user;
+    const {user} = data;
     if (!user) throw new Error('No user returned from Supabase Auth');
 
     // Insert extra info into user_model

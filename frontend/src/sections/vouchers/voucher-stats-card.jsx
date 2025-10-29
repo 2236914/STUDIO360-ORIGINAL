@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 
+import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
+import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
-import Box from '@mui/material/Box';
-import Grid from '@mui/material/Grid';
 import CircularProgress from '@mui/material/CircularProgress';
 
 import { Iconify } from 'src/components/iconify';
@@ -23,20 +23,20 @@ export function VoucherStatsCard() {
         setLoading(true);
         
         // Here you would make an API call to fetch voucher statistics
-        // For now, we'll simulate with sample data
+        // For now, we'll simulate with empty data
         await new Promise(resolve => setTimeout(resolve, 1000));
         
         const sampleStats = {
-          totalVouchers: 12,
-          activeVouchers: 8,
-          usedVouchers: 3,
-          expiredVouchers: 1,
-          totalUsage: 156,
+          totalVouchers: 0,
+          activeVouchers: 0,
+          usedVouchers: 0,
+          expiredVouchers: 0,
+          totalUsage: 0,
           typeStats: [
-            { type: 'percentage', count: 6 },
-            { type: 'fixed_amount', count: 3 },
-            { type: 'free_shipping', count: 2 },
-            { type: 'buy_x_get_y', count: 1 },
+            { type: 'percentage', count: 0 },
+            { type: 'fixed_amount', count: 0 },
+            { type: 'free_shipping', count: 0 },
+            { type: 'buy_x_get_y', count: 0 },
           ]
         };
         

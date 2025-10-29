@@ -3,8 +3,8 @@
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
+import Typography from '@mui/material/Typography';
 
 import { Iconify } from 'src/components/iconify';
 import { useSettingsContext } from 'src/components/settings';
@@ -14,20 +14,20 @@ import { useSettingsContext } from 'src/components/settings';
 const KPI_DATA = [
   {
     title: 'Customer Satisfaction',
-    value: '5',
-    percentage: 95.2,
+    value: '0',
+    percentage: 0,
     icon: 'eva:star-fill',
   },
   {
     title: 'Order Fulfillment Rate',
-    value: '99',
-    percentage: 88.5,
+    value: '0',
+    percentage: 0,
     icon: 'eva:checkmark-circle-2-fill',
   },
   {
     title: 'Customer Retention Rate',
-    value: '85',
-    percentage: 95.8,
+    value: '0',
+    percentage: 0,
     icon: 'eva:people-fill',
   },
 ];

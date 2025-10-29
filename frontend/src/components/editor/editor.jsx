@@ -12,10 +12,9 @@ import Stack from '@mui/material/Stack';
 import Backdrop from '@mui/material/Backdrop';
 import FormHelperText from '@mui/material/FormHelperText';
 
-import { PortalWrapper } from '../portal';
-
 import { Toolbar } from './toolbar';
 import { StyledRoot } from './styles';
+import { PortalWrapper } from '../portal';
 import { editorClasses } from './classes';
 import { CodeHighlightBlock } from './components/code-highlight-block';
 

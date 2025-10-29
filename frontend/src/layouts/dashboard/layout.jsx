@@ -12,6 +12,7 @@ import { _contacts, _notifications } from 'src/_mock';
 import { varAlpha, stylesMode } from 'src/theme/styles';
 
 import { bulletColor } from 'src/components/nav-section';
+import { WelcomePopup } from 'src/components/welcome-popup';
 import { useSettingsContext } from 'src/components/settings';
 
 import { Main } from './main';
@@ -23,7 +24,6 @@ import { _account } from '../config-nav-account';
 import { HeaderBase } from '../core/header-base';
 import { LayoutSection } from '../core/layout-section';
 import { navData as dashboardNavData } from '../config-nav-dashboard';
-import { WelcomePopup } from 'src/components/welcome-popup';
 
 // ----------------------------------------------------------------------
 
@@ -79,6 +79,7 @@ export function DashboardLayout({ sx, children, data }) {
               helpLink: false,
               localization: false,
               contacts: false,
+              notifications: false,
             }}
             slots={{
               topArea: (

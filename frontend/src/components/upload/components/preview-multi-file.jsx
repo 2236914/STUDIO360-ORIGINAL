@@ -61,12 +61,14 @@ export function MultiFilePreview({
     >
       {renderFirstNode}
 
-      {files.map((file) => {
+      {files.map((file, index) => {
+        if (!file) return null;
+
         const { name, size } = fileData(file);
 
         if (thumbnail) {
           return (
-            <Box component="li" key={name} sx={{ display: 'inline-flex' }}>
+            <Box component="li" key={name || `file-${index}` } sx={{ display: 'inline-flex' }}>
               <FileThumbnail
                 tooltip
                 imageView
@@ -88,7 +90,7 @@ export function MultiFilePreview({
         return (
           <Box
             component="li"
-            key={name}
+            key={name || `file-${index}`}
             sx={{
               py: 1,
               pr: 1,

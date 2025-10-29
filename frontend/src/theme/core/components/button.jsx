@@ -89,7 +89,7 @@ const MuiButton = {
     contained: ({ theme, ownerState }) => {
       const styled = {
         colors: styleColors(ownerState, (color) => ({
-          '&:hover': { boxShadow: theme.customShadows[color] },
+          '&:hover': { boxShadow: theme.shadows[8] },
         })),
         inheritColor: {
           ...(ownerState.color === 'inherit' &&
@@ -97,7 +97,7 @@ const MuiButton = {
               color: theme.vars.palette.common.white,
               backgroundColor: theme.vars.palette.grey[800],
               '&:hover': {
-                boxShadow: theme.customShadows.z8,
+                boxShadow: theme.shadows[8],
                 backgroundColor: theme.vars.palette.grey[700],
               },
               [stylesMode.dark]: {

@@ -1,5 +1,6 @@
 'use client';
 
+import { m } from 'framer-motion';
 import { useState, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
@@ -8,19 +9,17 @@ import Badge from '@mui/material/Badge';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Tooltip from '@mui/material/Tooltip';
+import SvgIcon from '@mui/material/SvgIcon';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-import SvgIcon from '@mui/material/SvgIcon';
 
-import { m } from 'framer-motion';
-
-import { varHover } from 'src/components/animate';
-import { CustomPopover, usePopover } from 'src/components/custom-popover';
-import { CustomTabs } from 'src/components/custom-tabs';
-import { Scrollbar } from 'src/components/scrollbar';
-import { Iconify } from 'src/components/iconify';
 import { Label } from 'src/components/label';
+import { Iconify } from 'src/components/iconify';
+import { varHover } from 'src/components/animate';
+import { Scrollbar } from 'src/components/scrollbar';
+import { CustomTabs } from 'src/components/custom-tabs';
+import { usePopover, CustomPopover } from 'src/components/custom-popover';
 
 import { NotificationItem } from './notifications-drawer/notification-item';
 
@@ -30,60 +29,22 @@ const TABS = [
   {
     value: 'all',
     label: 'All',
-    count: 22,
+    count: 0,
   },
   {
     value: 'unread',
     label: 'Unread',
-    count: 12,
+    count: 0,
   },
   {
     value: 'archived',
     label: 'Archived',
-    count: 10,
+    count: 0,
   },
 ];
 
-// Mock notifications data
-const MOCK_NOTIFICATIONS = [
-  {
-    id: '1',
-    title: 'Deja Brady sent you a friend request',
-    description: '8 minutes · Communication',
-    avatar: '/assets/images/avatar/avatar_1.jpg',
-    type: 'friend_request',
-    isUnRead: true,
-    actions: [
-      { label: 'Accept', variant: 'contained' },
-      { label: 'Decline', variant: 'outlined' },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Jayvon Hull mentioned you in Minimal UI',
-    description: 'a day · Project UI',
-    avatar: '/assets/images/avatar/avatar_2.jpg',
-    type: 'mention',
-    isUnRead: true,
-    content: '@Jaydon Frankie feedback by asking questions or just leave a note of appreciation.',
-    actions: [{ label: 'Reply', variant: 'contained' }],
-  },
-  {
-    id: '3',
-    title: 'Lainey Davidson added file to File manager',
-    description: '2 days · File manager',
-    avatar: '/assets/images/avatar/avatar_3.jpg',
-    type: 'file_added',
-    isUnRead: true,
-    file: {
-      name: 'design-suriname-2015.mp3',
-      size: '2.3 GB',
-      time: '30 min ago',
-      icon: 'eva:music-outline',
-    },
-    actions: [{ label: 'Download', variant: 'outlined' }],
-  },
-];
+// Empty notifications data - will be populated from database
+const MOCK_NOTIFICATIONS = [];
 
 export function NotificationsPopover({ sx, ...other }) {
   const theme = useTheme();

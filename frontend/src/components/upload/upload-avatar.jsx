@@ -8,15 +8,36 @@ import { varAlpha } from 'src/theme/styles';
 
 import { Image } from '../image';
 import { Iconify } from '../iconify';
+import { ImageCropModal } from '../image-crop-modal';
 import { RejectionFiles } from './components/rejection-files';
 
 // ----------------------------------------------------------------------
 
-export function UploadAvatar({ sx, error, value, disabled, helperText, ...other }) {
+export function UploadAvatar({ sx, error, value, disabled, helperText, enableCrop = true, onChange, onDrop, ...other }) {
+  const handleFileSelect = (acceptedFiles) => {
+    console.log('handleFileSelect called with:', acceptedFiles);
+    const file = acceptedFiles[0];
+    if (file) {
+      console.log('File selected:', file.name, file.type, file.size);
+      if (enableCrop) {
+        console.log('Opening crop modal with file:', file);
+        setSelectedFile(file);
+        setCropModalOpen(true);
+      } else {
+        console.log('Direct upload without crop');
+        onChange?.(file);
+        onDrop?.(acceptedFiles);
+      }
+    } else {
+      console.log('No file selected');
+    }
+  };
+
   const { getRootProps, getInputProps, isDragActive, isDragReject, fileRejections } = useDropzone({
     multiple: false,
     disabled,
     accept: { 'image/*': [] },
+    onDrop: handleFileSelect,
     ...other,
   });
 
@@ -25,6 +46,8 @@ export function UploadAvatar({ sx, error, value, disabled, helperText, ...other 
   const hasError = isDragReject || !!error;
 
   const [preview, setPreview] = useState('');
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [selectedFile, setSelectedFile] = useState(null);
 
   useEffect(() => {
     if (typeof value === 'string') {
@@ -33,6 +56,18 @@ export function UploadAvatar({ sx, error, value, disabled, helperText, ...other 
       setPreview(URL.createObjectURL(value));
     }
   }, [value]);
+
+  const handleCropSave = (croppedFile) => {
+    onChange?.(croppedFile);
+    onDrop?.([croppedFile]);
+    setCropModalOpen(false);
+    setSelectedFile(null);
+  };
+
+  const handleCropClose = () => {
+    setCropModalOpen(false);
+    setSelectedFile(null);
+  };
 
   const renderPreview = hasFile && (
     <Image alt="avatar" src={preview} sx={{ width: 1, height: 1, borderRadius: '50%' }} />
@@ -125,6 +160,17 @@ export function UploadAvatar({ sx, error, value, disabled, helperText, ...other 
       {helperText && helperText}
 
       <RejectionFiles files={fileRejections} />
+
+      {enableCrop && (
+        <ImageCropModal
+          open={cropModalOpen}
+          onClose={handleCropClose}
+          onSave={handleCropSave}
+          imageFile={selectedFile}
+          aspect={1}
+          title="Crop Profile Photo"
+        />
+      )}
     </>
   );
 }

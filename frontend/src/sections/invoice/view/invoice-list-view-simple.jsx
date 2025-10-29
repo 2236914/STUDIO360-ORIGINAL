@@ -8,17 +8,19 @@ import Typography from '@mui/material/Typography';
 
 import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
-import { DashboardContent } from 'src/layouts/dashboard';
-import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
-import { Iconify } from 'src/components/iconify';
 
-// Simple stats data without theme dependencies
+import { DashboardContent } from 'src/layouts/dashboard';
+
+import { Iconify } from 'src/components/iconify';
+import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
+
+// Empty stats data - will be populated from database
 const SIMPLE_STATS = [
-  { title: 'Total', count: 20, amount: '$46,218.04', color: '#00B8D9' },
-  { title: 'Paid', count: 10, amount: '$23,110.23', color: '#22C55E' },
-  { title: 'Pending', count: 6, amount: '$13,825.05', color: '#FFAB00' },
-  { title: 'Overdue', count: 2, amount: '$4,655.63', color: '#FF5630' },
-  { title: 'Draft', count: 2, amount: '$4,627.13', color: '#919EAB' },
+  { title: 'Total', count: 0, amount: '₱0.00', color: '#00B8D9' },
+  { title: 'Paid', count: 0, amount: '₱0.00', color: '#22C55E' },
+  { title: 'Pending', count: 0, amount: '₱0.00', color: '#FFAB00' },
+  { title: 'Overdue', count: 0, amount: '₱0.00', color: '#FF5630' },
+  { title: 'Draft', count: 0, amount: '₱0.00', color: '#919EAB' },
 ];
 
 // ----------------------------------------------------------------------

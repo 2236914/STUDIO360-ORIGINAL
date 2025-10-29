@@ -10,7 +10,6 @@ const fs = require('fs');
 const multer = require('multer');
 const { spawn } = require('child_process');
 const crypto = require('crypto');
-const { postToWebhook } = require('../../services/n8nClient');
 const { chatComplete, getConfig: getLLMConfig } = require('../../services/llmClient');
 // bookkeeping helpers will be required lazily where needed to avoid startup cycles
 
@@ -127,27 +126,7 @@ function freshKPI() {
   };
 }
 let kpiStats = freshKPI();
-// On module load, try to hydrate in-memory KPI from DB snapshot
-try {
-  const { getMonth } = require('../../services/kpiRepo');
-  (async () => {
-    try {
-      const { data } = await getMonth();
-      if (data) {
-        kpiStats = {
-          processed: Number(data.transactions_processed || 0),
-          accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
-          timeSavedMinutes: Number(data.time_saved_minutes || 0),
-          costSavings: Number(data.cost_savings || 0),
-          docsCount: Number(data.docs_count || 0),
-          txCount: Number(kpiStats.txCount || 0),
-          transferred: Number(kpiStats.transferred || 0),
-          updatedAt: Date.now(),
-        };
-      }
-    } catch (_) {}
-  })();
-} catch (_) { /* supabase not configured or repo missing */ }
+// Note: DB-backed KPI snapshots removed (kpi_stats table deleted). Using in-memory only.
 
 // In-memory processed invoice/receipt JSON store (ephemeral)
 const processedStore = []; // { id, originalName, storedPath, size, mimetype, extractedAt, canonical }
@@ -286,7 +265,7 @@ function localAssistantReply(input, stats) {
   }
   // Generic "what is ..." without AI — steer to LLM or provide guidance
   if (/^\s*what\s+is\s+.+/i.test(msg)) {
-    return 'I can help with general questions too. For the best answers, enable the LLM fallback (set LLM_API_KEY in backend/.env or use the advanced n8n workflow). For bookkeeping, you can ask me to categorize or generate reports.';
+    return 'I can help with general questions too. For the best answers, enable the LLM fallback (set LLM_API_KEY in backend/.env). For bookkeeping, you can ask me to categorize or generate reports.';
   }
   // Categorization intent
   if (/categor/i.test(m)) {
@@ -416,23 +395,8 @@ router.get('/stats', (req, res) => {
 
 // Diagnostic: compare DB snapshot vs in-memory
 router.get('/stats/db', async (req, res) => {
-  try {
-    const { getMonth } = require('../../services/kpiRepo');
-    const { data, error } = await getMonth();
-    if (error) return res.json({ success: true, data: { memory: kpiStats, db: null, warning: 'supabase not configured or query failed' } });
-    const db = data ? {
-      processed: Number(data.transactions_processed || 0),
-      accuracyRate: typeof data.accuracy_rate === 'number' ? data.accuracy_rate : 0,
-      timeSavedMinutes: Number(data.time_saved_minutes || 0),
-      costSavings: Number(data.cost_savings || 0),
-      docsCount: Number(data.docs_count || 0),
-      monthKey: data.month_key,
-      lastCalculatedAt: data.last_calculated_at,
-    } : null;
-    return res.json({ success: true, data: { memory: kpiStats, db } });
-  } catch (_) {
-    return res.json({ success: true, data: { memory: kpiStats, db: null } });
-  }
+  // KPI DB snapshot disabled (kpi_stats table removed). Always return memory only.
+  return res.json({ success: true, data: { memory: kpiStats, db: null, warning: 'kpi_stats removed; DB snapshot disabled' } });
 });
 
 /**
@@ -466,21 +430,7 @@ router.post('/stats', express.json(), (req, res) => {
     }
     // ensure updatedAt
     kpiStats.updatedAt = Date.now();
-    // Fire-and-forget DB persistence using repo (non-blocking)
-    try {
-      const { snapshot, accumulate: dbAccumulate } = require('../../services/kpiRepo');
-      if (body.mode === 'accumulate') {
-        dbAccumulate({
-          processed: Number(body.processed || 0),
-          docsCount: Number(body.docsCount || 0),
-          timeSavedMinutes: Number(body.timeSavedMinutes || 0),
-          costSavings: Number(body.costSavings || 0),
-          accuracyRate: typeof body.accuracyRate === 'number' ? body.accuracyRate : undefined,
-        }).catch(()=>{});
-      } else {
-        snapshot(kpiStats).catch(()=>{});
-      }
-    } catch(_) { /* ignore persistence errors */ }
+    // Persistence disabled (kpi_stats removed). In-memory only.
     return res.json({ success: true, data: kpiStats });
   } catch (e) {
     return res.status(400).json({ success: false, message: e.message });
@@ -765,18 +715,17 @@ function getOrCreateSession(sessionId) {
 
 /**
  * @route   GET /api/ai/assistant/health
- * @desc    Check whether n8n webhook is configured
+ * @desc    Check whether LLM is configured
  */
 router.get('/assistant/health', (req, res) => {
-  const url = process.env.N8N_WEBHOOK_URL || '';
-  const configured = Boolean(url && (url.startsWith('http') || url.startsWith('mock:')));
-  const masked = url ? url.replace(/:[^@/]+@/, ':***@') : null; // mask basic auth secret
-  res.json({ success: true, data: { configured, url: masked } });
+  const llmCfg = getLLMConfig();
+  const configured = Boolean(llmCfg.apiKey);
+  res.json({ success: true, data: { configured, source: 'llm' } });
 });
 
 /**
  * @route   POST /api/ai/assistant/message
- * @desc    Send a user message to the n8n AI workflow and return the assistant reply
+ * @desc    Send a user message to the AI assistant and return the reply
  * @body    { message: string, sessionId?: string, context?: object }
  */
 router.post('/assistant/message', express.json(), async (req, res) => {
@@ -804,59 +753,33 @@ router.post('/assistant/message', express.json(), async (req, res) => {
       },
     };
 
-    const resp = await postToWebhook('assistant', payload);
-    if (!resp.ok) {
-      // If a direct LLM is configured, use it as a powerful fallback
+    // Use LLM as primary response method
+    const llmCfg = getLLMConfig();
+    
+    if (llmCfg.apiKey) {
       try {
-        const llmCfg = getLLMConfig();
-        if (llmCfg.apiKey) {
-          const system = 'You are the STUDIO360 AI Bookkeeper assistant. Be concise and helpful. If the user asks about bookkeeping tasks, guide them to upload receipts, categorize transactions, or generate reports.';
-          const llmReply = await chatComplete({
-            system,
-            messages: [
-              ...session.history.map(h => ({ role: h.role, content: String(h.content || '') })),
-              { role: 'user', content: String(message) },
-            ],
-            temperature: 0.3,
-            maxTokens: 400,
-          });
-          session.history.push({ role: 'assistant', content: llmReply, ts: Date.now() });
-          return res.json({ success: true, data: { sessionId: id, reply: llmReply, source: 'llm' } });
-        }
+        const system = 'You are the STUDIO360 AI Bookkeeper assistant. Be concise and helpful. If the user asks about bookkeeping tasks, guide them to upload receipts, categorize transactions, or generate reports.';
+        const llmReply = await chatComplete({
+          system,
+          messages: [
+            ...session.history.map(h => ({ role: h.role, content: String(h.content || '') })),
+            { role: 'user', content: String(message) },
+          ],
+          temperature: 0.3,
+          maxTokens: 400,
+        });
+        session.history.push({ role: 'assistant', content: llmReply, ts: Date.now() });
+        return res.json({ success: true, data: { sessionId: id, reply: llmReply, source: 'llm' } });
       } catch (e) {
-        console.warn('LLM fallback error:', e.message || e);
+        console.warn('LLM error:', e.message || e);
+        // fall through to local assistant
       }
-
-      // Otherwise, use the local heuristic reply
-      const hint = localAssistantReply(message, kpiStats);
-      if (resp.error) console.warn('n8n webhook error:', resp.error);
-      session.history.push({ role: 'assistant', content: hint, ts: Date.now() });
-      return res.json({ success: true, data: { sessionId: id, reply: hint, source: 'fallback' } });
     }
 
-    const data = resp.data || {};
-    const reply =
-      (typeof data.reply === 'string' && data.reply) ||
-      (Array.isArray(data.messages) && data.messages.find(m => m.role !== 'user')?.content) ||
-      (typeof data.text === 'string' && data.text) ||
-      'Okay.';
-
-    // optionally adjust KPI stats if workflow returns deltas
-    if (data.statsDelta && typeof data.statsDelta === 'object') {
-      const d = data.statsDelta;
-      kpiStats.processed = (kpiStats.processed || 0) + Number(d.processed || 0);
-      if (typeof d.accuracyRate === 'number') kpiStats.accuracyRate = d.accuracyRate;
-      kpiStats.timeSavedMinutes = (kpiStats.timeSavedMinutes || 0) + Number(d.timeSavedMinutes || 0);
-      kpiStats.costSavings = (kpiStats.costSavings || 0) + Number(d.costSavings || 0);
-      kpiStats.txCount = (kpiStats.txCount || 0) + Number(d.txCount || 0);
-      kpiStats.docsCount = (kpiStats.docsCount || 0) + Number(d.docsCount || 0);
-      kpiStats.updatedAt = Date.now();
-    }
-
-    // store assistant reply
-    session.history.push({ role: 'assistant', content: reply, ts: Date.now() });
-
-    return res.json({ success: true, data: { sessionId: id, reply, raw: data } });
+    // Fallback to local assistant if LLM is not available or fails
+    const hint = localAssistantReply(message, kpiStats);
+    session.history.push({ role: 'assistant', content: hint, ts: Date.now() });
+    return res.json({ success: true, data: { sessionId: id, reply: hint, source: 'fallback' } });
   } catch (err) {
     return res.status(500).json({ success: false, message: err.message });
   }

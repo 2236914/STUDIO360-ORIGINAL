@@ -1,8 +1,8 @@
 'use client';
 
-import { PortalWrapper } from '../portal';
 import { Iconify } from '../iconify';
 import { StyledToaster } from './styles';
+import { PortalWrapper } from '../portal';
 import { toasterClasses } from './classes';
 
 // ----------------------------------------------------------------------
@@ -11,15 +11,17 @@ export function Snackbar() {
   return (
     <PortalWrapper>
       <StyledToaster
-        expand
+        expand={false}
         gap={12}
         closeButton
         offset={16}
         visibleToasts={4}
         position="top-right"
+        duration={3000}
         className={toasterClasses.root}
         toastOptions={{
           unstyled: true,
+          duration: 3000,
           classNames: {
             toast: toasterClasses.toast,
             icon: toasterClasses.icon,

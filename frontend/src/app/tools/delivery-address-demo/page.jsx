@@ -1,5 +1,8 @@
-import { Container, Typography, Box, Paper, Alert } from '@mui/material';
+'use client';
+
 import { useState } from 'react';
+
+import { Box, Paper, Alert, Container, Typography } from '@mui/material';
 
 import { DeliveryAddressForm } from 'src/components/delivery-address-form';
 

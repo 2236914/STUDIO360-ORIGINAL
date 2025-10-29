@@ -4,30 +4,31 @@ import { useState, useEffect } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
 import Grid from '@mui/material/Grid';
 import Chip from '@mui/material/Chip';
+import Stack from '@mui/material/Stack';
+import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 import { RouterLink } from 'src/routes/components';
 
+import { fDate } from 'src/utils/format-time';
+import { fPercent, fCurrency } from 'src/utils/format-number';
+
 import { DashboardContent } from 'src/layouts/dashboard';
+import { vouchersApi } from 'src/services/vouchersService';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
-import { fCurrency, fPercent } from 'src/utils/format-number';
-import { fDate } from 'src/utils/format-time';
-
 // ----------------------------------------------------------------------
 
-export function VoucherDetailsView({ id }) {
+export function VoucherDetailsView({ id, isModal = false, onClose }) {
   const router = useRouter();
   const [voucher, setVoucher] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -37,34 +38,49 @@ export function VoucherDetailsView({ id }) {
       try {
         setLoading(true);
         
-        // Here you would make an API call to fetch the voucher
-        // For now, we'll simulate with sample data
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Fetch voucher from database
+        const voucherData = await vouchersApi.getVoucherById(id);
         
-        const sampleVoucher = {
-          id: parseInt(id),
-          code: 'WELCOME10',
-          name: 'Welcome Discount',
-          description: '10% off for new customers',
-          type: 'percentage',
-          value: 10,
-          minOrderAmount: 50,
-          maxDiscount: 20,
-          usageLimit: 100,
-          usedCount: 25,
-          validFrom: '2024-01-01T00:00:00Z',
-          validUntil: '2024-12-31T23:59:59Z',
-          applicableTo: 'all',
-          status: 'active',
-          createdAt: '2024-01-01T10:00:00Z',
-          updatedAt: '2024-01-01T10:00:00Z',
+        if (!voucherData) {
+          toast.error('Voucher not found');
+          if (isModal && onClose) {
+            onClose();
+          } else {
+            router.push(paths.dashboard.vouchers.root);
+          }
+          return;
+        }
+
+        // Transform database data to match component format
+        const transformedVoucher = {
+          id: voucherData.id,
+          name: voucherData.name,
+          code: voucherData.code,
+          description: voucherData.description || '',
+          type: voucherData.type,
+          value: parseFloat(voucherData.discount_value || 0),
+          minOrderAmount: parseFloat(voucherData.min_purchase_amount || 0),
+          maxDiscount: voucherData.max_discount_amount ? parseFloat(voucherData.max_discount_amount) : null,
+          usageLimit: voucherData.usage_limit,
+          usageCount: voucherData.usage_count || 0,
+          usageLimitPerUser: voucherData.usage_limit_per_user || 1,
+          validFrom: voucherData.start_date,
+          validUntil: voucherData.end_date,
+          status: voucherData.status,
+          isActive: voucherData.is_active,
+          createdAt: voucherData.created_at,
+          updatedAt: voucherData.updated_at,
         };
         
-        setVoucher(sampleVoucher);
+        setVoucher(transformedVoucher);
       } catch (error) {
         console.error('Error fetching voucher:', error);
         toast.error('Failed to load voucher details');
-        router.push(paths.dashboard.vouchers.root);
+        if (isModal && onClose) {
+          onClose();
+        } else {
+          router.push(paths.dashboard.vouchers.root);
+        }
       } finally {
         setLoading(false);
       }
@@ -76,7 +92,11 @@ export function VoucherDetailsView({ id }) {
   }, [id, router]);
 
   const handleBack = () => {
-    router.push(paths.dashboard.vouchers.root);
+    if (isModal && onClose) {
+      onClose();
+    } else {
+      router.push(paths.dashboard.vouchers.root);
+    }
   };
 
   const getStatusConfig = (status) => {
@@ -140,84 +160,34 @@ export function VoucherDetailsView({ id }) {
 
   if (loading) {
     return (
-      <DashboardContent>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-          <CircularProgress />
-        </Box>
-      </DashboardContent>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+        <CircularProgress />
+      </Box>
     );
   }
 
   if (!voucher) {
     return (
-      <DashboardContent>
-        <CustomBreadcrumbs
-          heading="Voucher not found"
-          links={[
-            { name: 'Dashboard', href: paths.dashboard.root },
-            { name: 'Vouchers', href: paths.dashboard.vouchers.root },
-            { name: 'Not found' },
-          ]}
-          action={
-            <Button
-              variant="text"
-              color="inherit"
-              onClick={handleBack}
-              startIcon={<Iconify icon="eva:arrow-back-fill" />}
-              sx={{ 
-                color: 'text.primary',
-                '&:hover': { bgcolor: 'transparent' }
-              }}
-            >
-              Back
-            </Button>
-          }
-          sx={{ mb: { xs: 3, md: 5 } }}
-        />
-      </DashboardContent>
+      <Box sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>
+          Voucher not found
+        </Typography>
+        <Button
+          variant="outlined"
+          onClick={handleBack}
+          startIcon={<Iconify icon="eva:arrow-back-fill" />}
+        >
+          Back
+        </Button>
+      </Box>
     );
   }
 
   const statusConfig = getStatusConfig(voucher.status);
   const typeConfig = getTypeConfig(voucher.type);
 
-  return (
-    <DashboardContent>
-      <CustomBreadcrumbs
-        heading={voucher.name}
-        links={[
-          { name: 'Dashboard', href: paths.dashboard.root },
-          { name: 'Vouchers', href: paths.dashboard.vouchers.root },
-          { name: voucher.name },
-        ]}
-        action={
-          <Stack direction="row" spacing={1}>
-            <Button
-              component={RouterLink}
-              href={paths.dashboard.vouchers.edit(voucher.id)}
-              variant="contained"
-              startIcon={<Iconify icon="eva:edit-fill" />}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="text"
-              color="inherit"
-              onClick={handleBack}
-              startIcon={<Iconify icon="eva:arrow-back-fill" />}
-              sx={{ 
-                color: 'text.primary',
-                '&:hover': { bgcolor: 'transparent' }
-              }}
-            >
-              Back
-            </Button>
-          </Stack>
-        }
-        sx={{ mb: { xs: 3, md: 5 } }}
-      />
-
-      <Grid container spacing={3}>
+  const content = (
+    <Grid container spacing={3}>
         <Grid item xs={12} md={8}>
           <Card sx={{ p: 3 }}>
             <Stack spacing={3}>
@@ -372,7 +342,7 @@ export function VoucherDetailsView({ id }) {
                       Applicable To
                     </Typography>
                     <Typography variant="body1" sx={{ fontWeight: 'fontWeightMedium', textTransform: 'capitalize' }}>
-                      {voucher.applicableTo.replace('_', ' ')}
+                      {voucher.applicableTo?.replace('_', ' ') || 'All products'}
                     </Typography>
                   </Box>
 
@@ -399,6 +369,48 @@ export function VoucherDetailsView({ id }) {
           </Card>
         </Grid>
       </Grid>
+  );
+
+  if (isModal) {
+    return content;
+  }
+
+  return (
+    <DashboardContent>
+      <CustomBreadcrumbs
+        heading={voucher.name}
+        links={[
+          { name: 'Dashboard', href: paths.dashboard.root },
+          { name: 'Vouchers', href: paths.dashboard.vouchers.root },
+          { name: voucher.name },
+        ]}
+        action={
+          <Stack direction="row" spacing={1}>
+            <Button
+              component={RouterLink}
+              href={paths.dashboard.vouchers.edit(voucher.id)}
+              variant="contained"
+              startIcon={<Iconify icon="eva:edit-fill" />}
+            >
+              Edit
+            </Button>
+            <Button
+              variant="text"
+              color="inherit"
+              onClick={handleBack}
+              startIcon={<Iconify icon="eva:arrow-back-fill" />}
+              sx={{ 
+                color: 'text.primary',
+                '&:hover': { bgcolor: 'transparent' }
+              }}
+            >
+              Back
+            </Button>
+          </Stack>
+        }
+        sx={{ mb: { xs: 3, md: 5 } }}
+      />
+      {content}
     </DashboardContent>
   );
 }

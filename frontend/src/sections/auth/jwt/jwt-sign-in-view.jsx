@@ -24,7 +24,7 @@ import { Form, Field } from 'src/components/hook-form';
 
 import { useAuthContext } from 'src/auth/hooks';
 import { signInWithPassword } from 'src/auth/context/jwt';
-import { setSession, removeSession } from 'src/auth/context/jwt/utils';
+import { removeSession } from 'src/auth/context/jwt/utils';
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------

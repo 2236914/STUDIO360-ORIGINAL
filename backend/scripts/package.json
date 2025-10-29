@@ -1,0 +1,16 @@
+{
+  "name": "shopee-data-converter",
+  "version": "1.0.0",
+  "description": "Convert Shopee analytics data to forecasting format",
+  "main": "convert_shopee_data.py",
+  "scripts": {
+    "convert": "python scripts/convert_shopee_data.py",
+    "convert:shopee": "python scripts/convert_shopee_data.py data/shopee_data.json output/shopee_forecast_data.json",
+    "convert:tiktok": "python scripts/convert_shopee_data.py data/tiktok_data.json output/tiktok_forecast_data.json"
+  },
+  "dependencies": {},
+  "devDependencies": {},
+  "keywords": ["shopee", "analytics", "forecasting", "data-conversion"],
+  "author": "Studio360",
+  "license": "MIT"
+}

@@ -23,8 +23,8 @@ axiosInstance.interceptors.response.use(
       }
       // If backend provided stderr/stdout, append a short diagnostic tail
       try {
-        const stderr = error.response.data.stderr;
-        const stdout = error.response.data.stdout;
+        const {stderr} = error.response.data;
+        const {stdout} = error.response.data;
         const clip = (s) => (typeof s === 'string' && s.trim() ? s.trim().slice(0, 400) : '');
         const parts = [];
         if (stderr) parts.push(`stderr: ${clip(stderr)}`);

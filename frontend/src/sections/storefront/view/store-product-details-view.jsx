@@ -1,33 +1,29 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import dynamic from 'next/dynamic';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 // import Tab from '@mui/material/Tab';
 import Card from '@mui/material/Card';
-import Chip from '@mui/material/Chip';
 import Grid from '@mui/material/Grid';
+import Menu from '@mui/material/Menu';
 // import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
-import Avatar from '@mui/material/Avatar';
 import Rating from '@mui/material/Rating';
+import Select from '@mui/material/Select';
 import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import FormControl from '@mui/material/FormControl';
-import Select from '@mui/material/Select';
-import InputLabel from '@mui/material/InputLabel';
-import Menu from '@mui/material/Menu';
 // import Pagination from '@mui/material/Pagination';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import Fab from '@mui/material/Fab';
+
+import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
 import { Iconify } from 'src/components/iconify';
-import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
 // ----------------------------------------------------------------------
 
@@ -296,7 +292,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           </IconButton>
           <Box
             component="img"
-            src="https://via.placeholder.com/600x600/8B5CF6/FFFFFF?text=Ballet+Shoes"
+            src={product.images?.[0] || '/assets/images/product/product-placeholder.png'}
             alt={`${product.name} main image`}
             sx={{
               width: '100%',
@@ -330,7 +326,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
             <Grid item xs={2.4} key={index}>
               <Box
                 component="img"
-                src="https://via.placeholder.com/600x600/8B5CF6/FFFFFF?text=Ballet+Shoes"
+                src={image || '/assets/images/product/product-placeholder.png'}
                 alt={`${product.name} ${index + 1}`}
                 sx={{
                   width: '100%',

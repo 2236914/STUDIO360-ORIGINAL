@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import axios from 'src/utils/axios';
+import { useRef, useMemo, useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -9,17 +8,19 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
+import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-import { useTheme } from '@mui/material/styles';
 import InputAdornment from '@mui/material/InputAdornment';
+import { Table, Paper, Alert, Dialog, TableRow, TableBody, TableCell, TableHead, DialogTitle, DialogContent, DialogActions, TableContainer } from '@mui/material';
 
+import axios from 'src/utils/axios';
 import { fNumber } from 'src/utils/format-number';
 
 import { DashboardContent } from 'src/layouts/dashboard';
-import { Iconify } from 'src/components/iconify';
+
 import { Label } from 'src/components/label';
-import { Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Dialog, DialogTitle, DialogContent, DialogActions, Alert } from '@mui/material';
+import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
@@ -386,7 +387,7 @@ export default function CashDisbursementPage() {
       checkNo: refNo || f.checkNo,
       payee: seller || f.payee,
       description: desc,
-      amount: amount,
+      amount,
       account: f.account,
     }));
     setImportOpen(false);
@@ -749,7 +750,7 @@ export default function CashDisbursementPage() {
                     </Typography>
                   </TableCell>
                   <TableCell align="left" sx={{ maxWidth: 260 }}>
-                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }}></Typography>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 700 }} />
                   </TableCell>
                 </TableRow>
               </TableBody>
@@ -831,7 +832,7 @@ export default function CashDisbursementPage() {
                 { key: 'ownersWithdrawalDebit', match: ["owner's withdrawal", 'withdrawal', 'draw'] },
                 { key: 'inventoryDebit', match: ['inventory'] },
               ];
-              let debitPayload = {};
+              const debitPayload = {};
               for (const m of debitFieldMap) {
                 if (m.match.some((t) => acc.includes(t))) {
                   debitPayload[m.key] = amt;

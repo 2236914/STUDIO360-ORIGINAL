@@ -1,5 +1,5 @@
 import PropTypes from 'prop-types';
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
 
 import Avatar from '@mui/material/Avatar';
 import Button from '@mui/material/Button';
@@ -9,15 +9,15 @@ import TableRow from '@mui/material/TableRow';
 import TableCell from '@mui/material/TableCell';
 import IconButton from '@mui/material/IconButton';
 import ListItemText from '@mui/material/ListItemText';
-import LinearProgress from '@mui/material/LinearProgress';
 
-import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 import { fDate } from 'src/utils/format-time';
+import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
 import { Label } from 'src/components/label';
 import { Iconify } from 'src/components/iconify';
 import { ConfirmDialog } from 'src/components/custom-dialog';
-import { CustomPopover, usePopover } from 'src/components/custom-popover';
+import { usePopover, CustomPopover } from 'src/components/custom-popover';
+import { useBoolean } from 'src/hooks/use-boolean';
 
 // ----------------------------------------------------------------------
 
@@ -31,7 +31,7 @@ export function InvoiceTableRow({
 }) {
   const { invoiceNumber, createDate, dueDate, invoiceTo, totalAmount, status, sent } = row;
 
-  const confirm = usePopover();
+  const confirm = useBoolean();
 
   const popover = usePopover();
 
@@ -145,8 +145,8 @@ export function InvoiceTableRow({
       </CustomPopover>
 
       <ConfirmDialog
-        open={confirm.open}
-        onClose={confirm.onClose}
+        open={confirm.value}
+        onClose={confirm.onFalse}
         title="Delete"
         content="Are you sure want to delete?"
         action={
@@ -164,6 +164,18 @@ InvoiceTableRow.propTypes = {
   onEditRow: PropTypes.func,
   onSelectRow: PropTypes.func,
   onViewRow: PropTypes.func,
-  row: PropTypes.object,
+  row: PropTypes.shape({
+    id: PropTypes.string,
+    invoiceNumber: PropTypes.string,
+    createDate: PropTypes.string,
+    dueDate: PropTypes.string,
+    invoiceTo: PropTypes.shape({
+      name: PropTypes.string,
+      email: PropTypes.string,
+    }),
+    totalAmount: PropTypes.number,
+    status: PropTypes.string,
+    sent: PropTypes.number,
+  }),
   selected: PropTypes.bool,
 };

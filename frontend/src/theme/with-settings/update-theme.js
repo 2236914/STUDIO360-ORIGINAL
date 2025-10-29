@@ -1,28 +1,32 @@
 import COLORS from '../core/colors.json';
 import PRIMARY_COLOR from './primary-color.json';
+import { components as coreComponents } from '../core/components';
 import { hexToRgbChannel, createPaletteChannel } from '../styles';
 import { grey as coreGreyPalette, primary as corePrimaryPalette } from '../core/palette';
+import { createShadowColor, customShadows as coreCustomShadows } from '../core/custom-shadows';
 
 // ----------------------------------------------------------------------
 
 /**
  * [1] settings @primaryColor
  * [2] settings @contrast
+ * [3] settings @borderRadius
  */
 
 export function updateCoreWithSettings(theme, settings) {
-  const { colorSchemes, customShadows } = theme;
+  const { colorSchemes, customShadows, shadows, typography, components, direction, cssVarPrefix, shouldSkipGeneratingVar } = theme;
 
+  // DON'T spread entire theme - causes circular reference!
+  // Instead, explicitly copy only what we need
   return {
-    ...theme,
     colorSchemes: {
       ...colorSchemes,
       light: {
         palette: {
           ...colorSchemes?.light?.palette,
-          /** [1] */
+          /** [1] Update primary color */
           primary: getPalettePrimary(settings.primaryColor),
-          /** [2] */
+          /** [2] Update background contrast */
           background: {
             ...colorSchemes?.light?.palette?.background,
             default: getBackgroundDefault(settings.contrast),
@@ -33,19 +37,30 @@ export function updateCoreWithSettings(theme, settings) {
       dark: {
         palette: {
           ...colorSchemes?.dark?.palette,
-          /** [1] */
+          /** [1] Update primary color for dark mode */
           primary: getPalettePrimary(settings.primaryColor),
         },
       },
     },
     customShadows: {
       ...customShadows,
-      /** [1] - TEMPORARILY DISABLED TO PREVENT CIRCULAR REFERENCE */
-      // primary:
-      //   settings.primaryColor === 'default'
-      //     ? coreCustomShadows('light').primary
-      //     : createShadowColor(getPalettePrimary(settings.primaryColor).mainChannel),
+      /** [1] Update primary shadow color */
+      primary:
+        settings.primaryColor === 'default'
+          ? coreCustomShadows('light').primary
+          : createShadowColor(getPalettePrimary(settings.primaryColor).mainChannel),
     },
+    /** [3] Update border radius from settings */
+    shape: {
+      borderRadius: settings.borderRadius || 8,
+    },
+    // Pass through other required properties WITHOUT spreading
+    shadows,
+    typography,
+    components,
+    direction,
+    cssVarPrefix,
+    shouldSkipGeneratingVar,
   };
 }
 
@@ -54,16 +69,29 @@ export function updateCoreWithSettings(theme, settings) {
 export function updateComponentsWithSettings(settings) {
   const components = {};
 
-  /** [2] */
+  /** [2] High contrast mode - Enhanced card styling */
   if (settings.contrast === 'hight') {
     const MuiCard = {
       styleOverrides: {
-        root: {
-          // Static styles to avoid circular reference - no theme dependencies
-          position: 'relative',
-          borderRadius: 16, // 8 * 2 (hardcoded to avoid theme access)
-          boxShadow: '0 0 2px 0 rgba(145, 158, 171, 0.2), 0 12px 24px -4px rgba(145, 158, 171, 0.12)', // theme.shadows[1] equivalent
-          zIndex: 0,
+        root: ({ theme, ownerState }) => {
+          let rootStyles = {};
+          if (typeof coreComponents?.MuiCard?.styleOverrides?.root === 'function') {
+            rootStyles =
+              coreComponents.MuiCard.styleOverrides.root({
+                ownerState,
+                theme,
+              }) ?? {};
+          }
+
+          return {
+            ...rootStyles,
+            // Enhanced shadow for high contrast
+            boxShadow: theme.customShadows.z12,
+            // Stronger border for high contrast
+            borderWidth: '1px',
+            borderStyle: 'solid',
+            borderColor: theme.vars.palette.divider,
+          };
         },
       },
     };
@@ -88,14 +116,17 @@ const PRIMARY_COLORS = {
 };
 
 function getPalettePrimary(primaryColorName) {
-  /** [1] */
   const selectedPrimaryColor = PRIMARY_COLORS[primaryColorName];
+  
+  if (!selectedPrimaryColor) {
+    return corePrimaryPalette;
+  }
+
   const updatedPrimaryPalette = createPaletteChannel(selectedPrimaryColor);
 
   return primaryColorName === 'default' ? corePrimaryPalette : updatedPrimaryPalette;
 }
 
 function getBackgroundDefault(contrast) {
-  /** [2] */
   return contrast === 'default' ? '#FFFFFF' : coreGreyPalette[200];
 }

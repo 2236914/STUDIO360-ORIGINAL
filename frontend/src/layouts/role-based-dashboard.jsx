@@ -1,11 +1,13 @@
 'use client';
 
-import { useAuthContext } from 'src/auth/hooks';
-import { useRouter } from 'src/routes/hooks';
 import { useEffect } from 'react';
 
-import { DashboardLayout } from './dashboard';
+import { useRouter } from 'src/routes/hooks';
+
+import { useAuthContext } from 'src/auth/hooks';
+
 import { AdminLayout } from './admin';
+import { DashboardLayout } from './dashboard';
 
 // ----------------------------------------------------------------------
 
@@ -27,7 +29,7 @@ export function RoleBasedDashboardLayout({ children }) {
       // If user is seller and on admin route, redirect to seller dashboard
       if (user.role === 'seller' && currentPath.startsWith('/admin')) {
         router.push('/dashboard');
-        return;
+        
       }
     }
   }, [user, router]);

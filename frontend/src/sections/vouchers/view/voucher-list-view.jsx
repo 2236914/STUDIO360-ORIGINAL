@@ -18,12 +18,12 @@ import {
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
-import { RouterLink } from 'src/routes/components';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 import { useSetState } from 'src/hooks/use-set-state';
 
 import { DashboardContent } from 'src/layouts/dashboard';
+import { vouchersApi } from 'src/services/vouchersService';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
@@ -31,17 +31,18 @@ import { EmptyContent } from 'src/components/empty-content';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
+import { VoucherStatsCard } from '../voucher-stats-card';
 import { VoucherTableToolbar } from '../voucher-table-toolbar';
 import { VoucherTableFiltersResult } from '../voucher-table-filters-result';
-import { VoucherStatsCard } from '../voucher-stats-card';
+import { VoucherModal } from '../voucher-modal';
 import {
+  RenderCellCreatedAt,
   RenderCellVoucherCode,
   RenderCellVoucherType,
   RenderCellVoucherValue,
-  RenderCellVoucherStatus,
   RenderCellVoucherUsage,
+  RenderCellVoucherStatus,
   RenderCellVoucherValidity,
-  RenderCellCreatedAt,
 } from '../voucher-table-row';
 
 // ----------------------------------------------------------------------
@@ -58,82 +59,6 @@ const STATUS_OPTIONS = [
   { value: 'inactive', label: 'Inactive' },
   { value: 'expired', label: 'Expired' },
   { value: 'used', label: 'Used' },
-];
-
-const HIDE_COLUMNS_TOGGLABLE = ['actions'];
-
-// Sample voucher data
-const VOUCHER_DATA = [
-  {
-    id: 1,
-    code: 'WELCOME10',
-    name: 'Welcome Discount',
-    description: '10% off for new customers',
-    type: 'percentage',
-    value: 10,
-    minOrderAmount: 50,
-    maxDiscount: 20,
-    usageLimit: 100,
-    usedCount: 25,
-    validFrom: '2024-01-01T00:00:00Z',
-    validUntil: '2024-12-31T23:59:59Z',
-    applicableTo: 'all',
-    status: 'active',
-    createdAt: '2024-01-01T10:00:00Z',
-    updatedAt: '2024-01-01T10:00:00Z',
-  },
-  {
-    id: 2,
-    code: 'SAVE20',
-    name: 'Save $20',
-    description: '$20 off orders over $100',
-    type: 'fixed_amount',
-    value: 20,
-    minOrderAmount: 100,
-    usageLimit: 50,
-    usedCount: 12,
-    validFrom: '2024-02-01T00:00:00Z',
-    validUntil: '2024-06-30T23:59:59Z',
-    applicableTo: 'all',
-    status: 'active',
-    createdAt: '2024-02-01T10:00:00Z',
-    updatedAt: '2024-02-01T10:00:00Z',
-  },
-  {
-    id: 3,
-    code: 'FREESHIP',
-    name: 'Free Shipping',
-    description: 'Free shipping on all orders',
-    type: 'free_shipping',
-    value: 0,
-    minOrderAmount: 0,
-    usageLimit: null,
-    usedCount: 45,
-    validFrom: '2024-01-15T00:00:00Z',
-    validUntil: null,
-    applicableTo: 'all',
-    status: 'active',
-    createdAt: '2024-01-15T10:00:00Z',
-    updatedAt: '2024-01-15T10:00:00Z',
-  },
-  {
-    id: 4,
-    code: 'SUMMER25',
-    name: 'Summer Sale',
-    description: '25% off summer collection',
-    type: 'percentage',
-    value: 25,
-    minOrderAmount: 75,
-    maxDiscount: 50,
-    usageLimit: 200,
-    usedCount: 200,
-    validFrom: '2024-06-01T00:00:00Z',
-    validUntil: '2024-08-31T23:59:59Z',
-    applicableTo: 'categories',
-    status: 'used',
-    createdAt: '2024-06-01T10:00:00Z',
-    updatedAt: '2024-08-31T10:00:00Z',
-  },
 ];
 
 // ----------------------------------------------------------------------
@@ -192,11 +117,77 @@ function applyFilter({ inputData, filters }) {
 export function VoucherListView() {
   const router = useRouter();
   const confirmRows = useBoolean();
-  const [tableData, setTableData] = useState(VOUCHER_DATA);
+  const confirmDelete = useBoolean();
+  const [deleteId, setDeleteId] = useState(null);
+  const [tableData, setTableData] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [filterButtonEl, setFilterButtonEl] = useState(null);
   const [selectedRowIds, setSelectedRowIds] = useState([]);
+  
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('create'); // 'create', 'edit', 'view'
+  const [modalVoucherId, setModalVoucherId] = useState(null);
 
-  const [filters, setFilters] = useSetState({
+  // Load vouchers from database
+  useEffect(() => {
+    loadVouchers();
+  }, []);
+
+  const loadVouchers = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Loading vouchers...');
+      const vouchers = await vouchersApi.getVouchers();
+      console.log('📋 Received vouchers from API:', vouchers);
+      console.log('📊 Voucher count:', vouchers?.length || 0);
+      
+      // Transform database data to match component format
+      const transformedVouchers = vouchers.map(voucher => ({
+        id: voucher.id,
+        name: voucher.name,
+        code: voucher.code,
+        description: voucher.description || '',
+        type: voucher.type,
+        value: parseFloat(voucher.discount_value || 0),
+        discount_value: parseFloat(voucher.discount_value || 0),
+        minOrderAmount: parseFloat(voucher.min_purchase_amount || 0),
+        min_purchase_amount: parseFloat(voucher.min_purchase_amount || 0),
+        max_discount_amount: voucher.max_discount_amount ? parseFloat(voucher.max_discount_amount) : null,
+        usageLimit: voucher.usage_limit,
+        usage_limit: voucher.usage_limit,
+        usedCount: voucher.usage_count || 0,
+        usage_count: voucher.usage_count || 0,
+        usage_limit_per_user: voucher.usage_limit_per_user || 1,
+        validFrom: voucher.start_date ? new Date(voucher.start_date) : new Date(),
+        validUntil: voucher.end_date ? new Date(voucher.end_date) : undefined,
+        start_date: voucher.start_date,
+        end_date: voucher.end_date,
+        status: voucher.status,
+        is_active: voucher.is_active,
+        created_at: voucher.created_at,
+        createdAt: voucher.created_at,
+        applicableTo: voucher.applicable_product_ids ? 'products' : (voucher.applicable_category_ids ? 'categories' : 'all'),
+        applicableIds: voucher.applicable_product_ids || voucher.applicable_category_ids || [],
+      }));
+      
+      setTableData(transformedVouchers);
+      setInitialLoad(false);
+      
+      if (transformedVouchers.length > 0) {
+        toast.success(`${transformedVouchers.length} voucher(s) loaded successfully!`);
+      }
+    } catch (error) {
+      console.error('Error loading vouchers:', error);
+      toast.error('Failed to load vouchers');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { state: filters, setState: setFilters } = useSetState({
     status: [],
     type: [],
     search: '',
@@ -205,10 +196,9 @@ export function VoucherListView() {
   const canReset = !!filters.status.length || !!filters.type.length || !!filters.search;
 
   const handleFilters = useCallback((name, value) => {
-    setFilters((prevState) => ({
-      ...prevState,
+    setFilters({
       [name]: value,
-    }));
+    });
   }, [setFilters]);
 
   const handleResetFilters = useCallback(() => {
@@ -223,34 +213,83 @@ export function VoucherListView() {
 
   const handleDeleteRow = useCallback(
     (id) => {
-      const deleteRow = tableData.filter((row) => row.id !== id);
-      toast.success('Voucher deleted successfully!');
-      setTableData(deleteRow);
+      setDeleteId(id);
+      confirmDelete.onTrue();
     },
-    [tableData]
+    []
   );
 
-  const handleDeleteRows = useCallback(() => {
-    const deleteRows = tableData.filter((row) => !selectedRowIds.includes(row.id));
-    toast.success('Vouchers deleted successfully!');
-    setTableData(deleteRows);
-    setSelectedRowIds([]);
-    confirmRows.onFalse();
+  const confirmDeleteRow = async () => {
+    try {
+      setLoading(true);
+      await vouchersApi.deleteVoucher(deleteId);
+      
+      const deleteRow = tableData.filter((row) => row.id !== deleteId);
+      setTableData(deleteRow);
+      
+      toast.success('Voucher deleted successfully!');
+      confirmDelete.onFalse();
+      setDeleteId(null);
+    } catch (error) {
+      console.error('Error deleting voucher:', error);
+      toast.error('Failed to delete voucher');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteRows = useCallback(async () => {
+    try {
+      setLoading(true);
+      await vouchersApi.deleteVouchers(selectedRowIds);
+      
+      const deleteRows = tableData.filter((row) => !selectedRowIds.includes(row.id));
+      setTableData(deleteRows);
+      setSelectedRowIds([]);
+      
+      toast.success(`${selectedRowIds.length} voucher(s) deleted successfully!`);
+      confirmRows.onFalse();
+    } catch (error) {
+      console.error('Error deleting vouchers:', error);
+      toast.error('Failed to delete vouchers');
+    } finally {
+      setLoading(false);
+    }
   }, [selectedRowIds, tableData, confirmRows]);
 
   const handleEditRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.vouchers.edit(id));
+      setModalMode('edit');
+      setModalVoucherId(id);
+      setModalOpen(true);
     },
-    [router]
+    []
   );
 
   const handleViewRow = useCallback(
     (id) => {
-      router.push(paths.dashboard.vouchers.details(id));
+      setModalMode('view');
+      setModalVoucherId(id);
+      setModalOpen(true);
     },
-    [router]
+    []
   );
+
+  const handleCreateVoucher = useCallback(() => {
+    setModalMode('create');
+    setModalVoucherId(null);
+    setModalOpen(true);
+  }, []);
+
+  const handleModalClose = useCallback(() => {
+    setModalOpen(false);
+    setModalVoucherId(null);
+  }, []);
+
+  const handleModalSuccess = useCallback(() => {
+    // Reload vouchers after successful create/edit
+    loadVouchers();
+  }, [loadVouchers]);
 
   const handleToggleStatus = useCallback(
     (id) => {
@@ -402,8 +441,7 @@ export function VoucherListView() {
           ]}
           action={
             <Button
-              component={RouterLink}
-              href={paths.dashboard.vouchers.new}
+              onClick={handleCreateVoucher}
               variant="contained"
               startIcon={<Iconify icon="mingcute:add-line" />}
             >
@@ -438,14 +476,14 @@ export function VoucherListView() {
             disableRowSelectionOnClick
             rows={dataFiltered}
             columns={columns}
-            loading={false}
+            loading={loading}
             getRowHeight={() => 'auto'}
             onRowSelectionModelChange={(newSelectionModel) => {
               setSelectedRowIds(newSelectionModel);
             }}
             slots={{
               toolbar: CustomToolbarCallback,
-              noRowsOverlay: () => <EmptyContent filled title="No Vouchers" />,
+              noRowsOverlay: () => <EmptyContent filled title={initialLoad ? 'Loading...' : 'No Vouchers'} />,
             }}
             slotProps={{
               toolbar: {
@@ -470,13 +508,14 @@ export function VoucherListView() {
         </Card>
       </DashboardContent>
 
+      {/* Delete Multiple Vouchers Confirmation */}
       <ConfirmDialog
         open={confirmRows.value}
         onClose={confirmRows.onFalse}
-        title="Delete"
+        title="Delete Vouchers"
         content={
           <>
-            Are you sure want to delete <strong> {selectedRowIds.length} </strong> vouchers?
+            Are you sure you want to delete <strong>{selectedRowIds.length}</strong> voucher(s)? This action cannot be undone.
           </>
         }
         action={
@@ -484,10 +523,38 @@ export function VoucherListView() {
             variant="contained"
             color="error"
             onClick={handleDeleteRows}
+            disabled={loading}
           >
-            Delete
+            {loading ? 'Deleting...' : 'Delete'}
           </Button>
         }
+      />
+
+      {/* Delete Single Voucher Confirmation */}
+      <ConfirmDialog
+        open={confirmDelete.value}
+        onClose={confirmDelete.onFalse}
+        title="Delete Voucher"
+        content="Are you sure you want to delete this voucher? This action cannot be undone."
+        action={
+          <Button
+            variant="contained"
+            color="error"
+            onClick={confirmDeleteRow}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        }
+      />
+
+      {/* Voucher Modal */}
+      <VoucherModal
+        open={modalOpen}
+        onClose={handleModalClose}
+        mode={modalMode}
+        voucherId={modalVoucherId}
+        onSuccess={handleModalSuccess}
       />
     </>
   );

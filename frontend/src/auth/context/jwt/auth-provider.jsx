@@ -1,17 +1,17 @@
 'use client';
 
-import { useMemo, useEffect, useCallback, useState } from 'react';
+import { useMemo, useEffect, useCallback } from 'react';
 
 import { useSetState } from 'src/hooks/use-set-state';
-import { useRouter } from 'src/routes/hooks';
 
-import { _mock } from 'src/_mock';
+import accountHistoryService from 'src/services/accountHistoryService';
 
+import { removeSession } from './utils';
 import { STORAGE_KEY } from './constant';
 import { AuthContext } from '../auth-context';
-import { setSession, isValidToken, removeSession } from './utils';
 
 // ----------------------------------------------------------------------
+
 
 import { supabase } from './supabaseClient';
 
@@ -142,6 +142,23 @@ export function AuthProvider({ children }) {
 
   const logout = useCallback(async () => {
     try {
+      // Log logout activity to account history before signing out
+      try {
+        await accountHistoryService.logActivity({
+          activityType: 'logout',
+          status: 'successful',
+          ipAddress: '127.0.0.1', // Simplified for now
+          userAgent: navigator.userAgent,
+          device: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent) ? 'Mobile' : 'Desktop',
+          location: 'Unknown',
+          timestamp: new Date().toISOString()
+        });
+        console.log('Logout activity logged successfully');
+      } catch (historyError) {
+        console.error('Failed to log logout activity:', historyError);
+        // Don't fail the logout if history logging fails
+      }
+
       // Sign out from Supabase Auth
       await supabase.auth.signOut();
 

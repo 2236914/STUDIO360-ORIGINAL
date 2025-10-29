@@ -6,19 +6,19 @@ import { styled, useTheme } from '@mui/material/styles';
 import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
 
+import { AccountPopover } from 'src/layouts/components/account-popover';
+import { NotificationsPopover } from 'src/layouts/components/notifications-popover';
+
 import { Logo } from 'src/components/logo';
 import { Iconify } from 'src/components/iconify';
+import { SettingsPopover } from 'src/components/settings';
 
 import { HeaderSection } from './header-section';
 import { Searchbar } from '../components/searchbar';
 import { MenuButton } from '../components/menu-button';
 import { SignInButton } from '../components/sign-in-button';
-import { AccountPopover } from 'src/layouts/components/account-popover';
-import { SettingsPopover } from 'src/components/settings';
-
 import { LanguagePopover } from '../components/language-popover';
 import { ContactsPopover } from '../components/contacts-popover';
-import { NotificationsPopover } from 'src/layouts/components/notifications-popover';
 
 // ----------------------------------------------------------------------
 

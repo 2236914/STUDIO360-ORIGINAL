@@ -1,5 +1,11 @@
 // ----------------------------------------------------------------------
 
+import { 
+  buildStoreUrl, 
+  buildAdminUrl, 
+  buildDashboardUrl 
+} from 'src/utils/subdomain';
+
 const ROOTS = {
   AUTH: '/auth',
   DASHBOARD: '/dashboard',
@@ -19,10 +25,22 @@ export const paths = {
     root: '/product',
     checkout: `/product/checkout`,
   },
-  // STORE
+  // STORE (Subdomain-aware)
   store: {
     root: '/stores',
     checkout: (storeId) => `/stores/${storeId}/checkout`,
+    // Subdomain-aware store URLs
+    subdomain: {
+      root: (storeId) => buildStoreUrl(storeId),
+      checkout: (storeId) => buildStoreUrl(storeId, '/checkout'),
+      products: (storeId) => buildStoreUrl(storeId, '/products'),
+      about: (storeId) => buildStoreUrl(storeId, '/about'),
+      shipping: (storeId) => buildStoreUrl(storeId, '/shipping'),
+      faq: (storeId) => buildStoreUrl(storeId, '/faq'),
+      collections: (storeId) => buildStoreUrl(storeId, '/collections'),
+      collection: (storeId, category) => buildStoreUrl(storeId, `/collections/${category}`),
+      product: (storeId, productName) => buildStoreUrl(storeId, `/${productName}`),
+    },
   },
   // AUTH
   auth: {
@@ -56,7 +74,7 @@ export const paths = {
       resetPassword: `${ROOTS.AUTH}/supabase/reset-password`,
     },
   },
-  // DASHBOARD (Seller Dashboard)
+  // DASHBOARD (Seller Dashboard) - Subdomain-aware
   dashboard: {
     root: ROOTS.DASHBOARD,
     two: `${ROOTS.DASHBOARD}/two`,
@@ -75,11 +93,14 @@ export const paths = {
     },
     aiBookkeeper: {
       root: `${ROOTS.DASHBOARD}/ai-bookkeeper`,
-      aiBookkeeper: `${ROOTS.DASHBOARD}/ai-bookkeeper/ai-bookkeeper`,
       aiCategorization: `${ROOTS.DASHBOARD}/ai-bookkeeper/ai-categorization`,
       uploadProcess: `${ROOTS.DASHBOARD}/ai-bookkeeper/upload-process`,
     },
-    taxDecisionTool: `${ROOTS.DASHBOARD}/tax-decision-tool`,
+    forecasting: {
+      root: `${ROOTS.DASHBOARD}/forecasting`,
+      finance: `${ROOTS.DASHBOARD}/forecasting/finance`,
+      productPerformance: `${ROOTS.DASHBOARD}/forecasting/product-performance`,
+    },
     // Shop
     inventory: {
       root: `${ROOTS.DASHBOARD}/inventory`,
@@ -122,8 +143,20 @@ export const paths = {
     account: `${ROOTS.DASHBOARD}/account`,
     // Misc
     announcement: `${ROOTS.DASHBOARD}/announcement`,
+    // Subdomain-aware dashboard URLs
+    subdomain: {
+      root: () => buildDashboardUrl(),
+      bookkeeping: () => buildDashboardUrl('/bookkeeping'),
+      aiBookkeeper: () => buildDashboardUrl('/ai-bookkeeper'),
+      inventory: () => buildDashboardUrl('/inventory'),
+      orders: () => buildDashboardUrl('/orders'),
+      invoice: () => buildDashboardUrl('/invoice'),
+      vouchers: () => buildDashboardUrl('/vouchers'),
+      store: () => buildDashboardUrl('/store'),
+      account: () => buildDashboardUrl('/account'),
+    },
   },
-  // ADMIN (Admin IT Dashboard)
+  // ADMIN (Admin IT Dashboard) - Subdomain-aware
   admin: {
     root: ROOTS.ADMIN,
     dashboard: `${ROOTS.ADMIN}/dashboard`,
@@ -134,5 +167,17 @@ export const paths = {
     analytics: `${ROOTS.ADMIN}/analytics`,
     reports: `${ROOTS.ADMIN}/reports`,
     support: `${ROOTS.ADMIN}/support`,
+    // Subdomain-aware admin URLs
+    subdomain: {
+      root: () => buildAdminUrl(),
+      dashboard: () => buildAdminUrl('/dashboard'),
+      users: () => buildAdminUrl('/users'),
+      onboarding: () => buildAdminUrl('/onboarding'),
+      settings: () => buildAdminUrl('/settings'),
+      compliance: () => buildAdminUrl('/compliance'),
+      analytics: () => buildAdminUrl('/analytics'),
+      reports: () => buildAdminUrl('/reports'),
+      support: () => buildAdminUrl('/support'),
+    },
   },
 };

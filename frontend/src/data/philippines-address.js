@@ -3,8 +3,8 @@
 // Comprehensive database with all major provinces, cities, and barangays
 
 import { VISAYAS_ADDRESS } from './visayas-address';
-import { MOUNTAIN_PROVINCES_ADDRESS } from './mountain-provinces-address';
 import { MINDANAO_ADDRESS } from './mindanao-address';
+import { MOUNTAIN_PROVINCES_ADDRESS } from './mountain-provinces-address';
 
 const LUZON_ADDRESS = {
   "BATANGAS": {
@@ -1780,10 +1780,6 @@ export const PHILIPPINES_ADDRESS = {
 export const PROVINCES = Object.keys(PHILIPPINES_ADDRESS);
 
 // Helper functions
-export const getCitiesByProvince = (province) => {
-  return PHILIPPINES_ADDRESS[province]?.cities || [];
-};
+export const getCitiesByProvince = (province) => PHILIPPINES_ADDRESS[province]?.cities || [];
 
-export const getBarangaysByCity = (province, city) => {
-  return PHILIPPINES_ADDRESS[province]?.barangays?.[city] || [];
-};
+export const getBarangaysByCity = (province, city) => PHILIPPINES_ADDRESS[province]?.barangays?.[city] || [];

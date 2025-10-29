@@ -1,5 +1,4 @@
 import { CONFIG } from 'src/config-global';
-import { DashboardLayout } from 'src/layouts/dashboard';
 import { RoleBasedDashboardLayout } from 'src/layouts/role-based-dashboard';
 
 import { AuthGuard } from 'src/auth/guard';

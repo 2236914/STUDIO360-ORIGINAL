@@ -22,7 +22,7 @@ export const NewAddressSchema = zod.object({
   name: zod.string().min(1, { message: 'Name is required!' }),
   address: zod.string().min(1, { message: 'Address is required!' }),
   zipCode: zod.string().min(1, { message: 'Zip code is required!' }),
-  phoneNumber: schemaHelper.phoneNumber({ isValidPhoneNumber }),
+  phoneNumber: zod.string().optional().or(zod.literal('')),
   country: schemaHelper.objectOrNull({
     message: { required_error: 'Country is required!' },
   }),

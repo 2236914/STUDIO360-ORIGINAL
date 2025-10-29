@@ -1,16 +1,15 @@
 'use client';
 
+import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 import Chip from '@mui/material/Chip';
-import Avatar from '@mui/material/Avatar';
+import Stack from '@mui/material/Stack';
 import Tooltip from '@mui/material/Tooltip';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 
-import { fCurrency, fPercent } from 'src/utils/format-number';
 import { fDate } from 'src/utils/format-time';
+import { fPercent, fCurrency } from 'src/utils/format-number';
 
-import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
@@ -55,7 +54,8 @@ export function RenderCellVoucherType({ params }) {
 }
 
 export function RenderCellVoucherValue({ params }) {
-  const { type, value } = params.row;
+  const { type } = params.row;
+  const value = params.row.value || params.row.discount_value || 0;
 
   if (type === 'percentage') {
     return (
@@ -117,7 +117,8 @@ export function RenderCellVoucherStatus({ params }) {
 }
 
 export function RenderCellVoucherUsage({ params }) {
-  const { usedCount, usageLimit } = params.row;
+  const usedCount = params.row.usedCount || params.row.usage_count || 0;
+  const usageLimit = params.row.usageLimit || params.row.usage_limit;
 
   if (!usageLimit) {
     return (
@@ -158,7 +159,8 @@ export function RenderCellVoucherUsage({ params }) {
 }
 
 export function RenderCellVoucherValidity({ params }) {
-  const { validFrom, validUntil, status } = params.row;
+  const validFrom = params.row.validFrom || params.row.start_date;
+  const validUntil = params.row.validUntil || params.row.end_date;
   const now = new Date();
 
   // Check if voucher is expired
@@ -205,9 +207,10 @@ export function RenderCellVoucherValidity({ params }) {
 }
 
 export function RenderCellCreatedAt({ params }) {
+  const createdAt = params.row.createdAt || params.row.created_at;
   return (
     <Typography variant="body2" sx={{ fontWeight: 'fontWeightMedium' }}>
-      {fDate(params.row.createdAt)}
+      {fDate(createdAt)}
     </Typography>
   );
 }

@@ -1,27 +1,56 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
 import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import Button from '@mui/material/Button';
-import Link from '@mui/material/Link';
-import IconButton from '@mui/material/IconButton';
 import Badge from '@mui/material/Badge';
-import { Iconify } from 'src/components/iconify';
+import Button from '@mui/material/Button';
+import Container from '@mui/material/Container';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+
 import { useRouter } from 'src/routes/hooks';
+
+import { Iconify } from 'src/components/iconify';
+import { HydrationBoundary } from 'src/components/hydration-boundary';
+
 import { useCheckoutContext } from 'src/sections/checkout/context';
 
 // ----------------------------------------------------------------------
 
+// Component that handles window-dependent storeId extraction
+function StoreIdExtractor({ propStoreId, onStoreIdChange }) {
+  // If no storeId prop provided, extract from current URL or subdomain
+  if (!propStoreId && typeof window !== 'undefined') {
+    const {pathname} = window.location;
+    const {hostname} = window.location;
+    
+    // Check traditional /stores/[storeId] route first
+    const storeIdMatch = pathname.match(/\/stores\/([^\/]+)/);
+    if (storeIdMatch) {
+      onStoreIdChange(storeIdMatch[1]);
+      return null;
+    } 
+    // Check actual subdomain from hostname (production)
+    else if (hostname !== 'localhost' && hostname.includes('.')) {
+      const subdomain = hostname.split('.')[0];
+      if (subdomain && subdomain !== 'www' && subdomain !== 'dashboard' && subdomain !== 'admin') {
+        onStoreIdChange(subdomain);
+        return null;
+      }
+    }
+  }
+  return null;
+}
+
 // Store Header Component with Search Icon, Cart Icon, and Products Link
-export function StoreHeader() {
+export function StoreHeader({ storeId: propStoreId }) {
   const router = useRouter();
+  const [storeId, setStoreId] = useState(propStoreId || 'kitschstudio');
   
   // Get cart count from checkout context
   let cartCount = 0;
-  let storeId = 'kitschstudio'; // Default store ID
   
   try {
     const checkout = useCheckoutContext();
@@ -31,18 +60,15 @@ export function StoreHeader() {
     console.log('Checkout context not available in header');
   }
 
-  // Extract storeId from current URL
-  if (typeof window !== 'undefined') {
-    const pathname = window.location.pathname;
-    const storeIdMatch = pathname.match(/\/stores\/([^\/]+)/);
-    if (storeIdMatch) {
-      storeId = storeIdMatch[1];
+  // Update storeId when prop changes
+  useEffect(() => {
+    if (propStoreId) {
+      setStoreId(propStoreId);
     }
-  }
+  }, [propStoreId]);
 
   const handleProductsClick = () => {
-    // Navigate to product catalog page
-    router.push(`/stores/${storeId}/products`);
+    router.push(`/${storeId}/products`);
   };
 
   const handleSearchClick = () => {
@@ -51,47 +77,62 @@ export function StoreHeader() {
   };
 
   const handleCartClick = () => {
-    // Navigate to checkout page
-    router.push(`/stores/${storeId}/checkout`);
+    router.push(`/${storeId}/checkout`);
   };
 
   const handleFAQClick = () => {
-    // Navigate to FAQ page
-    router.push(`/stores/${storeId}/faq`);
+    router.push(`/${storeId}/faq`);
   };
 
   return (
-    <Box sx={{ 
-      position: 'sticky',
-      top: 0,
-      zIndex: 1000,
-      bgcolor: 'background.paper', 
-      py: 2, 
-      borderBottom: '1px solid', 
-      borderColor: 'divider' 
-    }}>
-      <Container maxWidth="lg">
-        <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={4}>
-          {/* Logo */}
-          <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary' }}>
-            Logo
-          </Typography>
+    <HydrationBoundary>
+      {/* Extract storeId from URL/subdomain on client-side only */}
+      <StoreIdExtractor propStoreId={propStoreId} onStoreIdChange={setStoreId} />
+      
+      <Box sx={{ 
+        position: 'sticky',
+        top: 0,
+        zIndex: 1000,
+        bgcolor: 'background.paper', 
+        py: 2, 
+        borderBottom: '1px solid', 
+        borderColor: 'divider' 
+      }}>
+        <Container maxWidth="lg">
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={4}>
+            {/* Logo */}
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                fontWeight: 700, 
+                color: 'text.primary',
+                cursor: 'pointer',
+                '&:hover': { color: 'primary.main' }
+              }}
+              onClick={() => router.push(`/${storeId}`)}
+            >
+              Logo
+            </Typography>
 
           {/* Navigation */}
           <Stack direction="row" spacing={4} alignItems="center">
             {/* About Link */}
-            <Link 
-              href="/stores/kitschstudio/about" 
-              sx={{ 
-                color: 'text.primary', 
-                textDecoration: 'none', 
+            <Button
+              onClick={() => router.push(`/${storeId}/about`)}
+              sx={{
+                color: 'text.primary',
+                textTransform: 'none',
                 fontWeight: 500,
                 fontSize: '1rem',
-                '&:hover': { color: 'primary.main' } 
+                px: 1,
+                '&:hover': {
+                  color: 'primary.main',
+                  bgcolor: 'transparent'
+                }
               }}
             >
               About
-            </Link>
+            </Button>
 
             {/* Products Link */}
             <Button
@@ -127,6 +168,24 @@ export function StoreHeader() {
               }}
             >
               FAQ
+            </Button>
+
+            {/* Shipping Link */}
+            <Button
+              onClick={() => router.push(`/${storeId}/shipping`)}
+              sx={{
+                color: 'text.primary',
+                textTransform: 'none',
+                fontWeight: 500,
+                fontSize: '1rem',
+                px: 1,
+                '&:hover': {
+                  color: 'primary.main',
+                  bgcolor: 'transparent'
+                }
+              }}
+            >
+              Shipping
             </Button>
 
             {/* Search Icon */}
@@ -176,5 +235,6 @@ export function StoreHeader() {
         </Stack>
       </Container>
     </Box>
+    </HydrationBoundary>
   );
 }

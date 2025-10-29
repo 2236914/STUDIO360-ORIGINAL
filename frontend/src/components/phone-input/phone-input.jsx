@@ -1,5 +1,6 @@
 import { useState, forwardRef } from 'react';
 import PhoneNumberInput from 'react-phone-number-input/input';
+import 'react-phone-number-input/style.css';
 
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -14,6 +15,10 @@ export const PhoneInput = forwardRef(
     const defaultCountryCode = getCountryCode(value, inputCountryCode);
 
     const [selectedCountry, setSelectedCountry] = useState(defaultCountryCode);
+
+    const handleCountryChange = (newCountryCode) => {
+      setSelectedCountry(newCountryCode);
+    };
 
     return (
       <PhoneNumberInput
@@ -31,7 +36,7 @@ export const PhoneInput = forwardRef(
                   <InputAdornment position="start" sx={{ ml: 1 }}>
                     <CountryListPopover
                       countryCode={selectedCountry}
-                      onClickCountry={(inputValue) => setSelectedCountry(inputValue)}
+                      onClickCountry={handleCountryChange}
                     />
                   </InputAdornment>
                 ),

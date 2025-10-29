@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form';
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -7,19 +7,20 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
-import Divider from '@mui/material/Divider';
-import Typography from '@mui/material/Typography';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
 import Dialog from '@mui/material/Dialog';
+import Accordion from '@mui/material/Accordion';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Accordion from '@mui/material/Accordion';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 
 import { useBoolean } from 'src/hooks/use-boolean';
+
+import { customerSupportApi } from 'src/services/storePagesService';
 
 import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
@@ -28,33 +29,82 @@ import { Form, Field } from 'src/components/hook-form';
 // ----------------------------------------------------------------------
 
 export function StoreCustomerSupport() {
-  const [whatsappEnabled, setWhatsappEnabled] = useState(true);
-  const [gmailEnabled, setGmailEnabled] = useState(true);
-  const [faqChatbotEnabled, setFaqChatbotEnabled] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [gmailEnabled, setGmailEnabled] = useState(false);
+  const [faqChatbotEnabled, setFaqChatbotEnabled] = useState(false);
   
-  const [faqs, setFaqs] = useState([
-    {
-      id: '1',
-      question: 'What are your shipping options?',
-      answer: 'We offer multiple shipping options through JNT Express and SPX. Metro Manila delivery takes 1-2 days, while provincial delivery takes 3-5 days.',
-      category: 'Shipping',
-      active: true,
-    },
-    {
-      id: '2',
-      question: 'How can I track my order?',
-      answer: 'You can track your order using the tracking number sent to your email. Visit our tracking page or contact our support team.',
-      category: 'Orders',
-      active: true,
-    },
-    {
-      id: '3',
-      question: 'What is your return policy?',
-      answer: 'We accept returns within 7 days of delivery. Items must be in original condition with tags attached.',
-      category: 'Returns',
-      active: true,
-    },
-  ]);
+  const [faqs, setFaqs] = useState([]);
+
+  useEffect(() => {
+    loadCustomerSupportData();
+  }, []);
+
+  // Load customer support data from database
+  const loadCustomerSupportData = async () => {
+    try {
+      setLoading(true);
+      const data = await customerSupportApi.getCompleteCustomerSupportData();
+      
+      console.log('Loaded customer support data:', data);
+      
+      // Populate WhatsApp settings
+      if (data.whatsappSettings) {
+        setWhatsappEnabled(data.whatsappSettings.enabled || false);
+        methods.reset({
+          ...methods.getValues(),
+          whatsappNumber: data.whatsappSettings.phone_number || '',
+          whatsappWelcomeMessage: data.whatsappSettings.welcome_message || '',
+          whatsappBusinessHours: data.whatsappSettings.business_hours || '',
+        });
+      }
+      
+      // Populate Gmail settings
+      if (data.gmailSettings) {
+        setGmailEnabled(data.gmailSettings.enabled || false);
+        methods.reset({
+          ...methods.getValues(),
+          gmailAddress: data.gmailSettings.email_address || '',
+          gmailAutoReply: data.gmailSettings.auto_reply || '',
+          gmailSignature: data.gmailSettings.signature || '',
+        });
+      }
+      
+      // Populate FAQ Chatbot settings
+      if (data.faqChatbotSettings) {
+        setFaqChatbotEnabled(data.faqChatbotSettings.enabled || false);
+        methods.reset({
+          ...methods.getValues(),
+          faqChatbotName: data.faqChatbotSettings.chatbot_name || '',
+          faqWelcomeMessage: data.faqChatbotSettings.welcome_message || '',
+          faqFallbackMessage: data.faqChatbotSettings.fallback_message || '',
+        });
+      }
+      
+      // Populate FAQ items
+      if (data.faqChatbotItems && Array.isArray(data.faqChatbotItems)) {
+        const formattedFaqs = data.faqChatbotItems.map(item => ({
+          id: item.id,
+          question: item.question,
+          answer: item.answer,
+          category: '', // Not in database, keep for UI
+          active: item.is_active,
+          display_order: item.display_order,
+        }));
+        setFaqs(formattedFaqs);
+      }
+      
+      setInitialLoad(false);
+      toast.success('Customer support data loaded successfully!');
+    } catch (error) {
+      console.error('Error loading customer support data:', error);
+      toast.error('Failed to load customer support data. Using empty defaults.');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const faqDialog = useBoolean();
   const editFaqDialog = useBoolean();
@@ -63,15 +113,15 @@ export function StoreCustomerSupport() {
 
   const methods = useForm({
     defaultValues: {
-      whatsappNumber: '+63 912 345 6789',
-      whatsappWelcomeMessage: 'Hi! Welcome to Kitsch Studio! How can we help you today?',
-      whatsappBusinessHours: 'Monday to Friday, 9AM to 6PM',
-      gmailAddress: 'support@kitschstudio.com',
-      gmailAutoReply: 'Thank you for contacting us! We will get back to you within 24 hours.',
-      gmailSignature: 'Best regards,\nKitsch Studio Support Team\nsupport@kitschstudio.com',
-      faqChatbotName: 'Kitsch Assistant',
-      faqWelcomeMessage: 'Hello! I\'m here to help answer your questions. You can ask me about shipping, orders, returns, and more!',
-      faqFallbackMessage: 'I\'m sorry, I don\'t have an answer for that question. Let me connect you with our support team.',
+      whatsappNumber: '',
+      whatsappWelcomeMessage: '',
+      whatsappBusinessHours: '',
+      gmailAddress: '',
+      gmailAutoReply: '',
+      gmailSignature: '',
+      faqChatbotName: '',
+      faqWelcomeMessage: '',
+      faqFallbackMessage: '',
     },
   });
 
@@ -85,11 +135,62 @@ export function StoreCustomerSupport() {
 
   const handleSave = useCallback(async (data) => {
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      setLoading(true);
+      
+      // Save WhatsApp settings
+      await customerSupportApi.updateWhatsAppSettings({
+        enabled: whatsappEnabled,
+        phone_number: data.whatsappNumber,
+        welcome_message: data.whatsappWelcomeMessage,
+        business_hours: data.whatsappBusinessHours,
+      });
+      
+      // Save Gmail settings
+      await customerSupportApi.updateGmailSettings({
+        enabled: gmailEnabled,
+        email_address: data.gmailAddress,
+        auto_reply: data.gmailAutoReply,
+        signature: data.gmailSignature,
+      });
+      
+      // Save FAQ Chatbot settings
+      await customerSupportApi.updateFAQChatbotSettings({
+        enabled: faqChatbotEnabled,
+        chatbot_name: data.faqChatbotName,
+        welcome_message: data.faqWelcomeMessage,
+        fallback_message: data.faqFallbackMessage,
+      });
+      
+      // Save or update each FAQ item
+      for (const faq of faqs) {
+        if (typeof faq.id === 'string' && faq.id.length > 20) {
+          // Existing FAQ (UUID from database)
+          await customerSupportApi.updateFAQChatbotItem(faq.id, {
+            question: faq.question,
+            answer: faq.answer,
+            is_active: faq.active,
+            display_order: faq.display_order || 0,
+          });
+        } else {
+          // New FAQ (temporary numeric ID)
+          await customerSupportApi.createFAQChatbotItem({
+            question: faq.question,
+            answer: faq.answer,
+            is_active: faq.active,
+            display_order: faq.display_order || 0,
+          });
+        }
+      }
+      
       toast.success('Customer support settings updated successfully!');
-      console.info('Customer Support Data:', { ...data, whatsappEnabled, gmailEnabled, faqChatbotEnabled, faqs });
+      
+      // Reload to get updated IDs from database
+      await loadCustomerSupportData();
     } catch (error) {
+      console.error('Error saving customer support settings:', error);
       toast.error('Failed to update customer support settings');
+    } finally {
+      setLoading(false);
     }
   }, [whatsappEnabled, gmailEnabled, faqChatbotEnabled, faqs]);
 
@@ -169,11 +270,27 @@ export function StoreCustomerSupport() {
     deleteFaqDialog.onTrue();
   }, [deleteFaqDialog]);
 
-  const confirmDeleteFaq = useCallback(() => {
-    setFaqs((prev) => prev.filter((faq) => faq.id !== currentFaq.id));
-    deleteFaqDialog.onFalse();
-    setCurrentFaq(null);
-    toast.success('FAQ deleted successfully!');
+  const confirmDeleteFaq = useCallback(async () => {
+    try {
+      const faqId = currentFaq.id;
+      
+      // If it's a database FAQ (UUID), delete from database
+      if (typeof faqId === 'string' && faqId.length > 20) {
+        setLoading(true);
+        await customerSupportApi.deleteFAQChatbotItem(faqId);
+      }
+      
+      // Remove from local state
+      setFaqs((prev) => prev.filter((faq) => faq.id !== currentFaq.id));
+      deleteFaqDialog.onFalse();
+      setCurrentFaq(null);
+      toast.success('FAQ deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting FAQ:', error);
+      toast.error('Failed to delete FAQ');
+    } finally {
+      setLoading(false);
+    }
   }, [currentFaq, deleteFaqDialog]);
 
   const handleToggleFaq = useCallback((faqId) => {
@@ -209,7 +326,6 @@ export function StoreCustomerSupport() {
               <Stack spacing={3}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                   Configure your WhatsApp business integration for automated customer support.
-                  This will be connected to n8n automation later.
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -258,7 +374,7 @@ export function StoreCustomerSupport() {
                     disabled
                     sx={{ opacity: 0.5 }}
                   >
-                    Configure n8n Automation (Coming Soon)
+                    Configure Automation (Coming Soon)
                   </Button>
                 </Stack>
               </Stack>
@@ -289,7 +405,6 @@ export function StoreCustomerSupport() {
               <Stack spacing={3}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                   Configure your Gmail business integration for automated email support.
-                  This will be connected to n8n automation later.
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -297,7 +412,7 @@ export function StoreCustomerSupport() {
                     <Field.Text
                       name="gmailAddress"
                       label="Support Email Address"
-                      placeholder="support@kitschstudio.com"
+                      placeholder="kitschstudioofficial@gmail.com"
                       InputProps={{
                         startAdornment: (
                           <Iconify icon="solar:letter-bold" sx={{ color: 'text.secondary', mr: 1 }} />
@@ -337,7 +452,7 @@ export function StoreCustomerSupport() {
                     disabled
                     sx={{ opacity: 0.5 }}
                   >
-                    Configure n8n Automation (Coming Soon)
+                    Configure Automation (Coming Soon)
                   </Button>
                 </Stack>
               </Stack>
@@ -533,31 +648,6 @@ export function StoreCustomerSupport() {
           </Box>
         </Card>
 
-        {/* N8N Integration Info */}
-        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'warning.main', bgcolor: 'warning.lighter' }}>
-          <Box sx={{ p: 3 }}>
-            <Stack direction="row" alignItems="flex-start" spacing={2}>
-              <Iconify icon="solar:info-circle-bold" sx={{ color: 'warning.main', mt: 0.5 }} />
-              <Stack>
-                <Typography variant="subtitle2" sx={{ color: 'warning.dark' }}>
-                  n8n Automation Integration
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'warning.dark', mt: 1 }}>
-                  These settings will be used to configure automated workflows in n8n for:
-                </Typography>
-                <Box component="ul" sx={{ mt: 1, pl: 2, color: 'warning.dark' }}>
-                  <li>Automatic WhatsApp responses to customer inquiries</li>
-                  <li>Email ticket creation and management</li>
-                  <li>Customer support escalation workflows</li>
-                  <li>Response time tracking and analytics</li>
-                </Box>
-                <Typography variant="body2" sx={{ color: 'warning.dark', mt: 1 }}>
-                  The n8n integration will be available in a future update.
-                </Typography>
-              </Stack>
-            </Stack>
-          </Box>
-        </Card>
 
         {/* Save Button */}
         <Stack direction="row" justifyContent="flex-end">

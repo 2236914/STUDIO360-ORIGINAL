@@ -8,8 +8,8 @@ import { Scrollbar } from 'src/components/scrollbar';
 import { NavSectionMini, NavSectionVertical } from 'src/components/nav-section';
 
 import { NavUpgrade } from '../components/nav-upgrade';
-import { NavToggleButton } from '../components/nav-toggle-button';
 import { NavUserCard } from '../components/nav-user-card';
+import { NavToggleButton } from '../components/nav-toggle-button';
 
 // ----------------------------------------------------------------------
 
@@ -29,7 +29,7 @@ export function NavVertical({ sx, data, slots, isNavMini, layoutQuery, onToggleN
       <Scrollbar fillContent>
         <NavSectionVertical 
           data={data} 
-          enabledRootRedirect={true}
+          enabledRootRedirect
           sx={{ px: 2, flex: '1 1 auto' }} 
           {...other} 
         />
@@ -49,7 +49,7 @@ export function NavVertical({ sx, data, slots, isNavMini, layoutQuery, onToggleN
 
       <NavSectionMini
         data={data}
-        enabledRootRedirect={true}
+        enabledRootRedirect
         sx={{ pb: 2, px: 0.5, ...hideScrollY, flex: '1 1 auto', overflowY: 'auto' }}
         {...other}
       />

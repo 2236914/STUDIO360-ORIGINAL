@@ -1,15 +1,18 @@
 'use client';
 
+import { z as zod } from 'zod';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z as zod } from 'zod';
+
 import Link from '@mui/material/Link';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import LoadingButton from '@mui/lab/LoadingButton';
+
 import { paths } from 'src/routes/paths';
 import { RouterLink } from 'src/routes/components';
+
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------

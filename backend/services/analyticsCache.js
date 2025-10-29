@@ -24,7 +24,13 @@ function readJSON(p) {
   try {
     if (!fs.existsSync(p)) return null;
     const txt = fs.readFileSync(p, 'utf-8');
-    return JSON.parse(txt);
+    const parsed = JSON.parse(txt);
+    
+    // SAFE: Create clean copy to break any potential circular refs
+    if (parsed && typeof parsed === 'object') {
+      return JSON.parse(JSON.stringify(parsed));
+    }
+    return parsed;
   } catch (_) { return null; }
 }
 

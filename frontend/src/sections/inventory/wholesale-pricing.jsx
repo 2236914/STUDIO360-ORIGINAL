@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+
+import { useFieldArray, useFormContext } from 'react-hook-form';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -11,8 +12,6 @@ import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
-
-import { useFieldArray, useFormContext } from 'react-hook-form';
 
 import { Iconify } from 'src/components/iconify';
 
@@ -61,7 +60,7 @@ export function WholesalePricing() {
                   type="number"
                   placeholder="0"
                   value={tier.minQuantity || ''}
-                  onChange={(e) => setValue(`wholesalePricing.${index}.minQuantity`, parseInt(e.target.value) || 0)}
+                  onChange={(e) => setValue(`wholesalePricing.${index}.minQuantity`, parseInt(e.target.value, 10) || 0)}
                   sx={{ width: 120 }}
                 />
 

@@ -7,15 +7,14 @@ import Grid from '@mui/material/Grid';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Switch from '@mui/material/Switch';
-import Divider from '@mui/material/Divider';
-import Typography from '@mui/material/Typography';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import IconButton from '@mui/material/IconButton';
 import Dialog from '@mui/material/Dialog';
+import Accordion from '@mui/material/Accordion';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Accordion from '@mui/material/Accordion';
+import FormControlLabel from '@mui/material/FormControlLabel';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 
@@ -66,9 +65,9 @@ export function AccountCustomerSupport() {
       whatsappNumber: '+63 912 345 6789',
       whatsappWelcomeMessage: 'Hi! Welcome to Kitsch Studio! How can we help you today?',
       whatsappBusinessHours: 'Monday to Friday, 9AM to 6PM',
-      gmailAddress: 'support@kitschstudio.com',
+      gmailAddress: 'kitschstudioofficial@gmail.com',
       gmailAutoReply: 'Thank you for contacting us! We will get back to you within 24 hours.',
-      gmailSignature: 'Best regards,\nKitsch Studio Support Team\nsupport@kitschstudio.com',
+      gmailSignature: 'Best regards,\nKitsch Studio Support Team\nkitschstudioofficial@gmail.com',
       faqChatbotName: 'Kitsch Assistant',
       faqWelcomeMessage: 'Hello! I\'m here to help answer your questions. You can ask me about shipping, orders, returns, and more!',
       faqFallbackMessage: 'I\'m sorry, I don\'t have an answer for that question. Let me connect you with our support team.',
@@ -209,7 +208,6 @@ export function AccountCustomerSupport() {
               <Stack spacing={3}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                   Configure your WhatsApp business integration for automated customer support.
-                  This will be connected to n8n automation later.
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -258,7 +256,7 @@ export function AccountCustomerSupport() {
                     disabled
                     sx={{ opacity: 0.5 }}
                   >
-                    Configure n8n Automation (Coming Soon)
+                    Configure Automation (Coming Soon)
                   </Button>
                 </Stack>
               </Stack>
@@ -289,7 +287,6 @@ export function AccountCustomerSupport() {
               <Stack spacing={3}>
                 <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
                   Configure your Gmail business integration for automated email support.
-                  This will be connected to n8n automation later.
                 </Typography>
 
                 <Grid container spacing={3}>
@@ -297,7 +294,7 @@ export function AccountCustomerSupport() {
                     <Field.Text
                       name="gmailAddress"
                       label="Support Email Address"
-                      placeholder="support@kitschstudio.com"
+                      placeholder="kitschstudioofficial@gmail.com"
                       InputProps={{
                         startAdornment: (
                           <Iconify icon="solar:letter-bold" sx={{ color: 'text.secondary', mr: 1 }} />
@@ -337,7 +334,7 @@ export function AccountCustomerSupport() {
                     disabled
                     sx={{ opacity: 0.5 }}
                   >
-                    Configure n8n Automation (Coming Soon)
+                    Configure Automation (Coming Soon)
                   </Button>
                 </Stack>
               </Stack>
@@ -533,31 +530,6 @@ export function AccountCustomerSupport() {
           </Box>
         </Card>
 
-        {/* N8N Integration Info */}
-        <Card sx={{ borderRadius: 2, boxShadow: 'none', border: '1px solid', borderColor: 'warning.main', bgcolor: 'warning.lighter' }}>
-          <Box sx={{ p: 3 }}>
-            <Stack direction="row" alignItems="flex-start" spacing={2}>
-              <Iconify icon="solar:info-circle-bold" sx={{ color: 'warning.main', mt: 0.5 }} />
-              <Stack>
-                <Typography variant="subtitle2" sx={{ color: 'warning.dark' }}>
-                  n8n Automation Integration
-                </Typography>
-                <Typography variant="body2" sx={{ color: 'warning.dark', mt: 1 }}>
-                  These settings will be used to configure automated workflows in n8n for:
-                </Typography>
-                <Box component="ul" sx={{ mt: 1, pl: 2, color: 'warning.dark' }}>
-                  <li>Automatic WhatsApp responses to customer inquiries</li>
-                  <li>Email ticket creation and management</li>
-                  <li>Customer support escalation workflows</li>
-                  <li>Response time tracking and analytics</li>
-                </Box>
-                <Typography variant="body2" sx={{ color: 'warning.dark', mt: 1 }}>
-                  The n8n integration will be available in a future update.
-                </Typography>
-              </Stack>
-            </Stack>
-          </Box>
-        </Card>
 
         {/* Save Button */}
         <Stack direction="row" justifyContent="flex-end">

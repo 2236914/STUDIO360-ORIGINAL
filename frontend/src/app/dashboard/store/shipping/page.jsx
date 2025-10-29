@@ -1,92 +1,145 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
 import {
   Box,
   Card,
-  Stack,
-  Typography,
   Grid,
-  TextField,
+  Stack,
   Button,
+  Switch,
+  Divider,
+  TextField,
   Accordion,
+  Typography,
+  IconButton,
   AccordionSummary,
   AccordionDetails,
-  IconButton,
-  Switch,
   FormControlLabel,
-  Divider,
-  Alert,
-  Fab,
 } from '@mui/material';
 
 import { paths } from 'src/routes/paths';
+
+import { useBoolean } from 'src/hooks/use-boolean';
+
 import { DashboardContent } from 'src/layouts/dashboard';
-import { Iconify } from 'src/components/iconify';
+import { shippingPageApi } from 'src/services/storePagesService';
+
 import { Upload } from 'src/components/upload';
+import { toast } from 'src/components/snackbar';
+import { Iconify } from 'src/components/iconify';
+import { ConfirmDialog } from 'src/components/custom-dialog';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
 // ----------------------------------------------------------------------
 
 export default function ShippingReturnsPage() {
+  const [loading, setLoading] = useState(false);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const confirmDialog = useBoolean();
+  const [deleteItem, setDeleteItem] = useState(null);
+
   useEffect(() => {
     document.title = 'Shipping & Returns | STUDIO360';
+    loadShippingData();
   }, []);
+
+  // Load shipping page data from database
+  const loadShippingData = async () => {
+    try {
+      setLoading(true);
+      const data = await shippingPageApi.getCompleteShippingData();
+      
+      console.log('Loaded shipping page data:', data);
+      
+      // Populate local shipping
+      if (data.localShipping) {
+        setShippingSection(prev => ({
+          ...prev,
+          localShipping: {
+            enabled: data.localShipping.enabled || false,
+            description: data.localShipping.description || '',
+          },
+        }));
+      }
+      
+      // Populate international shipping
+      if (data.internationalShipping) {
+        setShippingSection(prev => ({
+          ...prev,
+          internationalShipping: {
+            enabled: data.internationalShipping.enabled || false,
+            description: data.internationalShipping.description || '',
+          },
+        }));
+      }
+      
+      // Populate shipping rates
+      if (data.shippingRates) {
+        setShippingSection(prev => ({
+          ...prev,
+          shippingRates: {
+            enabled: data.shippingRates.enabled || false,
+            description: data.shippingRates.description || '',
+          },
+        }));
+      }
+      
+      // Populate return policy
+      if (data.returnPolicy) {
+        setReturnPolicy({
+          description: data.returnPolicy.description || '',
+        });
+      }
+      
+      // Populate FAQs
+      if (data.faqs && Array.isArray(data.faqs)) {
+        const formattedFaqs = data.faqs.map(faq => ({
+          id: faq.id,
+          question: faq.question,
+          answer: faq.answer,
+          visible: faq.is_active,
+          display_order: faq.display_order,
+        }));
+        setFaqSection(formattedFaqs);
+      }
+      
+      setInitialLoad(false);
+      toast.success('Shipping page data loaded successfully!');
+    } catch (error) {
+      console.error('Error loading shipping page data:', error);
+      toast.error('Failed to load shipping page data. Using empty defaults.');
+      setInitialLoad(false);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // State for shipping section
   const [shippingSection, setShippingSection] = useState({
     headerImage: null,
     localShipping: {
-      enabled: true,
-      description: 'We ship locally within 3-5 business days. Returns within 5-7 days across Australia.',
+      enabled: false,
+      description: '',
     },
     internationalShipping: {
-      enabled: true,
-      description: 'Global delivery available for many items. Shipping information provided for every order.',
+      enabled: false,
+      description: '',
     },
     shippingRates: {
-      enabled: true,
-      description: 'Flat rate of $10 for local delivery. International shipping calculated at checkout.',
+      enabled: false,
+      description: '',
     },
   });
 
   // State for return policy
   const [returnPolicy, setReturnPolicy] = useState({
-    description: `We want you to love your Kitsch Studio piece. Returns are straightforward and hassle-free:
-
-• Returns accepted within 14 days
-• Items must be unused and in original packaging
-• Free return shipping for faulty or damaged items
-• Simply contact us to initiate return process`
+    description: ''
   });
 
   // State for FAQ section
-  const [faqSection, setFaqSection] = useState([
-    {
-      id: 1,
-      question: 'What shipping options do you offer?',
-      answer: 'We offer standard and express shipping options. Standard shipping takes 5-7 business days while express shipping takes 2-3 business days.',
-      visible: true,
-    },
-    {
-      id: 2,
-      question: 'Do you ship internationally?',
-      answer: 'Yes, we ship to most countries worldwide. International shipping costs vary by destination and will be calculated at checkout.',
-      visible: true,
-    },
-    {
-      id: 3,
-      question: 'What is your return policy?',
-      answer: 'We accept returns within 14 days of delivery. Items must be unused and in original packaging. Free returns for faulty items.',
-      visible: true,
-    },
-    {
-      id: 4,
-      question: 'How can I track my order?',
-      answer: 'Once your order ships, you\'ll receive a tracking number via email. You can use this to track your package on our website.',
-      visible: true,
-    },
-  ]);
+  const [faqSection, setFaqSection] = useState([]);
 
   const [expanded, setExpanded] = useState('shipping');
   const [saveStatus, setSaveStatus] = useState('');
@@ -95,20 +148,76 @@ export default function ShippingReturnsPage() {
     setExpanded(isExpanded ? panel : false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    try {
     setSaveStatus('saving');
-    setTimeout(() => {
+      setLoading(true);
+      
+      // Save local shipping
+      await shippingPageApi.updateLocalShipping({
+        enabled: shippingSection.localShipping.enabled,
+        description: shippingSection.localShipping.description,
+      });
+      
+      // Save international shipping
+      await shippingPageApi.updateInternationalShipping({
+        enabled: shippingSection.internationalShipping.enabled,
+        description: shippingSection.internationalShipping.description,
+      });
+      
+      // Save shipping rates
+      await shippingPageApi.updateShippingRates({
+        enabled: shippingSection.shippingRates.enabled,
+        description: shippingSection.shippingRates.description,
+      });
+      
+      // Save return policy
+      await shippingPageApi.updateReturnPolicy({
+        description: returnPolicy.description,
+      });
+      
+      // Save or update each FAQ
+      for (const faq of faqSection) {
+        if (typeof faq.id === 'string' && faq.id.length > 20) {
+          // Existing FAQ (UUID from database)
+          await shippingPageApi.updateFAQ(faq.id, {
+            question: faq.question,
+            answer: faq.answer,
+            is_active: faq.visible,
+            display_order: faq.display_order || 0,
+          });
+        } else {
+          // New FAQ (temporary numeric ID)
+          await shippingPageApi.createFAQ({
+            question: faq.question,
+            answer: faq.answer,
+            is_active: faq.visible,
+            display_order: faq.display_order || 0,
+          });
+        }
+      }
+      
       setSaveStatus('saved');
-      setTimeout(() => setSaveStatus(''), 3000);
-    }, 1000);
+      toast.success('Shipping page saved successfully!');
+      
+      // Reload to get updated IDs from database
+      await loadShippingData();
+    } catch (error) {
+      console.error('Error saving shipping page:', error);
+      toast.error('Failed to save shipping page. Please try again.');
+      setSaveStatus('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const addFAQ = () => {
     const newFAQ = {
-      id: Date.now(),
+      id: Date.now(), // Temporary ID for new FAQs
       question: 'New question',
       answer: 'Your answer here...',
       visible: true,
+      display_order: faqSection.length,
     };
     setFaqSection(prev => [...prev, newFAQ]);
   };
@@ -121,8 +230,33 @@ export default function ShippingReturnsPage() {
     );
   };
 
-  const deleteFAQ = (id) => {
-    setFaqSection(prev => prev.filter(faq => faq.id !== id));
+  const confirmDeleteFAQ = (id) => {
+    setDeleteItem(id);
+    confirmDialog.onTrue();
+  };
+
+  const deleteFAQ = async () => {
+    try {
+      const faqId = deleteItem;
+      
+      // If it's a database FAQ (UUID), delete from database
+      if (typeof faqId === 'string' && faqId.length > 20) {
+        setLoading(true);
+        await shippingPageApi.deleteFAQ(faqId);
+        toast.success('FAQ deleted successfully!');
+      }
+      
+      // Remove from local state
+      setFaqSection(prev => prev.filter(faq => faq.id !== faqId));
+      
+      confirmDialog.onFalse();
+      setDeleteItem(null);
+    } catch (error) {
+      console.error('Error deleting FAQ:', error);
+      toast.error('Failed to delete FAQ. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleFAQVisibility = (id) => {
@@ -163,13 +297,6 @@ export default function ShippingReturnsPage() {
         }
         sx={{ mb: { xs: 3, md: 5 } }}
       />
-
-      {/* Save Status Alert */}
-      {saveStatus === 'saved' && (
-        <Alert severity="success" sx={{ mb: 3 }}>
-          Shipping & Returns changes saved successfully!
-        </Alert>
-      )}
 
       <Grid container spacing={3}>
         {/* Editor Panel */}
@@ -394,7 +521,7 @@ export default function ShippingReturnsPage() {
                           <IconButton
                             size="small"
                             color="error"
-                            onClick={() => deleteFAQ(faq.id)}
+                            onClick={() => confirmDeleteFAQ(faq.id)}
                           >
                             <Iconify icon="eva:trash-2-fill" />
                           </IconButton>
@@ -524,6 +651,24 @@ export default function ShippingReturnsPage() {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Confirmation Dialog */}
+      <ConfirmDialog
+        open={confirmDialog.value}
+        onClose={confirmDialog.onFalse}
+        title="Delete FAQ"
+        content="Are you sure you want to delete this FAQ? This action cannot be undone."
+        action={
+          <Button 
+            variant="contained" 
+            color="error" 
+            onClick={deleteFAQ}
+            disabled={loading}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        }
+      />
     </DashboardContent>
   );
 }

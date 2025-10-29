@@ -8,6 +8,14 @@ const nextConfig = {
     // Disable React DevTools to prevent _debugInfo errors
     DISABLE_REACT_DEVTOOLS: process.env.NODE_ENV === 'development' ? 'true' : 'false',
   },
+  // Enable subdomain routing
+  async rewrites() {
+    return {
+      beforeFiles: [],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   reactStrictMode: false,
   // Critical: Disable hydration warnings in development for CSS-in-JS
   onDemandEntries: {
@@ -21,8 +29,8 @@ const nextConfig = {
     forceSwcTransforms: true,
     // Improve hydration stability
     serverComponentsHmrCache: false,
-    // Disable problematic development features that cause _debugInfo errors
-    turbo: false,
+    // Note: 'turbo' can be experimental and may expect an object in newer Next versions.
+    // Removed boolean assignment to avoid config validation errors.
     // Disable server components debugging features that cause conflicts
     serverSourceMaps: false,
   },

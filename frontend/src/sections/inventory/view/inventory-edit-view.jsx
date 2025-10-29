@@ -1,14 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 import { paths } from 'src/routes/paths';
 import { useRouter } from 'src/routes/hooks';
 
 import { DashboardContent } from 'src/layouts/dashboard';
+import { inventoryApi } from 'src/services/inventoryService';
 
+import { toast } from 'src/components/snackbar';
 import { Iconify } from 'src/components/iconify';
 import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 
@@ -16,54 +20,85 @@ import { InventoryNewEditForm } from '../inventory-new-edit-form';
 
 // ----------------------------------------------------------------------
 
-// Mock product data for editing - would typically come from API
-const PRODUCT_DATA = {
-  1: {
-    id: '1',
-    name: 'Classic Leather Loafers',
-    subDescription: 'Featuring the original ripple design inspired by Japanese bullet trains',
-    description: 'Featuring the original ripple design inspired by Japanese bullet trains, the Nike Air Max 97 lets you push your style full-speed ahead.',
-    images: [
-      '/assets/images/product/product_1.jpg',
-      '/assets/images/product/product_2.jpg',
-      '/assets/images/product/product_3.jpg',
-    ],
-    code: '38BEE271',
-    sku: 'WW754X51YW-5V',
-    quantity: 80,
-    category: 'Shoes',
-    colors: ['Blue', 'Pink'],
-    sizes: ['7.5', '8.5', '9.5', '10', '10.5', '11', '11.5', '12', '13'],
-    tags: ['Technology', 'Health and Wellness', 'Travel', 'Finance', 'Education'],
-    gender: ['Men', 'Women', 'Kids'],
-    price: 97.14,
-    priceSale: 89.99,
-    taxes: 10,
-    saleLabel: { enabled: true, content: 'SALE' },
-    newLabel: { enabled: true, content: 'NEW' },
-  }
-};
-
 export function InventoryEditView({ id }) {
   const router = useRouter();
   
   const [currentProduct, setCurrentProduct] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Get product data (in real app, this would be from API)
+  // Load product data from database
   useEffect(() => {
-    const product = PRODUCT_DATA[id] || PRODUCT_DATA['1'];
-    setCurrentProduct(product);
-    
-    // Set page title
-    document.title = `Edit ${product.name} | Inventory - Kitsch Studio`;
-  }, [id]);
+    const loadProduct = async () => {
+      try {
+        setLoading(true);
+        const product = await inventoryApi.getProductById(id);
+        
+        if (!product) {
+          toast.error('Product not found');
+          router.push(paths.dashboard.inventory.root);
+          return;
+        }
+
+        // Transform database data to match form format
+        const transformedProduct = {
+          id: product.id,
+          name: product.name,
+          subDescription: product.short_description || '',
+          description: product.description || '',
+          images: product.images || [],
+          code: product.barcode || '',
+          sku: product.sku || '',
+          price: product.price || 0,
+          quantity: product.stock_quantity || 0,
+          priceSale: product.compare_at_price || 0,
+          category: product.category || '',
+          // Extract from dimensions JSONB field
+          tags: product.dimensions?.tags || [],
+          gender: product.dimensions?.gender || [],
+          theme: product.dimensions?.theme || '',
+          colors: product.dimensions?.colors || [],
+          sizes: product.dimensions?.sizes || [],
+          newLabel: product.dimensions?.newLabel || { enabled: false, content: '' },
+          saleLabel: product.dimensions?.saleLabel || { enabled: false, content: '' },
+          variations: [],
+          variationCombinations: [],
+          wholesalePricing: [],
+        };
+
+        setCurrentProduct(transformedProduct);
+        
+        // Set page title
+        document.title = `Edit ${product.name} | Inventory - STUDIO360`;
+      } catch (error) {
+        console.error('Error loading product:', error);
+        toast.error('Failed to load product');
+        router.push(paths.dashboard.inventory.root);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (id) {
+      loadProduct();
+    }
+  }, [id, router]);
 
   const handleBack = () => {
     router.push(paths.dashboard.inventory.root);
   };
 
+  if (loading) {
+    return (
+      <DashboardContent>
+        <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
+          <CircularProgress />
+        </Box>
+      </DashboardContent>
+    );
+  }
+
   if (!currentProduct) {
-    return null; // Loading state
+    return null;
   }
 
   return (

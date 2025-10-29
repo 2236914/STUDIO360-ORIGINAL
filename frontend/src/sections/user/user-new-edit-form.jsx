@@ -122,6 +122,7 @@ export function UserNewEditForm({ currentUser }) {
             <Box sx={{ mb: 5 }}>
               <Field.UploadAvatar
                 name="avatarUrl"
+                allowUrl
                 maxSize={3145728}
                 helperText={
                   <Typography

@@ -3,42 +3,40 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
-import axios from 'src/utils/axios';
-
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
-import Stack from '@mui/material/Stack';
-import Button from '@mui/material/Button';
-import Stepper from '@mui/material/Stepper';
 import Step from '@mui/material/Step';
-import StepLabel from '@mui/material/StepLabel';
-import StepContent from '@mui/material/StepContent';
-import Typography from '@mui/material/Typography';
-import IconButton from '@mui/material/IconButton';
-import LinearProgress from '@mui/material/LinearProgress';
-import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
-import Tooltip from '@mui/material/Tooltip';
-import TextField from '@mui/material/TextField';
-import MenuItem from '@mui/material/MenuItem';
 import Grid from '@mui/material/Grid';
+import Stack from '@mui/material/Stack';
+import Alert from '@mui/material/Alert';
+import Table from '@mui/material/Table';
+import Paper from '@mui/material/Paper';
+import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
+import Switch from '@mui/material/Switch';
+import Stepper from '@mui/material/Stepper';
+import MenuItem from '@mui/material/MenuItem';
+import TableRow from '@mui/material/TableRow';
+import StepLabel from '@mui/material/StepLabel';
+import TextField from '@mui/material/TextField';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import Typography from '@mui/material/Typography';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
-import Switch from '@mui/material/Switch';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
+import LinearProgress from '@mui/material/LinearProgress';
 import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Paper from '@mui/material/Paper';
+import FormControlLabel from '@mui/material/FormControlLabel';
+
+import axios from 'src/utils/axios';
 
 import { DashboardContent } from 'src/layouts/dashboard';
-import { Iconify } from 'src/components/iconify';
+
 import { Upload } from 'src/components/upload';
+import { Iconify } from 'src/components/iconify';
 
 // ----------------------------------------------------------------------
 
@@ -606,7 +604,7 @@ export default function UploadProcessPage() {
         const inv = cFields.invoiceNumber || structured.invoiceNumber;
         if (seller) descParts.push(seller);
         if (inv) descParts.push(`Invoice ${inv}`);
-        const description = (descParts.join(' - ') || 'Document Total') + ` (${filename})`;
+        const description = `${descParts.join(' - ') || 'Document Total'  } (${filename})`;
         const baseDesc = description;
         const overrideKey = normalizeKey(baseDesc);
         const learnedCat = overrides[overrideKey];
@@ -1055,7 +1053,7 @@ export default function UploadProcessPage() {
                           return (
                             <Stack direction="row" spacing={1} alignItems="center" sx={{ mb:1, flexWrap:'wrap' }}>
                               <Chip size="small" variant="outlined" color="info" label={`Source: ${sourceLabel}`} />
-                              <Chip size="small" variant="outlined" color={confColor} label={`Confidence: ${overallConfidence != null ? overallConfidence + '%' : 'N/A'}`} />
+                              <Chip size="small" variant="outlined" color={confColor} label={`Confidence: ${overallConfidence != null ? `${overallConfidence  }%` : 'N/A'}`} />
                               <Chip size="small" variant="filled" color="primary" label={`Grand Total: ${grandTotalFmt}`} />
                             </Stack>
                           );

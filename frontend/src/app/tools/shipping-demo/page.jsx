@@ -1,10 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { Container, Typography, Box, Paper, Grid, Card, CardHeader, Stack, Chip, Alert } from '@mui/material';
+
+import { Box, Grid, Card, Chip, Paper, Stack, Alert, Container, Typography, CardHeader } from '@mui/material';
+
+import { getShippingRegion, getRegionDisplayName, calculateShippingOptions, MOCK_SELLER_SHIPPING_CONFIG } from 'src/utils/shipping-calculator';
 
 import { DeliveryAddressForm } from 'src/components/delivery-address-form';
-import { calculateShippingOptions, getRegionDisplayName, getShippingRegion, MOCK_SELLER_SHIPPING_CONFIG } from 'src/utils/shipping-calculator';
 
 // ----------------------------------------------------------------------
 

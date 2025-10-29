@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react';
 
-import { toast } from 'src/components/snackbar';
 
 // ----------------------------------------------------------------------
 
@@ -102,10 +101,10 @@ export function useVoucherValidation() {
     }
   }, []);
 
-  const removeVoucher = useCallback(() => {
+  const removeVoucher = useCallback(() => 
     // In a real app, you might want to track voucher removal
-    return { success: true, message: 'Voucher removed successfully' };
-  }, []);
+     ({ success: true, message: 'Voucher removed successfully' })
+  , []);
 
   return {
     loading,

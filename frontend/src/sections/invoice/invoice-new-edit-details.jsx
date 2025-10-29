@@ -7,6 +7,7 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import MenuItem from '@mui/material/MenuItem';
+import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import InputAdornment from '@mui/material/InputAdornment';
 import { inputBaseClasses } from '@mui/material/InputBase';
@@ -28,7 +29,7 @@ export function InvoiceNewEditDetails({ methods, serviceOptions }) {
 
   const subtotal = totalOnRow.reduce((acc, num) => acc + num, 0);
 
-  const totalAmount = subtotal - values.discount - values.shipping + values.taxes;
+  const totalAmount = subtotal + values.shipping - values.discount + values.taxes;
 
   useEffect(() => {
     setValue('totalAmount', totalAmount);
@@ -101,8 +102,8 @@ export function InvoiceNewEditDetails({ methods, serviceOptions }) {
 
       <Stack direction="row">
         <Box sx={{ color: 'text.secondary' }}>Shipping</Box>
-        <Box sx={{ width: 160, ...(values.shipping && { color: 'error.main' }) }}>
-                      {values.shipping ? `- ${fCurrencyPHPSymbol(values.shipping, '₱', 2, '.', ',')}` : '-'}
+        <Box sx={{ width: 160, ...(values.shipping && { color: 'success.main' }) }}>
+                      {values.shipping ? `+ ${fCurrencyPHPSymbol(values.shipping, '₱', 2, '.', ',')}` : '-'}
         </Box>
       </Stack>
 
@@ -307,6 +308,14 @@ export function InvoiceNewEditDetails({ methods, serviceOptions }) {
 }
 
 InvoiceNewEditDetails.propTypes = {
-  methods: PropTypes.object,
-  serviceOptions: PropTypes.array,
+  methods: PropTypes.shape({
+    control: PropTypes.object,
+    setValue: PropTypes.func,
+    watch: PropTypes.func,
+  }),
+  serviceOptions: PropTypes.arrayOf(PropTypes.shape({
+    id: PropTypes.oneOfType([PropTypes.string, PropTypes.number]),
+    name: PropTypes.string,
+    price: PropTypes.number,
+  })),
 };
