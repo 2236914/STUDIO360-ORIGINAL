@@ -359,10 +359,24 @@ export default function GeneralJournalPage() {
           </Box>
           
           <Stack direction="row" spacing={1}>
-            <IconButton sx={{ color: 'success.main' }}>
+            <IconButton
+              sx={{ color: 'success.main' }}
+              title="Export to Excel"
+              onClick={() => {
+                const url = `/api/bookkeeping/reports/export?type=journal&format=xlsx`;
+                window.open(url, '_blank');
+              }}
+            >
               <Iconify icon="logos:excel" />
             </IconButton>
-            <IconButton sx={{ color: 'text.secondary' }}>
+            <IconButton
+              sx={{ color: 'text.secondary' }}
+              title="Download PDF"
+              onClick={() => {
+                const url = `/api/bookkeeping/reports/export?type=journal&format=pdf`;
+                window.open(url, '_blank');
+              }}
+            >
               <Iconify icon="eva:printer-fill" />
             </IconButton>
           </Stack>

@@ -90,6 +90,7 @@ export const paths = {
       generalLedger: `${ROOTS.DASHBOARD}/bookkeeping/general-ledger`,
       cashDisbursement: `${ROOTS.DASHBOARD}/bookkeeping/cash-disbursement`,
       cashReceipt: `${ROOTS.DASHBOARD}/bookkeeping/cash-receipt`,
+      financialReports: `${ROOTS.DASHBOARD}/bookkeeping/financial-reports`,
     },
     aiBookkeeper: {
       root: `${ROOTS.DASHBOARD}/ai-bookkeeper`,

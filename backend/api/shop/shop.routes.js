@@ -1,14 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const shopService = require('../../services/shopService');
-const { authenticateTokenHybrid } = require('../../middleware/auth');
+const { authenticateTokenHybrid, requireRole } = require('../../middleware/auth');
+
+// Require authenticated seller or admin for all shop routes
+router.use(authenticateTokenHybrid, requireRole(['seller', 'admin_it']));
 
 /**
  * @route GET /api/shop/complete
  * @desc Get complete shop data (shop info, shipping settings, couriers with rates)
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.get('/complete', authenticateTokenHybrid, async (req, res) => {
+router.get('/complete', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -41,9 +44,9 @@ router.get('/complete', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route GET /api/shop/info
  * @desc Get shop information
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.get('/info', authenticateTokenHybrid, async (req, res) => {
+router.get('/info', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -72,9 +75,9 @@ router.get('/info', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route PUT /api/shop/info
  * @desc Update shop information
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.put('/info', authenticateTokenHybrid, async (req, res) => {
+router.put('/info', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -144,9 +147,9 @@ router.put('/info', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route GET /api/shop/shipping
  * @desc Get shipping settings
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.get('/shipping', authenticateTokenHybrid, async (req, res) => {
+router.get('/shipping', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -175,9 +178,9 @@ router.get('/shipping', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route PUT /api/shop/shipping
  * @desc Update shipping settings
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.put('/shipping', authenticateTokenHybrid, async (req, res) => {
+router.put('/shipping', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -228,9 +231,9 @@ router.put('/shipping', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route GET /api/shop/couriers
  * @desc Get all couriers
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.get('/couriers', authenticateTokenHybrid, async (req, res) => {
+router.get('/couriers', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -259,9 +262,9 @@ router.get('/couriers', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route POST /api/shop/couriers
  * @desc Create a new courier
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.post('/couriers', authenticateTokenHybrid, async (req, res) => {
+router.post('/couriers', async (req, res) => {
   try {
     const userId = req.user?.id;
     
@@ -308,9 +311,9 @@ router.post('/couriers', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route PUT /api/shop/couriers/:id
  * @desc Update courier
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.put('/couriers/:id', authenticateTokenHybrid, async (req, res) => {
+router.put('/couriers/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, is_active } = req.body;
@@ -352,9 +355,9 @@ router.put('/couriers/:id', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route DELETE /api/shop/couriers/:id
  * @desc Delete courier
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.delete('/couriers/:id', authenticateTokenHybrid, async (req, res) => {
+router.delete('/couriers/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -383,9 +386,9 @@ router.delete('/couriers/:id', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route GET /api/shop/couriers/:id/rates
  * @desc Get regional shipping rates for a courier
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.get('/couriers/:id/rates', authenticateTokenHybrid, async (req, res) => {
+router.get('/couriers/:id/rates', async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -407,9 +410,9 @@ router.get('/couriers/:id/rates', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route PUT /api/shop/couriers/:id/rates
  * @desc Update regional shipping rates for a courier
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.put('/couriers/:id/rates', authenticateTokenHybrid, async (req, res) => {
+router.put('/couriers/:id/rates', async (req, res) => {
   try {
     const { id: courierId } = req.params;
     const { rates } = req.body;
@@ -460,9 +463,9 @@ router.put('/couriers/:id/rates', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route GET /api/shop/stats
  * @desc Get shop statistics
- * @access Private
+ * @access Private (seller/admin_it)
  */
-router.get('/stats', authenticateTokenHybrid, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
     const userId = req.user?.id;
     

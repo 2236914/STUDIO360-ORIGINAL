@@ -1533,20 +1533,12 @@ router.get('/events', authenticateTokenHybrid, async (req, res) => {
 /**
  * @route GET /api/store-pages/events/active
  * @desc Get active events (for public storefront)
- * @access Private
+ * @access Public
  */
-router.get('/events/active', authenticateTokenHybrid, async (req, res) => {
+router.get('/events/active', async (req, res) => {
   try {
-    const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({ 
-        success: false, 
-        message: 'User not authenticated' 
-      });
-    }
-
-    const events = await storePagesService.getActiveEvents(userId);
+    const { storeId } = req.query || {};
+    const events = await storePagesService.getActiveEvents(storeId || null);
     
     res.json({
       success: true,

@@ -59,6 +59,62 @@ class OrdersService {
   }
 
   /**
+   * Build general journal payload from order (accrual on completion)
+   */
+  buildJournalFromOrder(order) {
+    if (!order) return null;
+    try {
+      const orderNumber = String(order.order_number || order.id || '').trim();
+      const ref = orderNumber ? `ORD-${orderNumber}` : null;
+      const date = (order.order_date || order.created_at || new Date().toISOString()).toString().slice(0, 10);
+      const customer = String(order.customer_name || '').trim();
+      const subtotal = Number(order.subtotal || 0);
+      const shipping = Number(order.shipping_fee || 0);
+      const tax = Number(order.tax || 0); // reserved; not split without tax account config
+      const discount = Number(order.discount || 0);
+      const total = Number(order.total || (subtotal + shipping + tax - discount));
+      const netSales = Math.max(0, subtotal - discount);
+      const lines = [];
+      // Dr Accounts Receivable (103) = total
+      if (total > 0) lines.push({ code: '103', debit: total, credit: 0, description: `A/R – Order ${orderNumber}` });
+      // Cr Net Sales (401)
+      if (netSales > 0) lines.push({ code: '401', debit: 0, credit: netSales, description: 'Net Sales' });
+      // Cr Other Income (Shipping) (402)
+      if (shipping > 0) lines.push({ code: '402', debit: 0, credit: shipping, description: 'Shipping Income' });
+      // Note: tax handling can be added later when tax-liability account is defined
+      if (lines.length < 2) return null;
+      const particulars = `Order #${orderNumber}${customer ? ' – ' + customer : ''}`;
+      return { date, ref, particulars, lines };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /**
+   * Build cash receipt payload from order (clear A/R on payment)
+   */
+  buildReceiptFromOrder(order, amountReceived) {
+    if (!order) return null;
+    try {
+      const orderNumber = String(order.order_number || order.id || '').trim();
+      const referenceNo = orderNumber ? `RCPT-${orderNumber}` : null;
+      const date = new Date().toISOString().slice(0, 10);
+      const customer = String(order.customer_name || '').trim();
+      const amt = Number(amountReceived || order.total || 0);
+      if (amt <= 0) return null;
+      return {
+        date,
+        referenceNo,
+        customer,
+        cashDebit: amt,
+        arCredit: amt,
+        remarks: `Payment received for Order #${orderNumber}`,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+  /**
    * Get order by ID with all related data
    */
   async getOrderById(orderId, userId) {

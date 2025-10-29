@@ -195,6 +195,12 @@ export function OrderDetailsView({ id: idProp, inDialog = false, onClose }) {
                 color={ORDER_DATA.status === 'refunded' ? 'info' : 'default'}
                 variant="soft"
               />
+              <Chip
+                label={`PAYMENT: ${(ORDER_DATA.paymentStatus||'pending').toString().toUpperCase()}`}
+                size="small"
+                color={ORDER_DATA.paymentStatus === 'completed' ? 'success' : 'warning'}
+                variant="soft"
+              />
               <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 {fDate(ORDER_DATA.date, 'dd MMM yyyy')} {ORDER_DATA.time}
               </Typography>
@@ -248,6 +254,11 @@ export function OrderDetailsView({ id: idProp, inDialog = false, onClose }) {
           <Typography variant="body1" sx={{ color: 'text.secondary' }}>
             Studio360 - Order Management System
           </Typography>
+          {ORDER_DATA.paymentStatus === 'completed' && (
+            <Box sx={{ mt: 2 }}>
+              <Chip label="PAID" color="success" variant="outlined" sx={{ fontWeight: 700 }} />
+            </Box>
+          )}
         </Box>
 
         {/* Invoice Details */}
@@ -333,7 +344,7 @@ export function OrderDetailsView({ id: idProp, inDialog = false, onClose }) {
 
         {/* Summary */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Box sx={{ width: 300 }}>
+            <Box sx={{ width: 300 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
               <Typography variant="body2">Subtotal:</Typography>
               <Typography variant="body2">{fCurrency(ORDER_DATA.summary.subtotal)}</Typography>
@@ -368,6 +379,21 @@ export function OrderDetailsView({ id: idProp, inDialog = false, onClose }) {
               </Typography>
               <Typography variant="h6" sx={{ fontWeight: 700 }}>
                 {fCurrency(ORDER_DATA.summary.total)}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+        {/* Payment Summary */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+          <Box sx={{ width: 300 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="body2">Amount Paid:</Typography>
+              <Typography variant="body2">{ORDER_DATA.paymentStatus === 'completed' ? fCurrency(ORDER_DATA.summary.total) : fCurrency(0)}</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>Balance Due:</Typography>
+              <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                {ORDER_DATA.paymentStatus === 'completed' ? fCurrency(0) : fCurrency(ORDER_DATA.summary.total)}
               </Typography>
             </Box>
           </Box>

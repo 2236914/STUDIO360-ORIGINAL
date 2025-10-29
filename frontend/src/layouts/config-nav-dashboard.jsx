@@ -79,6 +79,7 @@ export const navData = [
           { title: 'General Ledger', path: paths.dashboard.bookkeeping.generalLedger },
           { title: 'Cash Disbursement Book', path: paths.dashboard.bookkeeping.cashDisbursement },
           { title: 'Cash Receipt Journal', path: paths.dashboard.bookkeeping.cashReceipt },
+          { title: 'Financial Reports', path: paths.dashboard.bookkeeping.financialReports },
         ],
       },
       {

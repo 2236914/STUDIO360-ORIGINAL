@@ -738,20 +738,26 @@ router.post('/sales-post', express.json(), async (req, res) => {
     // For now, just build journal payloads and return; client will POST them.
     const journalPayloads = [];
     const cashReceiptPayloads = [];
-    for (const s of sales) {
+  for (const s of sales) {
       const date = s.date || new Date().toISOString().slice(0,10);
       const platform = s.platform || 'Platform';
       const orderId = s.order_id || s.orderId || '';
-      const cash = Number(s.cash_received)||0;
-      const fees = Number(s.fees)||0;
-      const tax = Number(s.withholding_tax)||0;
-      const revenue = Number(s.total_revenue)||0;
-      const creditSales = platform.toLowerCase()==='tiktok' ? (cash + fees + tax) : revenue;
+      // Normalize and clamp to non-negative to satisfy journal validation
+      const toNum = (v) => {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+      };
+      const clampPos = (n) => Math.max(0, n || 0);
+      const cash = clampPos(toNum(s.cash_received));
+      const fees = clampPos(toNum(s.fees));
+      const tax = clampPos(toNum(s.withholding_tax));
+      const revenue = clampPos(toNum(s.total_revenue));
+      const creditSales = platform.toLowerCase()==='tiktok' ? clampPos(cash + fees + tax) : revenue;
       const lines = [];
-      if (cash) lines.push({ code: '101', debit: cash, credit: 0, description: 'Cash received' });
-      if (tax) lines.push({ code: '109', debit: tax, credit: 0, description: 'Withholding Tax' });
-      if (fees) lines.push({ code: '510', debit: fees, credit: 0, description: 'Platform Fees & Charges' });
-      if (creditSales) lines.push({ code: '401', debit: 0, credit: creditSales, description: 'Sales Revenue' });
+      if (cash > 0) lines.push({ code: '101', debit: cash, credit: 0, description: 'Cash received' });
+      if (tax > 0) lines.push({ code: '109', debit: tax, credit: 0, description: 'Withholding Tax' });
+      if (fees > 0) lines.push({ code: '510', debit: fees, credit: 0, description: 'Platform Fees & Charges' });
+      if (creditSales > 0) lines.push({ code: '401', debit: 0, credit: creditSales, description: 'Sales Revenue' });
       journalPayloads.push({ date, ref: `${platform.substring(0,2).toUpperCase()}-${date}`, particulars: `To record sales for the day - ${platform}`, orderId, lines });
       cashReceiptPayloads.push({
         date,
@@ -761,7 +767,7 @@ router.post('/sales-post', express.json(), async (req, res) => {
         cashDebit: cash,
         feesChargesDebit: fees,
         salesReturnsDebit: 0,
-        netSalesCredit: platform.toLowerCase()==='tiktok' ? creditSales : creditSales, // unified
+        netSalesCredit: creditSales, // unified
         otherIncomeCredit: 0,
         arCredit: 0,
         ownersCapitalCredit: 0,
@@ -937,27 +943,23 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         const canonical = canonicalizeStructured({ rawText: '', structured, meta });
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        // Auto-post best-effort
-        let autoPostResult = { posted: false, reason: 'skipped' };
-        (async () => {
-          try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
-          responded = true;
-          return res.json({
-            success: true,
-            message: 'Spreadsheet parsed successfully',
-            data: {
-              id,
-              ...meta,
-              text: '',
-              structured,
-              canonical,
-              fileUrl: meta.fileUrl,
-              warnings: [],
-              diagnostics: { rows: json.length, sheet: sheetName, detectedColumns: { amountCol, dateCol, descCol, invoiceCol, sellerCol } },
-              autoPost: autoPostResult
-            }
-          });
-        })();
+        // Manual confirmation required: do not auto-post on upload
+        responded = true;
+        return res.json({
+          success: true,
+          message: 'Spreadsheet parsed successfully',
+          data: {
+            id,
+            ...meta,
+            text: '',
+            structured,
+            canonical,
+            fileUrl: meta.fileUrl,
+            warnings: [],
+            diagnostics: { rows: json.length, sheet: sheetName, detectedColumns: { amountCol, dateCol, descCol, invoiceCol, sellerCol } },
+            autoPost: { posted: false, reason: 'manual_confirmation_required' }
+          }
+        });
       } catch (e) {
         return res.status(500).json({ success: false, message: 'Spreadsheet parse failed', error: e.message });
       }
@@ -1085,27 +1087,23 @@ router.post('/upload', upload.single('file'), async (req, res) => {
         if (canonical && canonical.source) canonical.source.fileUrl = meta.fileUrl;
         const id = crypto.randomUUID();
         processedStore.push({ id, ...meta, extractedAt: canonical.extractedAt, canonical });
-        // Auto-post best-effort
-        let autoPostResult = { posted: false, reason: 'skipped' };
-        (async () => {
-          try { autoPostResult = await tryAutoPostDocument(canonical, meta); } catch (e) { autoPostResult = { posted: false, reason: 'error', error: String(e && e.message ? e.message : e) }; }
-          responded = true;
-          return res.json({
-            success: true,
-            message: 'File processed successfully',
-            data: {
-              id,
-              ...meta,
-              text: parsed.text,
-              structured: parsed.structured || null,
-              canonical,
-              fileUrl: meta.fileUrl,
-              warnings: parsed.warnings || [],
-              diagnostics: parsed.diagnostics || null,
-              autoPost: autoPostResult
-            }
-          });
-        })();
+        // Manual confirmation required: do not auto-post on upload
+        responded = true;
+        return res.json({
+          success: true,
+          message: 'File processed successfully',
+          data: {
+            id,
+            ...meta,
+            text: parsed.text,
+            structured: parsed.structured || null,
+            canonical,
+            fileUrl: meta.fileUrl,
+            warnings: parsed.warnings || [],
+            diagnostics: parsed.diagnostics || null,
+            autoPost: { posted: false, reason: 'manual_confirmation_required' }
+          }
+        });
       } catch (e) {
         responded = true;
         const storedPath = path.relative(process.cwd(), filePath).replace(/\\/g, '/');

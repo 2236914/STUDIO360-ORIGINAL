@@ -20,7 +20,18 @@ async function authenticatedRequest(url, options = {}) {
       },
     };
 
-    const response = await fetch(url, { ...options, ...defaultOptions });
+    // In the browser, prefer relative '/api' to use Next.js proxy and avoid CORS/port issues
+    let finalUrl = url;
+    if (typeof window !== 'undefined') {
+      try {
+        const base = (CONFIG.site.serverUrl || '').replace(/\/$/, '');
+        if (base && url.startsWith(base)) {
+          finalUrl = url.slice(base.length);
+        }
+      } catch (_) { /* noop */ }
+    }
+
+    const response = await fetch(finalUrl, { ...options, ...defaultOptions });
     
     // If we get a 401/403, the token might be invalid
     if (response.status === 401 || response.status === 403) {
@@ -82,7 +93,7 @@ export const bookkeepingApi = {
   // Get ledger summary
   async getLedgerSummary() {
     try {
-      const url = `${CONFIG.site.serverUrl}/api/bookkeeping/ledger-summary`;
+      const url = `${CONFIG.site.serverUrl}/api/bookkeeping/ledger/summary`;
       const response = await authenticatedRequest(url);
       const data = await response.json();
       

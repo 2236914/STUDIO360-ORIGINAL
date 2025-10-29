@@ -15,6 +15,7 @@ import { fNumber } from 'src/utils/format-number';
 
 import { Iconify } from 'src/components/iconify';
 import { Chart, useChart } from 'src/components/chart';
+import { supabase } from 'src/auth/context/jwt/supabaseClient';
 
 // ----------------------------------------------------------------------
 
@@ -52,6 +53,68 @@ export function AnalyticsAiForecast() {
 
   useEffect(() => {
     loadForecastData();
+  }, [selectedType]);
+
+  // Polling and refetch on tab focus/visibility change
+  useEffect(() => {
+    let intervalId;
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        loadForecastData();
+      }
+    };
+
+    // Start polling every 30s
+    intervalId = setInterval(() => {
+      loadForecastData();
+    }, 30000);
+
+    // Refetch when tab becomes visible
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', onVisibility);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', onVisibility);
+      }
+    };
+  }, [selectedType]);
+
+  // Supabase Realtime subscription to receipts/disbursements
+  useEffect(() => {
+    let debounceTimer;
+    const triggerRefetch = () => {
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        loadForecastData();
+      }, 500);
+    };
+
+    const channel = supabase
+      .channel('financial-forecast-stream')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cash_receipt_journal' },
+        triggerRefetch
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cash_disbursement_book' },
+        triggerRefetch
+      )
+      .subscribe((status) => {
+        // no-op; rely on events
+      });
+
+    return () => {
+      try { supabase.removeChannel(channel); } catch (_) {}
+      clearTimeout(debounceTimer);
+    };
   }, [selectedType]);
 
   const loadForecastData = async () => {
@@ -232,6 +295,20 @@ export function AnalyticsAiForecast() {
     },
   ];
 
+  // Classification of monthly sales levels (low/consistent/high)
+  const classifyLevels = (() => {
+    const vals = (actualData || []).filter((v) => typeof v === 'number' && v > 0).slice(0, 12);
+    if (vals.length < 3) return [];
+    const sorted = [...vals].sort((a, b) => a - b);
+    const q1 = sorted[Math.floor(sorted.length * 0.25)];
+    const q3 = sorted[Math.floor(sorted.length * 0.75)];
+    return (actualData || []).slice(0, 12).map((v) => {
+      if (v <= q1) return 'Low';
+      if (v >= q3) return 'High';
+      return 'Consistent';
+    });
+  })();
+
   return (
     <Card sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
@@ -292,6 +369,16 @@ export function AnalyticsAiForecast() {
       </Stack>
 
       <Chart type="line" series={series} options={chartOptions} height={320} />
+
+      {/* Sales level legend */}
+      {isSales && classifyLevels.length > 0 && (
+        <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: 'wrap' }}>
+          <Typography variant="caption" sx={{ mr: 1, color: 'text.secondary' }}>Sales Levels:</Typography>
+          <Box sx={{ bgcolor: 'warning.lighter', color: 'warning.darker', px: 1, borderRadius: 1 }} component="span">Low</Box>
+          <Box sx={{ bgcolor: 'info.lighter', color: 'info.darker', px: 1, borderRadius: 1 }} component="span">Consistent</Box>
+          <Box sx={{ bgcolor: 'success.lighter', color: 'success.darker', px: 1, borderRadius: 1 }} component="span">High</Box>
+        </Stack>
+      )}
     </Card>
   );
 } 

@@ -23,6 +23,23 @@ router.post('/financial-forecast', async (req, res) => {
     if (type === 'sales') {
       // Get sales data from database using SQL functions
       const salesData = await getSalesDataFromDatabase(year);
+      const hasData = Array.isArray(salesData.monthly_sales) && salesData.monthly_sales.some((v) => Number(v) > 0);
+      if (!hasData) {
+        return res.json({
+          success: true,
+          message: 'No bookkeeping sales data for selected year',
+          data: {
+            actual: Array(12).fill(0),
+            forecast: Array(6).fill(0),
+            confidence: 0,
+            type: 'sales',
+            totalSales: 0,
+            growthRate: 0,
+            seasonality: 'N/A',
+            channelBreakdown: {}
+          }
+        });
+      }
       
       // Generate forecast using Prophet
       const forecast = await runProphetForecast(salesData.monthly_sales, year);
@@ -43,6 +60,23 @@ router.post('/financial-forecast', async (req, res) => {
     } else if (type === 'expenses') {
       // Get expenses data from database using SQL functions
       const expensesData = await getExpensesDataFromDatabase(year);
+      const hasData = Array.isArray(expensesData.monthly_expenses) && expensesData.monthly_expenses.some((v) => Number(v) > 0);
+      if (!hasData) {
+        return res.json({
+          success: true,
+          message: 'No bookkeeping expenses data for selected year',
+          data: {
+            actual: Array(12).fill(0),
+            forecast: Array(6).fill(0),
+            confidence: 0,
+            type: 'expenses',
+            totalExpenses: 0,
+            growthRate: 0,
+            seasonality: 'N/A',
+            categoryBreakdown: {}
+          }
+        });
+      }
       
       // Generate forecast using Prophet
       const forecast = await runProphetForecast(expensesData.monthly_expenses, year);

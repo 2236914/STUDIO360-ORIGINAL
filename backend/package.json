@@ -10,7 +10,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "backup:db": "bash ../tools/backup/backup-db.sh || tools\\backup\\backup-db.bat",
+    "backup:uploads": "bash ../tools/backup/backup-uploads.sh || tools\\backup\\backup-uploads.bat",
+    "backup:all": "npm run backup:db && npm run backup:uploads"
   },
   "keywords": [
     "api",
@@ -38,7 +41,8 @@
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^7.0.10",
     "winston": "^3.11.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "pdfkit": "^0.15.0"
     ,
     "pg": "^8.10.0"
   },

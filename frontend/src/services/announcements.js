@@ -17,23 +17,48 @@ async function authFetch(path, options = {}) {
 async function listSystemAnnouncements() {
   try {
     const isBrowser = typeof window !== 'undefined';
-    const url = isBrowser
-      ? '/api/announcements/system' // Use Next.js rewrite in browser to avoid CORS
-      : `${CONFIG.site.serverUrl}/api/announcements/system`;
+    async function detectServerUrl() {
+      try {
+        const cached = isBrowser ? sessionStorage.getItem('serverUrl:detected') : null;
+        if (cached) return cached;
+      } catch (_) {}
+      const candidates = [
+        CONFIG.site.serverUrl,
+        isBrowser ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
+        isBrowser ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
+        'http://localhost:3001',
+        'http://localhost:3021',
+        'http://127.0.0.1:3001',
+        'http://127.0.0.1:3021',
+      ].filter(Boolean);
+      for (const base of candidates) {
+        try {
+          const ac = new AbortController();
+          const t = setTimeout(() => ac.abort(), 2000);
+          const r = await fetch(`${base}/api/status`, { signal: ac.signal });
+          clearTimeout(t);
+          if (r.ok) {
+            try { if (isBrowser) sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
+            return base;
+          }
+        } catch (_) {}
+      }
+      return CONFIG.site.serverUrl;
+    }
 
-    console.log('[Announcements] Fetching from:', url);
+    const base = await detectServerUrl();
+    const primary = `${base}/api/announcements/system`;
+    const fallback = '/api/announcements/system';
 
-    const res = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      // Avoid caching stale announcements
-      cache: 'no-store',
-    });
+    async function fetchOnce(url) {
+      const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
+      const json = await res.json().catch(() => ({}));
+      return { ok: res.ok, json };
+    }
 
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json?.message || 'Request failed');
+    let { ok, json } = await fetchOnce(primary);
+    if (!ok) ({ ok, json } = await fetchOnce(fallback));
+    if (!ok) return [];
     return json?.data ?? json;
   } catch (error) {
     console.error('Error fetching system announcements:', error);

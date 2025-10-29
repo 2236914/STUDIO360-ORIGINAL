@@ -424,6 +424,24 @@ router.post('/callback', async (req, res) => {
       if (orderError) {
         console.error('Error updating order status:', orderError);
       } else {
+        // Auto-post cash receipt to clear A/R (accrual basis) using bookkeeping endpoint
+        try {
+          const { data: orderData } = await supabase
+            .from('orders')
+            .select('*, order_items(*)')
+            .eq('id', updatedPayment.order_id)
+            .single();
+          if (orderData) {
+            try {
+              const receiptPayload = ordersService.buildReceiptFromOrder(orderData, updatedPayment.amount);
+              if (receiptPayload) {
+                const port = process.env.PORT || 3001;
+                const url = `http://127.0.0.1:${port}/api/bookkeeping/cash-receipts`;
+                try { await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(receiptPayload) }); } catch (_) {}
+              }
+            } catch (postErr) { /* ignore to not fail webhook */ }
+          }
+        } catch (_) { /* ignore */ }
         // Send order confirmation email to customer
         try {
           const { data: orderData } = await supabase

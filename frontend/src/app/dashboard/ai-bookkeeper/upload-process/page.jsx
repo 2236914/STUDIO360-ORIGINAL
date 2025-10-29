@@ -267,6 +267,7 @@ export default function UploadProcessPage() {
   const [salesPosted, setSalesPosted] = useState(false);
   const [salesPostLog, setSalesPostLog] = useState([]); // log strings
   const [salesTransfer, setSalesTransfer] = useState({ transferred: 0, total: 0, errors: 0 });
+  const [transferring, setTransferring] = useState(false); // dedicated loading for Start Transfer
 
   // Load overrides once on mount
   useEffect(() => { setCategoryOverrides(loadCategoryOverrides()); }, []);
@@ -342,19 +343,32 @@ export default function UploadProcessPage() {
     setEditDialog({ open: true, transaction: { ...transaction, book } });
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (editDialog.transaction) {
-      setTransactions(prev => 
-        prev.map(t => 
-          t.id === editDialog.transaction.id ? editDialog.transaction : t
-        )
-      );
-      // Persist override for future parses based on description root
-      const key = normalizeKey(editDialog.transaction.description || editDialog.transaction.sourceFile || '');
+      const tx = editDialog.transaction;
+      setTransactions(prev => prev.map(t => (t.id === tx.id ? tx : t)));
+      // Persist learned override for future parses
+      const key = normalizeKey(tx.description || tx.sourceFile || '');
       if (key) {
-        const next = { ...categoryOverrides, [key]: editDialog.transaction.aiCategory };
+        const next = { ...categoryOverrides, [key]: tx.aiCategory };
         setCategoryOverrides(next);
         saveCategoryOverrides(next);
+      }
+      // If this transaction has been posted to General Journal with a reference, allow inline update-by-ref
+      if (tx.postedRef && (tx.book === 'journal' || (!tx.book && inferBookFromCategory(tx.aiCategory) === 'journal'))) {
+        try {
+          const amt = Math.abs(Number(tx.amount) || 0);
+          const exp = mapExpenseCategoryToCoa(tx.aiCategory);
+          const date = tx.postedDate || new Date().toISOString().slice(0, 10);
+          const lines = [
+            { code: exp.code, description: exp.label, debit: amt, credit: 0 },
+            { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
+          ];
+          await axios.put(`/api/bookkeeping/journal/by-ref/${encodeURIComponent(tx.postedRef)}`, { date, particulars: tx.description || '', lines });
+        } catch (e) {
+          // Non-blocking: keep UI updated even if backend PUT fails; user can retry
+          console.warn('Inline journal update failed:', e?.response?.data?.message || e.message);
+        }
       }
     }
     setEditDialog({ open: false, transaction: null });
@@ -367,12 +381,15 @@ export default function UploadProcessPage() {
     // - Income: CRJ only (backend mirrors to GJ)
     // - Other: GJ
     const items = transactions.slice();
-    setProcessing(true);
+    setTransferring(true);
     setTransferState({ transferred: 0, total: items.length, categories: [] });
     const categoriesSet = new Set();
     const counts = { journal: 0, 'cash-disbursements': 0, 'cash-receipts': 0 };
     try {
       const postedRefs = []; // collect referenceNos posted so we can confirm backend persisted them
+      const journalPayloads = []; // accumulate GJ entries for bulk post
+      const journalMap = new Map(); // txnId -> ref
+      // First pass: prepare actions, but defer journal posts to bulk
       for (let i = 0; i < items.length; i++) {
         const t = items[i];
         const amt = Math.abs(Number(t.amount) || 0);
@@ -412,28 +429,24 @@ export default function UploadProcessPage() {
           // For Purchases – Materials: never post a separate GJ here (CDB only).
           // For other expenses: keep previous behavior (fallback GJ only if not an image source).
             if (!isPurchases && !isImage) {
-            const lines = [
-              { code: exp.code, description: exp.label, debit: amt, credit: 0 },
-              { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
-            ];
-            try {
-              const r = await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
-              const returnedRef = r?.data?.data?.entry?.ref || r?.data?.data?.entry?.reference || ref || '';
-              if (returnedRef) postedRefs.push(String(returnedRef));
-            } catch (e) {
-              // allow flow to continue; error logged by outer catch
+              const ensureRef = ref || `AI-${Date.now()}-${t.id}`;
+              journalPayloads.push({ date: invDate, ref: ensureRef, particulars, lines: [
+                { code: exp.code, description: exp.label, debit: amt, credit: 0 },
+                { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
+              ] });
+              journalMap.set(t.id, ensureRef);
+              counts.journal += 1;
             }
-            counts.journal += 1;
-          }
         } else if (cls === 'income') {
           // handled via CRJ below
         } else {
           const exp = mapExpenseCategoryToCoa(t.aiCategory);
-          const lines = [
+          const ensureRef = ref || `AI-${Date.now()}-${t.id}`;
+          journalPayloads.push({ date: invDate, ref: ensureRef, particulars, lines: [
             { code: exp.code, description: exp.label, debit: amt, credit: 0 },
             { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
-          ];
-          await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+          ] });
+          journalMap.set(t.id, ensureRef);
           counts.journal += 1;
         }
 
@@ -477,6 +490,8 @@ export default function UploadProcessPage() {
               const returned = r?.data?.data?.entry;
               const returnedRef = returned?.referenceNo || returned?.reference || payload.referenceNo || ref || '';
               if (returnedRef) postedRefs.push(String(returnedRef));
+              // annotate transaction so inline edit can know it was posted (CDB edits not supported yet)
+              setTransactions(prev => prev.map(x => x.id === t.id ? { ...x, postedRef: returnedRef, postedDate: invDate, postedBook: 'cash-disbursements' } : x));
             } catch (e) {
               // allow flow to continue
             }
@@ -503,6 +518,7 @@ export default function UploadProcessPage() {
             const returned = r?.data?.data?.entry;
             const returnedRef = returned?.referenceNo || returned?.reference || payload.referenceNo || ref || '';
             if (returnedRef) postedRefs.push(String(returnedRef));
+            setTransactions(prev => prev.map(x => x.id === t.id ? { ...x, postedRef: returnedRef, postedDate: invDate, postedBook: 'cash-receipts' } : x));
           } catch (e) {
             // continue
           }
@@ -510,6 +526,25 @@ export default function UploadProcessPage() {
         }
 
         setTransferState((prev) => ({ ...prev, transferred: prev.transferred + 1, categories: Array.from(categoriesSet) }));
+      }
+      // Bulk post prepared General Journal entries (if any)
+      if (journalPayloads.length) {
+        try {
+          const resp = await axios.post('/api/bookkeeping/journal/bulk', journalPayloads);
+          const results = resp?.data?.data?.results || [];
+          const okRefs = results.filter(r => r && r.ok && r.ref).map(r => String(r.ref));
+          okRefs.forEach(r => postedRefs.push(r));
+          // annotate transactions with postedRef for inline edit by ref
+          setTransactions(prev => prev.map(x => {
+            const refForTx = journalMap.get(x.id);
+            if (refForTx && okRefs.includes(refForTx)) {
+              return { ...x, postedRef: refForTx, postedDate: (x.orderDate || x.dateIssued || new Date().toISOString().slice(0,10)), postedBook: 'journal', book: 'journal' };
+            }
+            return x;
+          }));
+        } catch (e) {
+          console.warn('Bulk journal post failed:', e?.response?.data?.message || e.message);
+        }
       }
       const newCompleted = { ...completed, 2: true };
       setCompleted(newCompleted);
@@ -558,11 +593,11 @@ export default function UploadProcessPage() {
         console.warn('Ledger confirm routine failed:', e);
       }
 
-      router.push('/dashboard/bookkeeping/general-journal');
+      // Do not auto-navigate; let the user review and click Finish or use quick links
     } catch (err) {
       console.error('Transfer error:', err);
     } finally {
-      setProcessing(false);
+      setTransferring(false);
     }
   };
 
@@ -1292,7 +1327,7 @@ Grand Total: ${fmtAmt(cAmts.grandTotal ?? s.total)}`}
                   <LinearProgress variant="determinate" value={transferState.total ? Math.min(100, Math.round((transferState.transferred / transferState.total) * 100)) : 0} sx={{ height: 10, borderRadius: 5 }} />
                 </Box>
                 <Stack direction="row" justifyContent="flex-end">
-                  <Button variant="contained" disabled={processing || !transactions?.length} onClick={handleTransfer} startIcon={<Iconify icon="eva:arrow-forward-fill" />}>{processing ? 'Transferring...' : 'Start Transfer'}</Button>
+                  <Button variant="contained" disabled={transferring || !transactions?.length} onClick={handleTransfer} startIcon={<Iconify icon="eva:arrow-forward-fill" />}>{transferring ? 'Transferring...' : 'Start Transfer'}</Button>
                 </Stack>
                 {transferState.transferred === transferState.total && transferState.total > 0 && (
                   <Alert severity="success" sx={{ mt: 2 }}>

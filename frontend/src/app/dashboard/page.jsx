@@ -13,12 +13,19 @@ import {
   AnalyticsProductPerformance,
   AnalyticsTaxableIncome
 } from 'src/sections/overview/analytics';
+import { _analyticsWidgets } from 'src/_mock/_overview';
 
 // ----------------------------------------------------------------------
 
 export const metadata = { title: `Dashboard - Kitsch Studio` };
 
 export default async function Page() {
+  const widgets = await _analyticsWidgets();
+  const wSales = widgets?.[0] || { percent: 0, total: 0, chart: { categories: [], series: [], colors: ['#22c55e'] } };
+  const wExpenses = widgets?.[1] || { percent: 0, total: 0, chart: { categories: [], series: [], colors: ['#ef4444'] } };
+  const wOrders = widgets?.[2] || { percent: 0, total: 0, chart: { categories: [], series: [], colors: ['#3b82f6'] } };
+  const wProfit = widgets?.[3] || { percent: 0, total: 0, chart: { categories: [], series: [], colors: ['#f59e0b'] } };
+
   return (
     <DashboardContent maxWidth="xl">
       <Typography variant="h4" sx={{ mb: { xs: 3, md: 5 } }}>
@@ -30,33 +37,33 @@ export default async function Page() {
         <Grid xs={12} sm={6} lg={3} md={6}>
           <AnalyticsWidgetSummary
             title="Total Sales"
-            percent={0}
-            total={0}
-            chart={{ categories: [], series: [], colors: ['#22c55e'] }}
+            percent={wSales.percent || 0}
+            total={wSales.total || 0}
+            chart={wSales.chart || { categories: [], series: [], colors: ['#22c55e'] }}
           />
         </Grid>
         <Grid xs={12} sm={6} lg={3} md={6}>
           <AnalyticsWidgetSummary
             title="Total Expenses"
-            percent={0}
-            total={0}
-            chart={{ categories: [], series: [], colors: ['#ef4444'] }}
+            percent={wExpenses.percent || 0}
+            total={wExpenses.total || 0}
+            chart={wExpenses.chart || { categories: [], series: [], colors: ['#ef4444'] }}
           />
         </Grid>
         <Grid xs={12} sm={6} lg={3} md={6}>
           <AnalyticsWidgetSummary
             title="Total Orders"
-            percent={0}
-            total={0}
-            chart={{ categories: [], series: [], colors: ['#3b82f6'] }}
+            percent={wOrders.percent || 0}
+            total={wOrders.total || 0}
+            chart={wOrders.chart || { categories: [], series: [], colors: ['#3b82f6'] }}
           />
         </Grid>
         <Grid xs={12} sm={6} lg={3} md={6}>
           <AnalyticsWidgetSummary
             title="Net Profit"
-            percent={0}
-            total={0}
-            chart={{ categories: [], series: [], colors: ['#f59e0b'] }}
+            percent={wProfit.percent || 0}
+            total={wProfit.total || 0}
+            chart={wProfit.chart || { categories: [], series: [], colors: ['#f59e0b'] }}
           />
         </Grid>
       </Grid>

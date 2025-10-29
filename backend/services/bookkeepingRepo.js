@@ -176,15 +176,27 @@ module.exports = {
 };
 
 // --- Reads against new schema ---
-async function getJournalEntries({ page = 1, limit = 100 } = {}) {
+async function getJournalEntries({ page = 1, limit = 100, from = null, to = null, month = null, year = null } = {}) {
   if (!supabase) return { entries: [], pagination: { page, limit, total: 0, totalPages: 1 } };
   const offset = (page - 1) * limit;
-  const { data: rows, error, count } = await supabase
+  let query = supabase
     .from('general_journal')
     .select('id, date, account_title_particulars, reference, debit, credit', { count: 'exact' })
     .order('date', { ascending: true })
-    .order('id', { ascending: true })
-    .range(offset, offset + limit - 1);
+    .order('id', { ascending: true });
+  // Apply date filters if provided (prefer from/to; fallback to month/year)
+  try {
+    if (from) query = query.gte('date', from);
+    if (to) query = query.lte('date', to);
+    if (!from && !to && (month != null || year != null)) {
+      const y = Number(year || new Date().getFullYear());
+      const m = Number(month || 1);
+      const start = new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10);
+      const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+      query = query.gte('date', start).lte('date', end);
+    }
+  } catch (_) { /* ignore filter build errors */ }
+  const { data: rows, error, count } = await query.range(offset, offset + limit - 1);
   if (error) throw error;
   // Group into entries by date+reference
   const map = new Map();
@@ -302,16 +314,28 @@ module.exports.getCashReceiptsAll = getCashReceiptsAll;
 module.exports.getCashDisbursementsAll = getCashDisbursementsAll;
 
 // --- Full ledger (summary + entries) derived from DB general_journal ---
-async function getLedgerFullFromDb() {
+async function getLedgerFullFromDb({ from = null, to = null, month = null, year = null } = {}) {
   if (!supabase) return { summary: [], ledger: [], accounts: listAccounts() };
   // 1) Summary comes from DB ledger view/table via existing helper
   const { summary: summaryFromDb } = await getLedgerSummary();
   // 2) Details come from general_journal grouped by COA title mapping
-  const { data: rows, error } = await supabase
+  let q = supabase
     .from('general_journal')
     .select('id, date, account_title_particulars, reference, debit, credit')
     .order('date', { ascending: true })
     .order('id', { ascending: true });
+  try {
+    if (from) q = q.gte('date', from);
+    if (to) q = q.lte('date', to);
+    if (!from && !to && (month != null || year != null)) {
+      const y = Number(year || new Date().getFullYear());
+      const m = Number(month || 1);
+      const start = new Date(Date.UTC(y, m - 1, 1)).toISOString().slice(0, 10);
+      const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+      q = q.gte('date', start).lte('date', end);
+    }
+  } catch (_) { /* ignore */ }
+  const { data: rows, error } = await q;
   if (error) throw error;
   const accountsMap = new Map(Object.entries(COA).map(([code, acc]) => [String(acc.title), { code: String(code), normal: acc.normal, title: acc.title }]));
   const byCode = new Map();
@@ -432,3 +456,20 @@ async function refreshGeneralLedger() {
 }
 
 module.exports.refreshGeneralLedger = refreshGeneralLedger;
+
+// --- Update helpers ---
+async function updateJournalByRef({ ref, date, remarks, lines }) {
+  if (!supabase) return false;
+  const reference = String(ref || '').trim();
+  if (!reference) return false;
+  // Delete existing rows with this reference, then re-insert provided lines
+  const { error: delErr } = await supabase.from('general_journal').delete().eq('reference', reference);
+  if (delErr) throw delErr;
+  if (Array.isArray(lines) && lines.length) {
+    await insertJournal({ date, reference, remarks, lines });
+  }
+  try { await refreshGeneralLedger(); } catch (_) {}
+  return true;
+}
+
+module.exports.updateJournalByRef = updateJournalByRef;

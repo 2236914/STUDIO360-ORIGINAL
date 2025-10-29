@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { supabase } = require('../services/supabaseClient');
+const userService = require('../services/userService');
 
 /**
  * JWT Authentication Middleware
@@ -106,11 +107,27 @@ const authenticateSupabaseToken = async (req, res, next) => {
       });
     }
     
+    // Resolve role from our user table first, then fall back to Supabase metadata
+    let resolvedRole = 'user';
+    try {
+      const dbUser = await userService.getUserByEmail(user.email);
+      if (dbUser && dbUser.role) {
+        resolvedRole = dbUser.role;
+      } else if (user.user_metadata?.role) {
+        resolvedRole = user.user_metadata.role;
+      }
+    } catch (e) {
+      console.warn('Role resolution fallback to metadata due to error:', e);
+      if (user.user_metadata?.role) {
+        resolvedRole = user.user_metadata.role;
+      }
+    }
+
     // Set user info in request
     req.user = {
       id: user.id,
       email: user.email,
-      role: user.user_metadata?.role || 'user'
+      role: resolvedRole
     };
     
     next();
@@ -157,7 +174,23 @@ const authenticateTokenHybrid = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Invalid or expired token' });
     }
 
-    req.user = { id: user.id, email: user.email, role: user.user_metadata?.role || 'user' };
+    // Resolve role from DB or metadata for hybrid middleware as well
+    let resolvedRole = 'user';
+    try {
+      const dbUser = await userService.getUserByEmail(user.email);
+      if (dbUser && dbUser.role) {
+        resolvedRole = dbUser.role;
+      } else if (user.user_metadata?.role) {
+        resolvedRole = user.user_metadata.role;
+      }
+    } catch (e) {
+      console.warn('Role resolution fallback to metadata (hybrid):', e);
+      if (user.user_metadata?.role) {
+        resolvedRole = user.user_metadata.role;
+      }
+    }
+
+    req.user = { id: user.id, email: user.email, role: resolvedRole };
     return next();
   } catch (error) {
     console.error('Supabase token verification error:', error);
@@ -167,19 +200,29 @@ const authenticateTokenHybrid = async (req, res, next) => {
 
 /**
  * Require Admin Role Middleware
- * Ensures the user has admin or admin_it role
- * Now allows all authenticated users (removed strict role check)
+ * Only allows users with role 'admin_it'
  */
 const requireAdmin = (req, res, next) => {
-  // Check if user is authenticated
   if (!req.user) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Authentication required' 
-    });
+    return res.status(401).json({ success: false, message: 'Authentication required' });
   }
-  
-  // Allow all authenticated users to access IT Maintenance
+  if (req.user.role !== 'admin_it') {
+    return res.status(403).json({ success: false, message: 'Admin privileges required' });
+  }
+  next();
+};
+
+/**
+ * Factory to require any of the allowed roles
+ */
+const requireRole = (roles = []) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  const allowed = Array.isArray(roles) ? roles : [roles];
+  if (!allowed.includes(req.user.role)) {
+    return res.status(403).json({ success: false, message: 'Insufficient role' });
+  }
   next();
 };
 
@@ -203,5 +246,6 @@ module.exports = {
   authenticateTokenHybrid,
   optionalAuth,
   requireAdmin,
+  requireRole,
   generateToken
 };

@@ -258,9 +258,33 @@ export function OrdersListView() {
   }, [handlePrintMenuClose]);
 
   const handleExport = useCallback(() => {
-    console.log('Export data');
+    try {
+      const header = ['order_number','date','customer_name','customer_email','total','status','payment_status','payment_method'];
+      const lines = [header.join(',')];
+      for (const o of dataFiltered) {
+        const row = [
+          (o.id||'').toString().replace(/,/g,' '),
+          (o.date||'').toString().slice(0,10),
+          (o.customer?.name||'').replace(/,/g,' '),
+          (o.customer?.email||'').replace(/,/g,' '),
+          Number(o.total || o.price || 0).toFixed(2),
+          (o.status||'').replace(/,/g,' '),
+          (o.paymentStatus||'').replace(/,/g,' '),
+          (o.paymentMethod||'').replace(/,/g,' '),
+        ];
+        lines.push(row.join(','));
+      }
+      const csv = lines.join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'orders_export.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (_) {}
     handlePrintMenuClose();
-  }, [handlePrintMenuClose]);
+  }, [dataFiltered, handlePrintMenuClose]);
 
   // Pagination handlers
   const handlePageChange = useCallback((newPage) => {
@@ -482,6 +506,19 @@ export function OrdersListView() {
           </Label>
         );
       },
+    },
+    {
+      field: 'paymentStatus',
+      headerName: 'Payment',
+      width: 140,
+      renderCell: (params) => (
+        <Chip
+          label={(params.row.paymentStatus||'pending').toString().toUpperCase()}
+          size="small"
+          color={params.row.paymentStatus === 'completed' ? 'success' : (params.row.paymentStatus === 'pending' ? 'warning' : 'default')}
+          variant="soft"
+        />
+      ),
     },
     {
       type: 'actions',

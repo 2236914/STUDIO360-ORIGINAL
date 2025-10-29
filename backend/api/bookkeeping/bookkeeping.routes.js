@@ -164,16 +164,129 @@ function findReceiptDuplicate(payload) {
 
 /**
  * @route   GET /api/bookkeeping/journal
- * @desc    Get general journal
+ * @desc    Get general journal (supports filters: from, to, month, year)
  * @access  Private
  */
-router.get('/journal', (req, res) => {
+router.get('/journal', async (req, res) => {
   const page = parseInt(req.query.page || '1', 10);
   const limit = parseInt(req.query.limit || '100', 10);
+  const from = req.query.from || null;
+  const to = req.query.to || null;
+  const month = req.query.month != null ? parseInt(req.query.month, 10) : null;
+  const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
+
+  // If DB is available, prefer DB reads with filters
+  if (isDbReady()) {
+    try {
+      const { entries, pagination } = await getJournalEntries({ page, limit, from, to, month, year });
+      return ok(res, { message: 'Journal retrieved (DB)', data: { journal: entries, pagination } });
+    } catch (e) {
+      // fall back to memory below
+    }
+  }
+
+  // Filter in-memory store by date if provided
+  const inRange = (d) => {
+    try {
+      if (!from && !to && month == null && year == null) return true;
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return false;
+      if (from && new Date(from) > dt) return false;
+      if (to && new Date(to) < dt) return false;
+      if (month != null) {
+        if ((dt.getUTCMonth() + 1) !== month) return false;
+      }
+      if (year != null) {
+        if (dt.getUTCFullYear() !== year) return false;
+      }
+      return true;
+    } catch (_) { return true; }
+  };
+  const filtered = store.journal.filter((e) => inRange(e.date));
   const start = (page - 1) * limit;
   const end = start + limit;
-  const data = store.journal.slice(start, end);
-  ok(res, { message: 'Journal retrieved', data: { journal: data, pagination: { page, limit, total: store.journal.length, totalPages: Math.ceil(store.journal.length / limit) || 1 } } });
+  const data = filtered.slice(start, end);
+  ok(res, { message: 'Journal retrieved (memory)', data: { journal: data, pagination: { page, limit, total: filtered.length, totalPages: Math.ceil(filtered.length / limit) || 1 } } });
+});
+
+/**
+ * @route   POST /api/bookkeeping/journal/bulk
+ * @desc    Bulk add entries to general journal
+ * @access  Private
+ */
+router.post('/journal/bulk', async (req, res) => {
+  const items = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.entries) ? req.body.entries : []);
+  if (!items.length) return bad(res, 'Provide an array of journal entries');
+  const results = [];
+  for (const it of items) {
+    const { date, ref, particulars, lines } = it || {};
+    if (!date || !Array.isArray(lines) || lines.length < 2) {
+      results.push({ ok: false, ref: ref || null, error: 'Invalid entry (date and at least 2 lines required)' });
+      continue;
+    }
+    // Validate: debits == credits
+    let dr = 0, cr = 0;
+    for (const ln of lines) { dr += Number(ln.debit || 0); cr += Number(ln.credit || 0); }
+    if (Math.abs(dr - cr) > 0.005) {
+      results.push({ ok: false, ref: ref || null, error: 'Not balanced' });
+      continue;
+    }
+    // Reuse POST /journal logic by calling insertJournal when DB, else push to memory
+    const normLines = (lines || []).map((ln) => ({
+      code: getAccount(ln.code).code,
+      description: ln.description || '',
+      debit: Number(ln.debit || 0),
+      credit: Number(ln.credit || 0),
+    }));
+    try {
+      if (isDbReady()) {
+        const codes = Array.from(new Set(normLines.map((l) => String(l.code))));
+        for (const c of codes) { const acc = getAccount(c); await upsertAccount({ code: acc.code, title: acc.title, type: acc.type }); }
+        await insertJournal({ date, reference: ref || null, remarks: particulars || '', lines: normLines });
+      }
+      const id = store.journal.length + 1;
+      const entry = { id, date, ref: ref || `GJ${String(id).padStart(4,'0')}`, particulars: particulars || '', lines: normLines };
+      store.journal.push(entry);
+      results.push({ ok: true, ref: entry.ref });
+    } catch (e) {
+      results.push({ ok: false, ref: ref || null, error: e && e.message ? e.message : String(e) });
+    }
+  }
+  ok(res, { message: 'Bulk journal processed', data: { results } });
+});
+
+/**
+ * @route   PUT /api/bookkeeping/journal/by-ref/:ref
+ * @desc    Update an existing journal entry by reference (replace lines)
+ * @access  Private
+ */
+router.put('/journal/by-ref/:ref', async (req, res) => {
+  const ref = String(req.params.ref || '').trim();
+  const { date, particulars, lines } = req.body || {};
+  if (!ref) return bad(res, 'Reference is required');
+  if (!date || !Array.isArray(lines) || lines.length < 2) return bad(res, 'Provide date and at least 2 lines');
+  let dr = 0, cr = 0;
+  for (const ln of lines) { dr += Number(ln.debit || 0); cr += Number(ln.credit || 0); }
+  if (Math.abs(dr - cr) > 0.005) return bad(res, 'Journal not balanced: debits must equal credits');
+
+  const target = findJournalByRef(ref);
+  if (!target) return bad(res, 'Reference not found', 404);
+  const normLines = (lines || []).map((ln) => ({ code: getAccount(ln.code).code, description: ln.description || '', debit: Number(ln.debit || 0), credit: Number(ln.credit || 0) }));
+  // Update memory first for responsiveness
+  target.date = date;
+  target.particulars = particulars || '';
+  target.lines = normLines;
+
+  if (isDbReady()) {
+    try {
+      const { updateJournalByRef } = require('../../services/bookkeepingRepo');
+      await updateJournalByRef({ ref, date, remarks: target.particulars, lines: normLines });
+    } catch (e) {
+      // keep memory updated; surface warning
+      return res.json({ success: true, message: 'Journal updated (memory). DB update failed', warning: String(e && e.message ? e.message : e), data: { entry: target } });
+    }
+  }
+  ok(res, { message: 'Journal updated', data: { entry: target } });
 });
 
 /**
@@ -189,13 +302,20 @@ router.post('/journal', async (req, res) => {
     const existing = findJournalByRef(ref);
     if (existing) return ok(res, { message: 'Journal entry exists', data: { entry: existing, duplicate: true } });
   }
+  // Pre-validate lines: ensure amounts are non-negative before normalization
+  for (const ln of lines) {
+    const d = Number(ln.debit || 0);
+    const c = Number(ln.credit || 0);
+    if (d < 0 || c < 0) return bad(res, 'Amounts must be positive');
+  }
   // Validate lines: each requires code, debit or credit amount
   let totalDr = 0, totalCr = 0;
   const normLines = lines.map((ln) => {
     const acc = getAccount(ln.code);
     const debit = Number(ln.debit || 0);
     const credit = Number(ln.credit || 0);
-    if (debit < 0 || credit < 0) throw new Error('Amounts must be positive');
+    // Safety: already validated above; keep guard to ensure invariants
+    if (debit < 0 || credit < 0) return bad(res, 'Amounts must be positive');
     totalDr += debit; totalCr += credit;
     return {
       code: acc.code,
@@ -248,10 +368,14 @@ router.post('/journal', async (req, res) => {
 router.get('/ledger', async (req, res) => {
   const mode = String(req.query.mode || '').toLowerCase();
   const summaryOnly = req.query.summary === '1' || mode === 'summary';
+  const from = req.query.from || null;
+  const to = req.query.to || null;
+  const month = req.query.month != null ? parseInt(req.query.month, 10) : null;
+  const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
   // Prefer DB-derived ledger if available, fallback to in-memory aggregation
   if (isDbReady()) {
     try {
-      const full = await getLedgerFullFromDb();
+      const full = await getLedgerFullFromDb({ from, to, month, year });
       const hasDbData = Array.isArray(full?.summary) && full.summary.length > 0;
       if (hasDbData) {
         if (summaryOnly) return ok(res, { message: 'Ledger summary (DB)', data: { summary: full.summary, accounts: full.accounts } });
@@ -268,8 +392,22 @@ router.get('/ledger', async (req, res) => {
     }
   }
   // In-memory aggregation from store.journal
+  // Filter journal by date first if filters provided
+  const inRange = (d) => {
+    try {
+      if (!from && !to && month == null && year == null) return true;
+      const dt = new Date(d);
+      if (Number.isNaN(dt.getTime())) return false;
+      if (from && new Date(from) > dt) return false;
+      if (to && new Date(to) < dt) return false;
+      if (month != null && (dt.getUTCMonth() + 1) !== month) return false;
+      if (year != null && dt.getUTCFullYear() !== year) return false;
+      return true;
+    } catch (_) { return true; }
+  };
+  const sourceJournal = store.journal.filter((e) => inRange(e.date));
   const byCode = new Map();
-  for (const j of store.journal) {
+  for (const j of sourceJournal) {
     for (const ln of j.lines) {
       const acc = getAccount(ln.code);
       if (!byCode.has(acc.code)) byCode.set(acc.code, { code: acc.code, title: acc.title, normal: acc.normal, entries: [], totals: { debit: 0, credit: 0 } });
@@ -307,6 +445,106 @@ router.get('/ledger', async (req, res) => {
 router.get('/ledger/summary', (req, res) => {
   req.query.summary = '1';
   return router.handle({ ...req, method: 'GET', url: '/ledger' }, res);
+});
+
+/**
+ * @route   GET /api/bookkeeping/ledger/full
+ * @desc    Get full ledger with date filters (alias of /ledger without summary)
+ * @access  Private
+ */
+router.get('/ledger/full', (req, res) => {
+  req.query.summary = '0';
+  return router.handle({ ...req, method: 'GET', url: '/ledger' }, res);
+});
+
+/**
+ * @route   GET /api/bookkeeping/reports/export
+ * @desc    Export journal or ledger as CSV (filters supported)
+ * @access  Private
+ */
+router.get('/reports/export', async (req, res) => {
+  const type = String(req.query.type || 'journal');
+  const format = String(req.query.format || 'csv');
+  if (format !== 'csv') return bad(res, 'Only CSV export is supported for now', 400);
+  const from = req.query.from || null;
+  const to = req.query.to || null;
+  const month = req.query.month != null ? parseInt(req.query.month, 10) : null;
+  const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
+
+  const yyyymm = () => {
+    if (year && month) return `${year}-${String(month).padStart(2,'0')}`;
+    if (from || to) return `${from || 'start'}_to_${to || 'end'}`;
+    return 'all';
+  };
+
+  let rows = [];
+  if (type === 'journal') {
+    // Reuse GET /journal path
+    try {
+      const page = 1, limit = 100000;
+      if (isDbReady()) {
+        const { entries } = await getJournalEntries({ page, limit, from, to, month, year });
+        rows = entries;
+      } else {
+        const inRange = (d) => {
+          try {
+            if (!from && !to && month == null && year == null) return true;
+            const dt = new Date(d);
+            if (Number.isNaN(dt.getTime())) return false;
+            if (from && new Date(from) > dt) return false;
+            if (to && new Date(to) < dt) return false;
+            if (month != null && (dt.getUTCMonth() + 1) !== month) return false;
+            if (year != null && dt.getUTCFullYear() !== year) return false;
+            return true;
+          } catch (_) { return true; }
+        };
+        rows = store.journal.filter(j => inRange(j.date));
+      }
+    } catch (_) { rows = []; }
+    // Build CSV
+    const header = ['date','ref','account_code','account_title','description','debit','credit'];
+    const lines = [header.join(',')];
+    for (const e of rows) {
+      for (const ln of e.lines || []) {
+        const acc = getAccount(ln.code);
+        const rec = [e.date, (e.ref||'').replace(/,/g,' '), acc.code, (acc.title||'').replace(/,/g,' '), (ln.description||'').replace(/,/g,' '), Number(ln.debit||0).toFixed(2), Number(ln.credit||0).toFixed(2)];
+        lines.push(rec.join(','));
+      }
+    }
+    const csv = lines.join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="journal_${yyyymm()}.csv"`);
+    return res.status(200).send(csv);
+  }
+  if (type === 'ledger') {
+    try {
+      if (isDbReady()) {
+        const full = await getLedgerFullFromDb({ from, to, month, year });
+        rows = full?.ledger || [];
+      } else {
+        // Use in-memory aggregation with filters
+        req.query.summary = '0';
+        const r = await new Promise((resolve) => {
+          const fakeRes = { json: (j) => resolve(j) };
+          router.handle({ ...req, method: 'GET', url: '/ledger' }, fakeRes);
+        });
+        rows = r?.data?.ledger || [];
+      }
+    } catch (_) { rows = []; }
+    const header = ['account_code','account_title','entry_date','reference','description','debit','credit','running_balance'];
+    const lines = [header.join(',')];
+    for (const acc of rows) {
+      for (const e of acc.entries || []) {
+        const rec = [acc.code, (acc.accountTitle||'').replace(/,/g,' '), e.date, (e.reference||'').replace(/,/g,' '), (e.description||'').replace(/,/g,' '), Number(e.debit||0).toFixed(2), Number(e.credit||0).toFixed(2), Number(e.balance||0).toFixed(2)];
+        lines.push(rec.join(','));
+      }
+    }
+    const csv = lines.join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="ledger_${yyyymm()}.csv"`);
+    return res.status(200).send(csv);
+  }
+  return bad(res, 'Unknown type for export', 400);
 });
 
 /**

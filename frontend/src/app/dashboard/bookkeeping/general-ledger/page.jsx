@@ -309,7 +309,24 @@ export default function GeneralLedgerPage() {
             >
               <Iconify icon="eva:refresh-fill" />
             </IconButton>
-            <IconButton sx={{ color: 'text.secondary' }} title="Print">
+            <IconButton
+              sx={{ color: 'success.main' }}
+              title="Export to Excel"
+              onClick={() => {
+                const url = `/api/bookkeeping/reports/export?type=ledger&format=xlsx`;
+                window.open(url, '_blank');
+              }}
+            >
+              <Iconify icon="logos:excel" />
+            </IconButton>
+            <IconButton
+              sx={{ color: 'text.secondary' }}
+              title="Download PDF"
+              onClick={() => {
+                const url = `/api/bookkeeping/reports/export?type=ledger&format=pdf`;
+                window.open(url, '_blank');
+              }}
+            >
               <Iconify icon="eva:printer-fill" />
             </IconButton>
           </Stack>

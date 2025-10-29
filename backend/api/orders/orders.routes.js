@@ -277,6 +277,22 @@ router.put('/:id/status', authenticateTokenHybrid, async (req, res) => {
         message: 'Order not found or update failed' 
       });
     }
+    // On completion (accrual): post journal entry recognizing revenue and A/R
+    try {
+      if (String(status).toLowerCase() === 'completed') {
+        const fullOrder = await ordersService.getOrderById(id, userId);
+        const payload = ordersService.buildJournalFromOrder(fullOrder);
+        if (payload && Array.isArray(payload.lines) && payload.lines.length >= 2) {
+          const port = process.env.PORT || 3001;
+          const url = `http://127.0.0.1:${port}/api/bookkeeping/journal`;
+          try {
+            const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            // ignore non-2xx silently to avoid blocking status update
+            void resp;
+          } catch (_) { /* no-op */ }
+        }
+      }
+    } catch (_) { /* non-blocking */ }
     
     res.json({
       success: true,
