@@ -310,6 +310,41 @@ router.get('/ledger/summary', (req, res) => {
 });
 
 /**
+ * @route   GET /api/bookkeeping/exists
+ * @desc    Check whether a reference exists in journal/receipts/disbursements (memory or DB)
+ * @access  Private
+ */
+router.get('/exists', async (req, res) => {
+  const ref = String(req.query.ref || '').trim();
+  if (!ref) return bad(res, 'Provide ref query parameter', 400);
+  try {
+    // Check in-memory stores first
+    const inJournal = findJournalByRef(ref) || store.journal.find((e) => String(e.ref) === ref);
+    const inReceipts = store.receipts.find((r) => String(r.referenceNo || r.reference || '') === ref);
+    const inDisb = store.disbursements.find((d) => String(d.referenceNo || d.reference || '') === ref);
+    if (inJournal || inReceipts || inDisb) return ok(res, { message: 'Reference found (memory)', data: { exists: true } });
+
+    // If DB available, perform lightweight checks
+    if (isDbReady()) {
+      try {
+        const { entries } = await getJournalEntries({ page: 1, limit: 10000 });
+        if (Array.isArray(entries) && entries.find((e) => String(e.ref) === ref)) return ok(res, { message: 'Reference found (db)', data: { exists: true } });
+        const receipts = await getCashReceiptsAll();
+        if (Array.isArray(receipts) && receipts.find((r) => String(r.reference || r.referenceNo || '') === ref)) return ok(res, { message: 'Reference found (db)', data: { exists: true } });
+        const disb = await getCashDisbursementsAll();
+        if (Array.isArray(disb) && disb.find((d) => String(d.reference || d.referenceNo || '') === ref)) return ok(res, { message: 'Reference found (db)', data: { exists: true } });
+      } catch (e) {
+        // ignore DB read errors and fall through to not found
+      }
+    }
+
+    return ok(res, { message: 'Reference not found', data: { exists: false } });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e && e.message ? e.message : String(e) });
+  }
+});
+
+/**
  * @route   POST /api/bookkeeping/ledger
  * @desc    Add ledger entry
  * @access  Private

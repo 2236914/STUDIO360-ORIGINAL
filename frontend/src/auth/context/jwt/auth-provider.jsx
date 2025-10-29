@@ -60,53 +60,48 @@ export function AuthProvider({ children }) {
           console.log('Found session data, parsing...');
           const sessionJson = JSON.parse(sessionData);
           console.log('Parsed session data:', sessionJson);
-          
-          const { isActive, timestamp, token } = sessionJson;
-          
-          // If session is marked as inactive, clear it
+          const { isActive, timestamp } = sessionJson;
+
           if (isActive === false) {
             console.log('Session is marked as inactive, logging out...');
             await logout();
             return;
           }
-          
+
           // Check if token is expired (older than 1 day)
           const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
           const isExpired = (Date.now() - timestamp) > oneDay;
-          
           if (isExpired) {
             console.log('Session has expired, logging out...');
             await logout();
             return;
           }
-          
+
           // Validate token with Supabase (persisted across refresh)
           console.log('Validating session with Supabase...');
           const { data: { session }, error } = await supabase.auth.getSession();
           console.log('Supabase session response:', { session, error });
-          
+
           if (error || !session) {
             console.error('Invalid or expired session:', error);
+            // Require explicit sign-in; do not auto-login from local metadata
             await logout();
             return;
           }
-          
+
           console.log('Session is valid, fetching user data...');
-          
-          // Fetch user info from user_model
           const { data: userModel, error: userError } = await supabase
             .from('user_model')
             .select('id, email, name, role')
             .eq('id', session.user.id)
             .single();
-            
-          console.log('User model data:', { userModel, userError });
-            
+
           if (userError) {
             console.error('Error fetching user data:', userError);
-            throw userError;
+            await logout();
+            return;
           }
-            
+
           setState({
             user: {
               id: session.user.id,
@@ -118,10 +113,9 @@ export function AuthProvider({ children }) {
             },
             loading: false,
           });
-          
+
           console.log('User session loaded successfully');
           return; // Exit early if we have a valid session
-          
         } catch (error) {
           console.error('Error parsing session data:', error);
           await logout();

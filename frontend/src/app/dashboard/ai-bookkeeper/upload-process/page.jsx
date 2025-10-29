@@ -372,10 +372,12 @@ export default function UploadProcessPage() {
     const categoriesSet = new Set();
     const counts = { journal: 0, 'cash-disbursements': 0, 'cash-receipts': 0 };
     try {
+      const postedRefs = []; // collect referenceNos posted so we can confirm backend persisted them
       for (let i = 0; i < items.length; i++) {
         const t = items[i];
         const amt = Math.abs(Number(t.amount) || 0);
-        const cls = classifyCategory(t.aiCategory);
+  // Determine class from category, but force 'expense' for image/pdf sources
+  const rawClass = classifyCategory(t.aiCategory);
         categoriesSet.add(t.aiCategory);
         const particulars = t.description || '';
         const today = new Date().toISOString().slice(0, 10);
@@ -396,19 +398,31 @@ export default function UploadProcessPage() {
           return '';
         };
         const ref = pickRef(t.invoiceNumber, t.orderSummaryNo, t.orderId);
-        const isImage = typeof t.fileUrl === 'string' && /\.(jpe?g|png)$/i.test(t.fileUrl);
+  // Treat PDF uploads as image sources as well (they should be saved to CDB)
+  // Determine file reference (some OCR/canonical payloads store fileUrl, others only keep filename)
+  const fileRef = (t.fileUrl || t.sourceFile || '').toString();
+  const isImage = /\.(jpe?g|png|pdf)$/i.test(fileRef);
+
+  // Force image/pdf-originated transactions to be treated as expenses (will post to CDB)
+  const cls = isImage ? 'expense' : rawClass;
 
         if (cls === 'expense') {
           const exp = mapExpenseCategoryToCoa(t.aiCategory);
           const isPurchases = exp.code === COA_CODES.PURCHASES;
           // For Purchases – Materials: never post a separate GJ here (CDB only).
           // For other expenses: keep previous behavior (fallback GJ only if not an image source).
-          if (!isPurchases && !isImage) {
+            if (!isPurchases && !isImage) {
             const lines = [
               { code: exp.code, description: exp.label, debit: amt, credit: 0 },
               { code: COA_CODES.CASH, description: 'Cash/Bank/eWallet', debit: 0, credit: amt },
             ];
-            await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+            try {
+              const r = await axios.post('/api/bookkeeping/journal', { date: invDate, ref, particulars, lines });
+              const returnedRef = r?.data?.data?.entry?.ref || r?.data?.data?.entry?.reference || ref || '';
+              if (returnedRef) postedRefs.push(String(returnedRef));
+            } catch (e) {
+              // allow flow to continue; error logged by outer catch
+            }
             counts.journal += 1;
           }
         } else if (cls === 'income') {
@@ -434,6 +448,8 @@ export default function UploadProcessPage() {
           const remarks = parts.filter(Boolean).join(' • ');
           const payload = {
             date: invDate,
+            // include the original invoice/order reference so backend idempotency can match by ref
+            referenceNo: ref || undefined,
             payee: t.sellerName || 'N/A',
             remarks,
             cashCredit: amt,
@@ -456,7 +472,14 @@ export default function UploadProcessPage() {
           else payload.purchasesDebit = amt;
           // Post to CDB: always for Purchases – Materials; for other expenses, only when source is an image.
           if (isPurchases || isImage) {
-            await axios.post('/api/bookkeeping/cash-disbursements', payload);
+            try {
+              const r = await axios.post('/api/bookkeeping/cash-disbursements', payload);
+              const returned = r?.data?.data?.entry;
+              const returnedRef = returned?.referenceNo || returned?.reference || payload.referenceNo || ref || '';
+              if (returnedRef) postedRefs.push(String(returnedRef));
+            } catch (e) {
+              // allow flow to continue
+            }
             counts['cash-disbursements'] += 1;
           }
         } else if (cls === 'income') {
@@ -475,7 +498,14 @@ export default function UploadProcessPage() {
             ownersCapitalCredit: 0,
             remarks: t.description,
           };
-          await axios.post('/api/bookkeeping/cash-receipts', payload);
+          try {
+            const r = await axios.post('/api/bookkeeping/cash-receipts', payload);
+            const returned = r?.data?.data?.entry;
+            const returnedRef = returned?.referenceNo || returned?.reference || payload.referenceNo || ref || '';
+            if (returnedRef) postedRefs.push(String(returnedRef));
+          } catch (e) {
+            // continue
+          }
           counts['cash-receipts'] += 1;
         }
 
@@ -490,7 +520,45 @@ export default function UploadProcessPage() {
         if (counts['cash-disbursements'] > 0) window.localStorage.setItem('cashDisbursementsNeedsRefresh', '1');
         if (counts['cash-receipts'] > 0) window.localStorage.setItem('cashReceiptsNeedsRefresh', '1');
       } catch (_) {}
-      setTimeout(() => router.push('/dashboard/bookkeeping/general-journal'), 300);
+
+      // If we posted reference numbers, poll the lightweight exists endpoint for each ref (deterministic)
+      // This is faster and more reliable than scanning the entire ledger.
+      try {
+        if (typeof postedRefs !== 'undefined' && Array.isArray(postedRefs) && postedRefs.length) {
+          const refsToFind = Array.from(new Set(postedRefs.filter(Boolean)));
+          const maxAttempts = 10;
+          const delayMs = 400;
+          const remaining = new Set(refsToFind);
+          for (let attempt = 0; attempt < maxAttempts && remaining.size > 0; attempt++) {
+            try {
+              // Check each remaining ref in parallel (but small number expected)
+              const checks = Array.from(remaining).map(async (r) => {
+                try {
+                  const res = await axios.get('/api/bookkeeping/exists', { params: { ref: r } });
+                  const exists = !!(res?.data?.data?.exists);
+                  if (exists) return r;
+                } catch (_) {
+                  // ignore transient errors for this ref
+                }
+                return null;
+              });
+              const results = await Promise.all(checks);
+              for (const foundRef of results) if (foundRef) remaining.delete(foundRef);
+            } catch (e) {
+              // ignore transient fetch errors
+            }
+            if (remaining.size > 0) await new Promise((r) => setTimeout(r, delayMs));
+          }
+          if (remaining.size > 0) console.warn('Timeout waiting for posted references to be persisted', Array.from(remaining));
+        } else {
+          // no refs to confirm; perform a single GET to prime caches
+          try { await axios.get('/api/bookkeeping/ledger'); } catch (_) {}
+        }
+      } catch (e) {
+        console.warn('Ledger confirm routine failed:', e);
+      }
+
+      router.push('/dashboard/bookkeeping/general-journal');
     } catch (err) {
       console.error('Transfer error:', err);
     } finally {
@@ -1020,11 +1088,7 @@ export default function UploadProcessPage() {
                     return (
                       <Card key={name} sx={{ p:2, bgcolor:'grey.50' }}>
                         <Typography variant="body2" sx={{ fontWeight:600, mb:1 }}>{name}</Typography>
-                        {Array.isArray(warns) && warns.length > 0 && (
-                          <Stack direction="row" spacing={1} sx={{ mb:1, flexWrap:'wrap' }}>
-                            {warns.map((w,i) => <Chip key={i} size="small" color="warning" variant="outlined" label={String(w).slice(0,80)} />)}
-                          </Stack>
-                        )}
+                        {/* Structured invoice indicators (grand total / source / confidence) rendered below */}
                         {/* Summary indicators: Source, Confidence, Grand Total */}
                         {(() => {
                           const sourceLabel = c ? 'Canonical' : 'OCR Structured';
@@ -1092,15 +1156,27 @@ export default function UploadProcessPage() {
                             else confColor = 'error';
                           }
 
-                          const chips = [];
-                          if (gtVerified) chips.push(<Chip key="gtv" size="small" variant="filled" color="success" label="Grand total verified" />);
-                          chips.push(<Chip key="gt" size="small" variant="filled" color="primary" label={`Grand Total: ${grandTotalFmt}`} />);
-                          chips.push(<Chip key="src" size="small" variant="outlined" color="info" label={`Source: ${srcDisplay}`} />);
-                          if (finalConfidence != null) chips.push(<Chip key="conf" size="small" variant="outlined" color={confColor} label={`Confidence: ${finalConfidence}%`} />);
-
+                          // Build a small row of indicators: grand total mismatch (warning), detection source, canonical/source, and confidence.
+                          const mismatchDelta = (grandTotalNum != null && localItemSum != null) ? Math.abs(grandTotalNum - localItemSum) : null;
                           return (
-                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb:1, flexWrap:'wrap' }}>
-                              {chips}
+                            <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1, flexWrap: 'wrap' }}>
+                              {mismatchDelta != null && !itemsMatch && (
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  color="warning"
+                                  label={`⚠ Grand total mismatch Δ ${fmtAmt(mismatchDelta)}`}
+                                />
+                              )}
+                              {gtDetectedBold && (
+                                <Chip size="small" variant="filled" color="info" label={`Detected from bold text`} />
+                              )}
+                              {(gtSource || sourceLabel) && (
+                                <Chip size="small" variant="outlined" color="info" label={`Source: ${gtSource || sourceLabel}`} />
+                              )}
+                              {finalConfidence != null && (
+                                <Chip size="small" variant="outlined" color={confColor} label={`Confidence: ${finalConfidence}%`} />
+                              )}
                             </Stack>
                           );
                         })()}
@@ -1110,16 +1186,6 @@ Seller Address: ${na(cFields.sellerAddress || s.sellerAddress)}
 
 Buyer Name: ${na(cFields.buyerName || s.buyerName)}
 Buyer Address: ${na(cFields.buyerAddress || s.buyerAddress)}
-
-Order Summary
-Order Summary No.: ${na(cFields.orderSummaryNo || s.orderSummaryNo)}
-Date Issued: ${na(cFields.dateIssued || s.dateIssued)}
-Order ID: ${na(cFields.orderId || s.orderId)}
-Order Paid Date: ${na(cFields.orderPaidDate || s.orderPaidDate)}
-Payment Method: ${na(cFields.paymentMethod || s.paymentMethod)}
-
-Order Details
-${itemsText}
 
 Merchandise Subtotal: ${fmtAmt(cAmts.merchandiseSubtotal ?? s.merchandiseSubtotal)}
 Shipping Fee: ${fmtAmt(cAmts.shippingFee ?? s.shippingFee)}
