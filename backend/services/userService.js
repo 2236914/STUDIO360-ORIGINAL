@@ -15,7 +15,7 @@ class UserService {
         .from('user_model')
         .select('*')
         .eq('id', userId)
-        .is('deleted_at', null)
+        .eq('deleted_at', null)
         .single();
 
       if (error) {
@@ -41,7 +41,7 @@ class UserService {
         .from('user_model')
         .select('*')
         .eq('email', email)
-        .is('deleted_at', null)
+        .eq('deleted_at', null)
         .single();
 
       if (error) {
@@ -122,7 +122,7 @@ class UserService {
         .from('user_model')
         .update(updateData)
         .eq('id', userId)
-        .is('deleted_at', null)
+        .eq('deleted_at', null)
         .select()
         .single();
 
@@ -149,7 +149,7 @@ class UserService {
         .from('user_model')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', userId)
-        .is('deleted_at', null);
+        .eq('deleted_at', null);
 
       if (error) {
         console.error('Error deleting user:', error);
@@ -176,7 +176,7 @@ class UserService {
       let query = supabase
         .from('user_model')
         .select('*')
-        .is('deleted_at', null)
+        .eq('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (options.role) {
@@ -216,7 +216,7 @@ class UserService {
         .from('user_model')
         .select('id')
         .eq('email', email)
-        .is('deleted_at', null)
+        .eq('deleted_at', null)
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
@@ -242,7 +242,7 @@ class UserService {
         .from('user_model')
         .select('*', { count: 'exact', head: true })
         .eq('role', role)
-        .is('deleted_at', null);
+        .eq('deleted_at', null);
 
       if (error) {
         console.error('Error getting user count by role:', error);
