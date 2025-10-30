@@ -15,12 +15,29 @@ class UserService {
         .from('user_model')
         .select('*')
         .eq('id', userId)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .single();
 
       if (error) {
         console.error('Error fetching user by ID:', error);
         return null;
+      }
+
+      // Normalize timestamp fields to either ISO strings or null
+      if (data) {
+        try {
+          data.created_at = data.created_at ? new Date(data.created_at).toISOString() : null;
+        } catch (e) {
+          data.created_at = null;
+        }
+        if (Object.prototype.hasOwnProperty.call(data, 'last_login')) {
+          try {
+            data.last_login = data.last_login ? new Date(data.last_login).toISOString() : null;
+          } catch (e) {
+            data.last_login = null;
+          }
+        }
+        if (data.role) data.role = String(data.role).toLowerCase();
       }
 
       return data;
@@ -41,12 +58,29 @@ class UserService {
         .from('user_model')
         .select('*')
         .eq('email', email)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .single();
 
       if (error) {
         console.error('Error fetching user by email:', error);
         return null;
+      }
+
+      // Normalize timestamp fields to either ISO strings or null
+      if (data) {
+        try {
+          data.created_at = data.created_at ? new Date(data.created_at).toISOString() : null;
+        } catch (e) {
+          data.created_at = null;
+        }
+        if (Object.prototype.hasOwnProperty.call(data, 'last_login')) {
+          try {
+            data.last_login = data.last_login ? new Date(data.last_login).toISOString() : null;
+          } catch (e) {
+            data.last_login = null;
+          }
+        }
+        if (data.role) data.role = String(data.role).toLowerCase();
       }
 
       return data;
@@ -118,11 +152,23 @@ class UserService {
    */
   async updateUser(userId, updateData) {
     try {
+      // Sanitize timestamp fields so we don't send string 'null' to Postgres
+      const sanitized = { ...updateData };
+      if (sanitized.created_at === 'null' || sanitized.created_at === 'undefined') sanitized.created_at = null;
+      if (sanitized.created_at) {
+        try { sanitized.created_at = new Date(sanitized.created_at).toISOString(); } catch (e) { sanitized.created_at = null; }
+      }
+      if (sanitized.last_login === 'null' || sanitized.last_login === 'undefined') sanitized.last_login = null;
+      if (sanitized.last_login) {
+        try { sanitized.last_login = new Date(sanitized.last_login).toISOString(); } catch (e) { sanitized.last_login = null; }
+      }
+      if (sanitized.role) sanitized.role = String(sanitized.role).toLowerCase();
+
       const { data, error } = await supabase
         .from('user_model')
-        .update(updateData)
+        .update(sanitized)
         .eq('id', userId)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .select()
         .single();
 
@@ -149,7 +195,7 @@ class UserService {
         .from('user_model')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', userId)
-        .eq('deleted_at', null);
+        .is('deleted_at', null);
 
       if (error) {
         console.error('Error deleting user:', error);
@@ -176,7 +222,7 @@ class UserService {
       let query = supabase
         .from('user_model')
         .select('*')
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (options.role) {
@@ -216,7 +262,7 @@ class UserService {
         .from('user_model')
         .select('id')
         .eq('email', email)
-        .eq('deleted_at', null)
+        .is('deleted_at', null)
         .single();
 
       if (error && error.code !== 'PGRST116') { // PGRST116 is "not found" error
@@ -242,7 +288,7 @@ class UserService {
         .from('user_model')
         .select('*', { count: 'exact', head: true })
         .eq('role', role)
-        .eq('deleted_at', null);
+        .is('deleted_at', null);
 
       if (error) {
         console.error('Error getting user count by role:', error);

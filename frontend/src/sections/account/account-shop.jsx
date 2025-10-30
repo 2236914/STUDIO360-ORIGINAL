@@ -34,6 +34,7 @@ import { Form, Field } from 'src/components/hook-form';
 import { ConfirmDialog } from 'src/components/custom-dialog';
 
 import { supabase } from 'src/auth/context/jwt/supabaseClient';
+import { authService } from 'src/services/authService';
 
 // ----------------------------------------------------------------------
 
@@ -41,7 +42,14 @@ import { supabase } from 'src/auth/context/jwt/supabaseClient';
 async function isAuthenticated() {
   try {
     const { data: { session }, error } = await supabase.auth.getSession();
-    return !error && !!session;
+    if (!error && !!session) return true;
+    // Fallback to custom JWT stored in authService/localStorage
+    try {
+      if (authService.isAuthenticated()) return true;
+    } catch (e) {
+      // ignore
+    }
+    return false;
   } catch (error) {
     console.error('Authentication check error:', error);
     return false;
@@ -52,21 +60,33 @@ async function isAuthenticated() {
 async function authenticatedRequest(url, options = {}) {
   try {
     // Get the current session from Supabase
-    const { data: { session }, error } = await supabase.auth.getSession();
-    
-    console.log('Frontend: Supabase session check:', { 
-      hasSession: !!session, 
-      hasError: !!error, 
-      tokenPreview: session?.access_token ? `${session.access_token.substring(0, 20)  }...` : 'no token' 
-    });
-    
-    if (error || !session) {
-      throw new Error('No authentication session available');
+    let token = null;
+    // Try Supabase session first (if app uses Supabase auth)
+    try {
+      const { data: { session }, error } = await supabase.auth.getSession();
+      if (!error && session?.access_token) {
+        token = session.access_token;
+      }
+    } catch (e) {
+      console.warn('Supabase session check failed:', e);
+    }
+
+    // Fallback to local authService token (custom JWT) if no Supabase token
+    try {
+      if (!token) token = authService.getToken();
+    } catch (e) {
+      console.warn('authService token retrieval failed:', e);
+    }
+
+    console.log('Frontend: Making authenticated request to:', url, { hasToken: !!token });
+
+    if (!token) {
+      throw new Error('No authentication token available');
     }
 
     const defaultOptions = {
       headers: {
-        'Authorization': `Bearer ${session.access_token}`,
+        'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
         ...options.headers,
       },

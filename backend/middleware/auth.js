@@ -112,14 +112,14 @@ const authenticateSupabaseToken = async (req, res, next) => {
     try {
       const dbUser = await userService.getUserByEmail(user.email);
       if (dbUser && dbUser.role) {
-        resolvedRole = dbUser.role;
+        resolvedRole = String(dbUser.role).toLowerCase();
       } else if (user.user_metadata?.role) {
-        resolvedRole = user.user_metadata.role;
+        resolvedRole = String(user.user_metadata.role).toLowerCase();
       }
     } catch (e) {
       console.warn('Role resolution fallback to metadata due to error:', e);
       if (user.user_metadata?.role) {
-        resolvedRole = user.user_metadata.role;
+        resolvedRole = String(user.user_metadata.role).toLowerCase();
       }
     }
 
@@ -179,14 +179,14 @@ const authenticateTokenHybrid = async (req, res, next) => {
     try {
       const dbUser = await userService.getUserByEmail(user.email);
       if (dbUser && dbUser.role) {
-        resolvedRole = dbUser.role;
+        resolvedRole = String(dbUser.role).toLowerCase();
       } else if (user.user_metadata?.role) {
-        resolvedRole = user.user_metadata.role;
+        resolvedRole = String(user.user_metadata.role).toLowerCase();
       }
     } catch (e) {
       console.warn('Role resolution fallback to metadata (hybrid):', e);
       if (user.user_metadata?.role) {
-        resolvedRole = user.user_metadata.role;
+        resolvedRole = String(user.user_metadata.role).toLowerCase();
       }
     }
 
