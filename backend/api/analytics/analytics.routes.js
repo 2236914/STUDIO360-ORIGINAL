@@ -669,22 +669,6 @@ function detectSeasonality(monthlySales) {
   }
 }
 
-    return res.json({
-      success: true,
-      data: {
-        year,
-        products: productForecasts,
-        summary: {
-          totalProducts: productForecasts.length,
-          avgGrowthRate: Math.round(productForecasts.reduce((sum, p) => sum + p.growthRate, 0) / productForecasts.length * 10) / 10,
-          topPerformer: productForecasts.reduce((max, p) => p.totalSales > max.totalSales ? p : max, productForecasts[0])
-        }
-      }
-    });
-  } catch (e) {
-    return res.status(500).json({ success: false, message: e.message });
-  }
-});
 
 // POST /api/analytics/products/categories/forecast { year: 2025 }
 router.post('/products/categories/forecast', async (req, res) => {
@@ -891,6 +875,382 @@ router.post('/products/inventory/forecast', async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/analytics/kpis?year=YYYY
+// Returns consolidated KPIs derived from book-of-accounts sources:
+// - Total Sales (from Cash Receipt Journal / General Ledger)
+// - Total Expenses (from Cash Disbursement Book / General Ledger)
+// - Total Orders (unique invoices / order references)
+// - Net Profit (from General Ledger preferred, else sales - expenses)
+router.get('/kpis', async (req, res) => {
+  try {
+    const year = parseInt(req.query.year || new Date().getFullYear(), 10);
+    const prevYear = year - 1;
+
+    // Local-export preference: if the repo contains exported bookkeeping snapshots, prefer them
+    // This helps local dev and ensures the dashboard reflects the repo's book-of-accounts even
+    // when a Supabase connection exists but is empty.
+    const _journalExportPath = path.join(__dirname, '..', '..', '..', 'exports', 'full_journal.json');
+    if (fs.existsSync(_journalExportPath)) {
+      try {
+        const journalPath = _journalExportPath;
+        const ledgerPath = path.join(__dirname, '..', '..', '..', 'exports', 'full_ledger_summary.json');
+        let journal = null;
+        let ledgerSummary = null;
+        if (fs.existsSync(journalPath)) {
+          const raw = fs.readFileSync(journalPath, 'utf8');
+          const parsed = JSON.parse(raw || '{}');
+          journal = (parsed && parsed.data && parsed.data.entries) ? parsed.data.entries : [];
+        }
+        if (fs.existsSync(ledgerPath)) {
+          const raw2 = fs.readFileSync(ledgerPath, 'utf8');
+          const parsed2 = JSON.parse(raw2 || '{}');
+          ledgerSummary = (parsed2 && parsed2.data) ? parsed2.data : null;
+        }
+
+        if (Array.isArray(journal) && journal.length) {
+          let totalSalesLocal = 0;
+          let totalExpensesLocal = 0;
+          const ordersSetLocal = new Set();
+          let netProfitLocal = null;
+          const monthlySalesLocal = Array.from({ length: 12 }, () => 0);
+
+          for (const e of journal) {
+            try {
+              const d = new Date(e.date);
+              if (Number.isNaN(d.getTime())) continue;
+              const y = d.getFullYear();
+              if (y !== year) continue;
+              const mi = d.getMonth();
+              // Lines array contains debit/credit per line; treat credit on Sales Revenue as sales
+              for (const ln of (e.lines || [])) {
+                const desc = String(ln.description || '').toLowerCase();
+                const debit = Number(ln.debit || 0);
+                const credit = Number(ln.credit || 0);
+                if (desc.includes('sales') || desc.includes('revenue') || desc.includes('sales revenue')) {
+                  totalSalesLocal += Math.max(0, credit);
+                  monthlySalesLocal[mi] += Math.max(0, credit);
+                }
+                // Heuristic: treat lines labeled Purchases/COGS or debit entries with purchase keywords as expenses
+                if (desc.includes('purchases') || desc.includes('cogs') || desc.includes('purchase') || desc.includes('cost of goods')) {
+                  totalExpensesLocal += Math.max(0, debit);
+                }
+              }
+              const key = String(e.ref || e.id || '').trim();
+              if (key) ordersSetLocal.add(key);
+            } catch (_) { /* ignore malformed row */ }
+          }
+
+          // Try to prefer ledger summary if it's available in the export
+          if (ledgerSummary && Array.isArray(ledgerSummary.summary)) {
+            try {
+              let rev = 0;
+              let exp = 0;
+              for (const s of ledgerSummary.summary) {
+                const code = String(s.code || '').trim();
+                const title = String(s.accountTitle || '').toLowerCase();
+                const debit = Number(s.debit || 0);
+                const credit = Number(s.credit || 0);
+                if (code === '401' || title.includes('sales') || title.includes('revenue')) rev += (credit - debit);
+                if (code.startsWith('5') || title.includes('expense') || ['materials','rent','utilities','advert','delivery','tax','license','misc','purchases','cogs'].some(k => title.includes(k))) exp += (debit - credit);
+              }
+              if (rev !== 0 || exp !== 0) {
+                netProfitLocal = rev - exp;
+                if (rev !== 0) totalSalesLocal = rev;
+                if (exp !== 0) totalExpensesLocal = exp;
+              }
+            } catch (_) { /* ignore ledger parse errors */ }
+          }
+
+          const totalOrdersLocal = ordersSetLocal.size;
+          // Attach forecast based on monthlySalesLocal
+          let forecastObj = { nextMonths: [], confidence: 0, forecastTotal: 0 };
+          try {
+            const fr = await runProphetForecast(monthlySalesLocal, year).catch(() => generateFallbackForecast(monthlySalesLocal));
+            const farr = Array.isArray(fr?.forecast) ? fr.forecast : (fr?.forecast || []);
+            const conf = Number(fr?.confidence || 60);
+            const ftotal = farr.reduce((s, v) => s + Number(v || 0), 0);
+            forecastObj = { nextMonths: farr, confidence: conf, forecastTotal: ftotal };
+          } catch (_) {}
+
+          const resultLocal = {
+            year,
+            totalSales: Math.round(totalSalesLocal || 0),
+            totalExpenses: Math.round(totalExpensesLocal || 0),
+            totalOrders: Number(totalOrdersLocal || 0),
+            netProfit: Math.round((netProfitLocal !== null ? netProfitLocal : (totalSalesLocal - totalExpensesLocal)) || 0),
+            previous: { year: prevYear, totalSales: 0, totalExpenses: 0, totalOrders: 0 },
+            percentChange: { sales: null, expenses: null, orders: null, netProfit: null },
+            lastUpdated: new Date().toISOString(),
+            forecast: forecastObj
+          };
+          return res.json({ success: true, data: resultLocal, source: 'exports' });
+        }
+      } catch (e) {
+        // fallback to normal path below if exports cannot be read
+      }
+    }
+
+    let totalSales = 0;
+    let totalExpenses = 0;
+    let ordersSet = new Set();
+    let netProfit = null;
+
+    // Helper to safely sum numbers
+    const safeNum = (v) => Number(v || 0);
+
+    // Try to use DB-backed sources when available
+    if (isDbReady()) {
+      try {
+        // 1) Cash Receipt Journal (CRJ) -> Total Sales and orders
+        try {
+          const receipts = await getCashReceiptsAll();
+          for (const r of receipts || []) {
+            const d = new Date(r.date);
+            if (Number.isNaN(d.getTime())) continue;
+            const y = d.getFullYear();
+            if (y === year) {
+              totalSales += safeNum(r.cr_sales);
+              const key = String(r.invoice_no || r.reference || `${r.date}|${r.id||''}`);
+              if (key && key !== 'null') ordersSet.add(key);
+            }
+          }
+        } catch (e) { /* ignore CRJ read errors */ }
+
+        // 2) Cash Disbursement Book (CDB) -> Total Expenses
+        try {
+          const disb = await getCashDisbursementsAll();
+          for (const r of disb || []) {
+            const d = new Date(r.date);
+            if (Number.isNaN(d.getTime())) continue;
+            const y = d.getFullYear();
+            if (y === year) {
+              const sum = ['dr_materials','dr_supplies','dr_rent','dr_utilities','dr_advertising','dr_delivery','dr_taxes_licenses','dr_misc']
+                .reduce((s,k) => s + safeNum(r[k]), 0);
+              totalExpenses += sum;
+            }
+          }
+        } catch (e) { /* ignore CDB read errors */ }
+
+        // 3) General Journal - fetch references for additional order identification
+        try {
+          const start = new Date(Date.UTC(year,0,1)).toISOString().slice(0,10);
+          const end = new Date(Date.UTC(year,11,31)).toISOString().slice(0,10);
+          const { data: gjRows } = await supabase
+            .from('general_journal')
+            .select('reference,date,account_title_particulars')
+            .gte('date', start)
+            .lte('date', end);
+          for (const r of gjRows || []) {
+            const ref = String(r.reference || '').trim();
+            const title = String(r.account_title_particulars || '').toLowerCase();
+            // Heuristic: treat rows mentioning sales/order/invoice as order-related
+            if (ref && ref !== 'null') {
+              if (title.includes('sales') || title.includes('order') || title.includes('invoice')) {
+                ordersSet.add(ref);
+              }
+            }
+          }
+        } catch (e) { /* ignore general_journal read errors */ }
+
+        // 4) Prefer General Ledger for Net Profit if available
+        try {
+          const { ledger } = await getLedgerFullFromDb();
+          if (Array.isArray(ledger) && ledger.length) {
+            // Compute totals from ledger entries: revenue (code 401 or title contains 'sales') and expenses (codes starting with 5xx or titles containing 'expense')
+            let revTotal = 0;
+            let expTotal = 0;
+            for (const acc of ledger) {
+              const code = String(acc.code || '');
+              const title = String(acc.accountTitle || '').toLowerCase();
+              // Sum entries for the given year
+              if (!Array.isArray(acc.entries)) continue;
+              for (const e of acc.entries) {
+                const d = new Date(e.date);
+                if (Number.isNaN(d.getTime())) continue;
+                if (d.getFullYear() !== year) continue;
+                const credit = safeNum(e.credit);
+                const debit = safeNum(e.debit);
+                // Revenue: credit - debit
+                if (code === '401' || title.includes('sales') || title.includes('revenue')) {
+                  revTotal += (credit - debit);
+                }
+                // Expense heuristics: account code starts with '5' or title contains 'expense' or common expense names
+                if (code.startsWith('5') || title.includes('expense') || ['materials','rent','utilities','advert','delivery','tax','license','misc'].some(k => title.includes(k))) {
+                  expTotal += (debit - credit);
+                }
+              }
+            }
+            // If ledger gave meaningful numbers, use them
+            if (revTotal !== 0 || expTotal !== 0) {
+              netProfit = revTotal - expTotal;
+              // If totals from ledger differ from CRJ/CDB, prefer ledger for sales/expenses reporting
+              if (revTotal !== 0) totalSales = revTotal;
+              if (expTotal !== 0) totalExpenses = expTotal;
+            }
+          }
+        } catch (e) { /* ignore ledger read errors */ }
+      } catch (e) {
+        // DB read error - fall through to fallback
+      }
+    }
+
+    // Fallback when DB isn't ready or ledger didn't compute net profit
+    if (netProfit === null) {
+      // Ensure we have CRJ/CDB totals if not already computed
+      try {
+        if (!totalSales) {
+          const receipts = await getCashReceiptsAll();
+          for (const r of receipts || []) {
+            const d = new Date(r.date);
+            if (Number.isNaN(d.getTime())) continue;
+            if (d.getFullYear() === year) totalSales += safeNum(r.cr_sales);
+          }
+        }
+      } catch (_) {}
+      try {
+        if (!totalExpenses) {
+          const disb = await getCashDisbursementsAll();
+          for (const r of disb || []) {
+            const d = new Date(r.date);
+            if (Number.isNaN(d.getTime())) continue;
+            if (d.getFullYear() === year) {
+              const sum = ['dr_materials','dr_supplies','dr_rent','dr_utilities','dr_advertising','dr_delivery','dr_taxes_licenses','dr_misc']
+                .reduce((s,k) => s + safeNum(r[k]), 0);
+              totalExpenses += sum;
+            }
+          }
+        }
+      } catch (_) {}
+      netProfit = (totalSales || 0) - (totalExpenses || 0);
+    }
+
+    // Compute previous year baseline for percent changes
+    let totalSalesPrev = 0;
+    let totalExpensesPrev = 0;
+    let ordersPrevCount = 0;
+    try {
+      const receipts = await getCashReceiptsAll();
+      for (const r of receipts || []) {
+        const d = new Date(r.date);
+        if (Number.isNaN(d.getTime())) continue;
+        const y = d.getFullYear();
+        if (y === prevYear) totalSalesPrev += safeNum(r.cr_sales);
+      }
+    } catch (_) {}
+    try {
+      const disb = await getCashDisbursementsAll();
+      for (const r of disb || []) {
+        const d = new Date(r.date);
+        if (Number.isNaN(d.getTime())) continue;
+        if (d.getFullYear() === prevYear) {
+          totalExpensesPrev += ['dr_materials','dr_supplies','dr_rent','dr_utilities','dr_advertising','dr_delivery','dr_taxes_licenses','dr_misc']
+            .reduce((s,k) => s + safeNum(r[k]), 0);
+        }
+      }
+    } catch (_) {}
+    // Orders previous year: naive count of receipts
+    try {
+      const receipts = await getCashReceiptsAll();
+      const prevSet = new Set();
+      for (const r of receipts || []) {
+        const d = new Date(r.date);
+        if (Number.isNaN(d.getTime())) continue;
+        if (d.getFullYear() === prevYear) prevSet.add(String(r.invoice_no || r.reference || `${r.date}|${r.id||''}`));
+      }
+      ordersPrevCount = prevSet.size;
+    } catch (_) {}
+
+    const totalOrders = ordersSet.size;
+
+    const pctChange = (current, prev) => {
+      if (prev === 0) return null;
+      return ((current - prev) / prev) * 100;
+    };
+
+    const result = {
+      year,
+      totalSales: Math.round(totalSales || 0),
+      totalExpenses: Math.round(totalExpenses || 0),
+      totalOrders: Number(totalOrders || 0),
+      netProfit: Math.round(netProfit || 0),
+      previous: {
+        year: prevYear,
+        totalSales: Math.round(totalSalesPrev || 0),
+        totalExpenses: Math.round(totalExpensesPrev || 0),
+        totalOrders: Number(ordersPrevCount || 0)
+      },
+      percentChange: {
+        sales: pctChange(totalSales, totalSalesPrev),
+        expenses: pctChange(totalExpenses, totalExpensesPrev),
+        orders: pctChange(totalOrders, ordersPrevCount),
+        netProfit: pctChange(netProfit, (totalSalesPrev - totalExpensesPrev))
+      },
+      lastUpdated: new Date().toISOString()
+    };
+
+    // --- Forecast attachment: compute monthly sales series and attach a short Prophet forecast ---
+    try {
+      const monthlySales = Array.from({ length: 12 }, () => 0);
+
+      // Prefer receipts from DB when available
+      if (isDbReady()) {
+        try {
+          const receipts = await getCashReceiptsAll();
+          for (const r of receipts || []) {
+            const d = new Date(r.date);
+            if (Number.isNaN(d.getTime())) continue;
+            if (d.getFullYear() !== year) continue;
+            const mi = d.getMonth();
+            monthlySales[mi] += Number(r.cr_sales || 0);
+          }
+        } catch (_) { /* ignore */ }
+      }
+
+      // If DB not ready or monthlySales are all zero, try to build series from exports (local snapshot)
+      const allZero = monthlySales.every((v) => Number(v) === 0);
+      if (allZero) {
+        try {
+          const exportJournalPath = path.join(__dirname, '..', '..', '..', 'exports', 'full_journal.json');
+          if (fs.existsSync(exportJournalPath)) {
+            const raw = fs.readFileSync(exportJournalPath, 'utf8');
+            const parsed = JSON.parse(raw || '{}');
+            const entries = (parsed && parsed.data && parsed.data.entries) ? parsed.data.entries : [];
+            for (const e of entries || []) {
+              try {
+                const d = new Date(e.date);
+                if (Number.isNaN(d.getTime())) continue;
+                if (d.getFullYear() !== year) continue;
+                const mi = d.getMonth();
+                for (const ln of (e.lines || [])) {
+                  const desc = String(ln.description || '').toLowerCase();
+                  const credit = Number(ln.credit || 0);
+                  if (desc.includes('sales') || desc.includes('revenue')) {
+                    monthlySales[mi] += Math.max(0, credit);
+                  }
+                }
+              } catch (_) { /* ignore entry */ }
+            }
+          }
+        } catch (_) { /* ignore exports read errors */ }
+      }
+
+      // Run Prophet (or fallback) to generate a short forecast (3 months)
+      const forecastRes = await runProphetForecast(monthlySales, year).catch(() => generateFallbackForecast(monthlySales));
+      const forecastArr = Array.isArray(forecastRes?.forecast) ? forecastRes.forecast : (forecastRes?.forecast || []);
+      const confidence = Number(forecastRes?.confidence || 60);
+      const forecastTotal = forecastArr.reduce((s, v) => s + Number(v || 0), 0);
+      result.forecast = { nextMonths: forecastArr, confidence, forecastTotal };
+    } catch (e) {
+      // don't break KPI response if forecast fails
+      result.forecast = { nextMonths: [], confidence: 0, forecastTotal: 0 };
+    }
+
+    return res.json({ success: true, data: result });
+  } catch (e) {
+    return res.status(500).json({ success: false, message: e.message });
+  }
+});
 
 // Optional: POST /api/analytics/sales/forecast { channel: 'Shopee'|'TikTok Shop'|'360', year: 2025 }
 router.post('/sales/forecast', async (req, res) => {
