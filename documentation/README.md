@@ -11,7 +11,6 @@ Master index of all Markdown docs in the repository. Files remain in their origi
 - [PRODUCT_FORECASTING_SETUP.md](../PRODUCT_FORECASTING_SETUP.md)
 - [setup.md](../setup.md)
 - [XENDIT_INTEGRATION_GUIDE.md](../XENDIT_INTEGRATION_GUIDE.md)
-- Deployment (Recommended): [deploy-vercel-render.md](./deploy-vercel-render.md)
 
 ### Frontend
 - [frontend/README.md](../frontend/README.md)

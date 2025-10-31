@@ -1,0 +1,13 @@
+backend
+starter-next-js
+docs
+exports
+uploads
+ai
+database
+tools
+docker-compose.yml
+backend/Dockerfile
+**/__pycache__/
+**/poppler/**
+**/*.md
