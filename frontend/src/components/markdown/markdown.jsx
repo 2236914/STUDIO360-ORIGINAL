@@ -2,7 +2,7 @@ import './code-highlight-block.css';
 
 import { useMemo } from 'react';
 import remarkGfm from 'remark-gfm';
-import rehypeRaw from 'rehype-raw';
+import rehypeSanitize from 'rehype-sanitize';
 import rehypeHighlight from 'rehype-highlight';
 
 import Link from '@mui/material/Link';
@@ -41,7 +41,7 @@ export function Markdown({ children, sx, ...other }) {
   );
 }
 
-const rehypePlugins = [rehypeRaw, rehypeHighlight, [remarkGfm, { singleTilde: false }]];
+const rehypePlugins = [rehypeSanitize, rehypeHighlight, [remarkGfm, { singleTilde: false }]];
 
 const components = {
   img: ({ node, ...other }) => (

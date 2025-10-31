@@ -3,6 +3,7 @@ import 'src/global.css';
 import 'src/utils/debug-info-fix';
 
 import { CONFIG } from 'src/config-global';
+import { headers } from 'next/headers';
 import { primary } from 'src/theme/core/palette';
 import { ThemeProvider } from 'src/theme/theme-provider';
 import { getInitColorSchemeScript } from 'src/theme/color-scheme-script';
@@ -60,6 +61,7 @@ export const metadata = {
 
 export default async function RootLayout({ children }) {
   const settings = CONFIG.isStaticExport ? defaultSettings : await detectSettings();
+  const nonce = headers().get('x-nonce') || undefined;
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -67,6 +69,7 @@ export default async function RootLayout({ children }) {
         {getInitColorSchemeScript}
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               // Apply _debugInfo fix immediately - must run before any React/Next code

@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography';
 import ListItemText from '@mui/material/ListItemText';
 import ListItemAvatar from '@mui/material/ListItemAvatar';
 import ListItemButton from '@mui/material/ListItemButton';
+import DOMPurify from 'isomorphic-dompurify';
 
 import { fToNow } from 'src/utils/format-time';
 
@@ -215,9 +216,10 @@ export function NotificationItem({ notification }) {
 // ----------------------------------------------------------------------
 
 function reader(data) {
+  const safeHtml = DOMPurify.sanitize(String(data || ''), { USE_PROFILES: { html: true } });
   return (
     <Box
-      dangerouslySetInnerHTML={{ __html: data }}
+      dangerouslySetInnerHTML={{ __html: safeHtml }}
       sx={{
         mb: 0.5,
         '& p': { typography: 'body2', m: 0 },

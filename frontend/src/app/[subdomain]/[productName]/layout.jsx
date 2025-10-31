@@ -73,10 +73,14 @@ export default async function ProductLayout({ children, params }) {
     { name, item: url },
   ]);
 
+  // Read CSP nonce from request headers (set by middleware)
+  const { headers } = await import('next/headers');
+  const nonce = headers().get('x-nonce') || undefined;
+
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
+      <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script nonce={nonce} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(crumbs) }} />
       {children}
     </>
   );

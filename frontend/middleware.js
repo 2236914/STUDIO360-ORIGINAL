@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 
 // Main domain and subdomain configuration
 const MAIN_DOMAIN = 'studio360.com';
@@ -7,27 +8,74 @@ const LOCAL_DOMAIN = 'localhost:3000';
 export function middleware(request) {
   const { pathname, search } = request.nextUrl;
   const hostname = request.headers.get('host') || '';
-  
+
+  // Generate a per-request nonce
+  const nonce = crypto.randomBytes(16).toString('base64');
+
+  // Build a strict Content-Security-Policy using the nonce
+  const csp = [
+    "default-src 'self'",
+    // Allow scripts from self and this specific nonce only
+    `script-src 'self' 'nonce-${nonce}'` + (process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ''),
+    // Disallow inline styles except via nonce; allow self and fonts
+    `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`,
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https: http:",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    // Upgrade insecure requests in production
+    process.env.NODE_ENV === 'production' ? 'upgrade-insecure-requests' : '',
+  ].filter(Boolean).join('; ');
+
   // Extract subdomain from hostname
   const subdomain = getSubdomain(hostname);
-  
+
+  // Create a base response with CSP and nonce propagated to the request
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+
+  const baseResponse = NextResponse.next({ request: { headers: requestHeaders } });
+  baseResponse.headers.set('Content-Security-Policy', csp);
+  baseResponse.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  baseResponse.headers.set('X-Content-Type-Options', 'nosniff');
+  baseResponse.headers.set('X-Frame-Options', 'DENY');
+  baseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  baseResponse.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+
   // If no subdomain or it's the main domain, continue normally
   if (!subdomain || subdomain === 'www' || subdomain === 'app') {
-    return NextResponse.next();
+    return baseResponse;
   }
   
   // If subdomain is 'admin', redirect to admin routes
   if (subdomain === 'admin') {
     // Rewrite admin subdomain to admin routes
     const adminPath = pathname === '/' ? '/admin' : `/admin${pathname}`;
-    return NextResponse.rewrite(new URL(adminPath, request.url));
+    const res = NextResponse.rewrite(new URL(adminPath, request.url));
+    res.headers.set('Content-Security-Policy', csp);
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.headers.set('X-Content-Type-Options', 'nosniff');
+    res.headers.set('X-Frame-Options', 'DENY');
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    return res;
   }
   
   // If subdomain is 'dashboard', redirect to dashboard routes
   if (subdomain === 'dashboard') {
     // Rewrite dashboard subdomain to dashboard routes
     const dashboardPath = pathname === '/' ? '/dashboard' : `/dashboard${pathname}`;
-    return NextResponse.rewrite(new URL(dashboardPath, request.url));
+    const res = NextResponse.rewrite(new URL(dashboardPath, request.url));
+    res.headers.set('Content-Security-Policy', csp);
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.headers.set('X-Content-Type-Options', 'nosniff');
+    res.headers.set('X-Frame-Options', 'DENY');
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    return res;
   }
   
   // For store subdomains, rewrite to subdomain routes
@@ -37,11 +85,25 @@ export function middleware(request) {
       ? `/${subdomain}` 
       : `/${subdomain}${pathname}`;
     
-    return NextResponse.rewrite(new URL(subdomainPath, request.url));
+    const res = NextResponse.rewrite(new URL(subdomainPath, request.url));
+    res.headers.set('Content-Security-Policy', csp);
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.headers.set('X-Content-Type-Options', 'nosniff');
+    res.headers.set('X-Frame-Options', 'DENY');
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    return res;
   }
   
   // If subdomain doesn't match any pattern, redirect to main domain
-  return NextResponse.redirect(new URL(`https://${MAIN_DOMAIN}${pathname}${search}`, request.url));
+  const res = NextResponse.redirect(new URL(`https://${MAIN_DOMAIN}${pathname}${search}`, request.url));
+  res.headers.set('Content-Security-Policy', csp);
+  res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.headers.set('X-Content-Type-Options', 'nosniff');
+  res.headers.set('X-Frame-Options', 'DENY');
+  res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+  res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+  return res;
 }
 
 // Helper function to extract subdomain from hostname
