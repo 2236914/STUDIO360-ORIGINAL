@@ -19,12 +19,6 @@ import { toast } from 'src/components/snackbar';
 
 import { seoSettingsApi } from 'src/services/seoSettingsService';
 
-export const metadata = {
-  title: 'SEO Settings',
-  description: 'Manage your default SEO metadata for the storefront.',
-  robots: { index: false, follow: false },
-};
-
 export default function StoreSeoSettingsPage() {
   const methods = useForm({
     defaultValues: {

@@ -1,4 +1,9 @@
 {
+  "name": "studio360",
+  "version": "1.0.0",
+  "description": "STUDIO360 - AI-Powered Bookkeeping Platform",
+  "private": true,
+  "license": "UNLICENSED",
   "dependencies": {
     "@supabase/supabase-js": "^2.53.0",
     "bcrypt": "^6.0.0"

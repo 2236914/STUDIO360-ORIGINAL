@@ -36,3 +36,6 @@ build
 .eslintcache
 .unimportedrc.json
 tsconfig.tsbuildinfo
+
+# Lock files (using yarn, ignore npm lock file)
+package-lock.json

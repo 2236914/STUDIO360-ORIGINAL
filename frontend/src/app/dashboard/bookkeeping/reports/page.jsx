@@ -1,3 +1,4 @@
+"use client";
 import { useState, useEffect } from 'react';
 import { Container, Typography, Tabs, Tab, Stack, Button, TextField } from '@mui/material';
 import dayjs from 'dayjs';
@@ -5,7 +6,7 @@ import { getIncomeStatement, getBalanceSheet, getCashFlow, getTrialBalance, expo
 
 // ----------------------------------------------------------------------
 
-export const metadata = { title: 'Reports | Bookkeeping | Kitsch Studio' };
+// Metadata export removed because this file is a Client Component.
 
 export default function BookkeepingReportsPage() {
   const [tab, setTab] = useState('is');
