@@ -229,7 +229,9 @@ docker compose down
 
 ---
 
-## 📚 More Docs
+## 📚 Documentation Index
+
+For a full list of docs with links, see: [documentation/README.md](documentation/README.md)
 
 - `backend/README.md` — API details, health/metrics
 - `frontend/README.md` — app setup notes
