@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect } from 'react';
-
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
 import Grid from '@mui/material/Grid';
@@ -18,9 +16,6 @@ import { CustomBreadcrumbs } from 'src/components/custom-breadcrumbs';
 // ----------------------------------------------------------------------
 
 export default function StoreStorefrontPage() {
-  useEffect(() => {
-    document.title = 'Store | STUDIO360';
-  }, []);
 
   const storefrontModules = [
     {

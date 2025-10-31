@@ -15,7 +15,7 @@ import { fNumber } from 'src/utils/format-number';
 
 import { Iconify } from 'src/components/iconify';
 import { Chart, useChart } from 'src/components/chart';
-import { supabase } from 'src/auth/context/jwt/supabaseClient';
+// Realtime removed in mock-only mode
 
 // ----------------------------------------------------------------------
 
@@ -55,135 +55,39 @@ export function AnalyticsAiForecast() {
     loadForecastData();
   }, [selectedType]);
 
-  // Polling and refetch on tab focus/visibility change
-  useEffect(() => {
-    let intervalId;
-
-    const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        loadForecastData();
-      }
-    };
-
-    // Start polling every 30s
-    intervalId = setInterval(() => {
-      loadForecastData();
-    }, 30000);
-
-    // Refetch when tab becomes visible
-    if (typeof document !== 'undefined') {
-      document.addEventListener('visibilitychange', onVisibility);
-      window.addEventListener('focus', onVisibility);
-    }
-
-    return () => {
-      if (intervalId) clearInterval(intervalId);
-      if (typeof document !== 'undefined') {
-        document.removeEventListener('visibilitychange', onVisibility);
-        window.removeEventListener('focus', onVisibility);
-      }
-    };
-  }, [selectedType]);
-
-  // Supabase Realtime subscription to receipts/disbursements
-  useEffect(() => {
-    let debounceTimer;
-    const triggerRefetch = () => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        loadForecastData();
-      }, 500);
-    };
-
-    const channel = supabase
-      .channel('financial-forecast-stream')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cash_receipt_journal' },
-        triggerRefetch
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'cash_disbursement_book' },
-        triggerRefetch
-      )
-      .subscribe((status) => {
-        // no-op; rely on events
-      });
-
-    return () => {
-      try { supabase.removeChannel(channel); } catch (_) {}
-      clearTimeout(debounceTimer);
-    };
-  }, [selectedType]);
+  // Polling and realtime removed in mock-only mode
 
   const loadForecastData = async () => {
     try {
       setLoading(true);
       setError('');
-
-      // Detect server URL
-      const base = await detectServerUrl();
-      
-      // Use Prophet for sophisticated financial forecasting
-      const response = await fetch(`${base}/api/analytics/financial-forecast`, {
+      if (process.env.NEXT_PUBLIC_DASHBOARD_MOCK === 'true') {
+        const mock = {
+          actual: [12000,14500,13200,14800,16000,17200,18000,19000,20500,21000,22500,24000],
+          forecast: [25000,26000,27000,28000,29000,30000],
+          confidence: 82,
+          type: selectedType,
+        };
+        setForecastData(mock);
+        return;
+      }
+      const res = await fetch(`/api/analytics/financial-forecast`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          year: new Date().getFullYear(),
-          type: selectedType // 'sales' or 'expenses'
-        })
+        body: JSON.stringify({ year: new Date().getFullYear(), type: selectedType })
       });
-      
-      const json = await response.json();
-      if (!response.ok || !json.success) {
-        throw new Error(json.message || 'Failed to load forecast data');
-      }
-      
+      const json = await res.json();
+      if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to load forecast');
       setForecastData(json.data);
     } catch (e) {
-      setError(e.message);
-      // Fallback to empty data
-      setForecastData({
-        actual: Array(12).fill(0),
-        forecast: Array(6).fill(0),
-        confidence: 0
-      });
+      setError(e.message || 'Failed to load');
+      setForecastData({ actual: Array(12).fill(0), forecast: Array(6).fill(0), confidence: 0, type: selectedType });
     } finally {
       setLoading(false);
     }
   };
 
-  const detectServerUrl = async () => {
-    try {
-      const cached = sessionStorage.getItem('serverUrl:detected');
-      if (cached) return cached;
-    } catch (_) {}
-    
-    const candidates = [
-      CONFIG.site.serverUrl,
-      typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
-      typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
-      'http://localhost:3001',
-      'http://localhost:3021',
-      'http://127.0.0.1:3001',
-      'http://127.0.0.1:3021',
-    ].filter(Boolean);
-    
-    for (const base of candidates) {
-      try {
-        const ac = new AbortController();
-        const t = setTimeout(() => ac.abort(), 2500);
-        const r = await fetch(`${base}/api/health`, { signal: ac.signal });
-        clearTimeout(t);
-        if (r.ok) {
-          try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
-          return base;
-        }
-      } catch (_) {}
-    }
-    return CONFIG.site.serverUrl;
-  };
+  // Server URL detection removed in mock-only mode
 
   // Get actual and forecast data from API or fallback to zeros
   const actualData = forecastData?.actual || Array(12).fill(0);

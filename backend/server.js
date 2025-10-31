@@ -117,8 +117,8 @@ try { app.use('/api/ai', require('./api/ai/ai.routes')); } catch (_) { console.w
 try { app.use('/api/invoices', require('./api/invoices/invoices.routes')); } catch (_) { console.warn('Invoice routes missing'); }
 try { app.use('/api/notifications', require('./api/notifications/notifications.routes')); } catch (_) { console.warn('Notifications routes missing'); }
 try { app.use('/api/bookkeeping', require('./api/bookkeeping/bookkeeping.routes')); } catch (_) { console.warn('Bookkeeping routes missing'); }
-try { app.use('/api/analytics', require('./api/analytics/analytics.routes')); } catch (_) { console.warn('Analytics routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/product-forecasting.routes')); } catch (_) { console.warn('Product forecasting routes missing'); }
+try { app.use('/api/analytics', require('./api/analytics/analytics.routes')); } catch (_) { console.warn('Analytics routes missing'); }
 try { app.use('/api/analytics', require('./api/analytics/financial-forecasting.routes')); } catch (_) { console.warn('Financial forecasting routes missing'); }
 try { app.use('/api/vouchers', require('./api/vouchers/vouchers.routes')); } catch (_) { console.warn('Voucher routes missing'); }
 try { app.use('/api/mail', require('./api/mail/mail.routes')); } catch (_) { console.warn('Mail routes missing'); }

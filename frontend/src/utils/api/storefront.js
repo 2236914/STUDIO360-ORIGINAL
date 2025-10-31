@@ -4,6 +4,15 @@ import { CONFIG } from 'src/config-global';
 
 const API_URL = CONFIG.site.serverUrl;
 
+// Simple in-memory caches (5–10s) to smooth bursts on free tiers
+const _cache = {
+  homepage: new Map(), // key: shopName -> { ts, data }
+  products: new Map(), // key: shopName -> { ts, data }
+  info: new Map(), // optional
+};
+const CACHE_MS_SHORT = 5000;
+const CACHE_MS_MED = 10000;
+
 /**
  * Public storefront API - No authentication required
  */
@@ -71,7 +80,13 @@ export const storefrontApi = {
    */
   async getShopInfo(shopName) {
     try {
+      // optional short cache
+      const ck = String(shopName || '');
+      const e = _cache.info.get(ck);
+      const now = Date.now();
+      if (e && now - e.ts < CACHE_MS_SHORT) return e.data;
       const response = await client.get(`/public/storefront/${shopName}/info`);
+      _cache.info.set(ck, { ts: now, data: response.data });
       return response.data;
     } catch (error) {
       console.error('Error fetching shop info:', error);
@@ -104,9 +119,15 @@ export const storefrontApi = {
       
       // Add a small delay to ensure backend is ready
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
+      const ck = String(shopName || '');
+      const e = _cache.products.get(ck);
+      const now = Date.now();
+      if (e && now - e.ts < CACHE_MS_MED) return e.data;
+
       const response = await client.get(`/public/storefront/${shopName}/products`);
       console.log('Products response:', response.data);
+      _cache.products.set(ck, { ts: now, data: response.data });
       return response.data;
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -121,6 +142,19 @@ export const storefrontApi = {
           timeout: error.config?.timeout
         }
       });
+      throw error;
+    }
+  },
+
+  /**
+   * Fetch a single product by slug for a store
+   */
+  async getProductBySlug(shopName, slug) {
+    try {
+      const response = await client.get(`/public/storefront/${shopName}/products/${slug}`);
+      return response.data;
+    } catch (error) {
+      console.error('Error fetching product by slug:', error);
       throw error;
     }
   },
@@ -173,7 +207,12 @@ export const storefrontApi = {
    */
   async getHomepage(shopName) {
     try {
+      const ck = String(shopName || '');
+      const e = _cache.homepage.get(ck);
+      const now = Date.now();
+      if (e && now - e.ts < CACHE_MS_MED) return e.data;
       const response = await client.get(`/public/storefront/${shopName}/homepage`);
+      _cache.homepage.set(ck, { ts: now, data: response.data });
       return response.data;
     } catch (error) {
       console.error('Error fetching homepage data:', error);
@@ -187,7 +226,8 @@ export const storefrontApi = {
   async getCoupon(shopName) {
     try {
       const response = await client.get(`/public/storefront/${shopName}/coupon`);
-      return { success: true, data: response.data };
+      // Normalize to return the coupon object directly for UI consumption
+      return { success: true, data: response.data?.data ?? null };
     } catch (error) {
       console.error('Error fetching coupon data:', error);
       return { success: false, data: null };

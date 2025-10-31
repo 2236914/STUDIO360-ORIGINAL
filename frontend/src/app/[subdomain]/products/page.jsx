@@ -578,10 +578,7 @@ export default function SubdomainProductsPage({ params }) {
     );
   }
 
-  // Set page title
-  useEffect(() => {
-    document.title = `Our Collection | ${subdomain} | STUDIO360`;
-  }, [subdomain]);
+  // Title is handled via route segment generateMetadata
 
   return (
     <CheckoutProvider>

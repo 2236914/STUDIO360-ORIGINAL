@@ -75,6 +75,33 @@ class InventoryService {
   }
 
   /**
+   * Get public product by slug for a user
+   */
+  async getProductBySlug(userId, slug) {
+    try {
+      const { data, error } = await supabase
+        .from('inventory_products')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('slug', slug)
+        .eq('status', 'active')
+        .is('deleted_at', null)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') return null; // not found
+        console.error('Error fetching product by slug:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in getProductBySlug:', error);
+      return null;
+    }
+  }
+
+  /**
    * Create product
    */
   async createProduct(userId, productData) {

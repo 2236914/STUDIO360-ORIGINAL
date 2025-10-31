@@ -13,20 +13,17 @@ import { useSettingsContext } from 'src/components/settings';
 
 const KPI_DATA = [
   {
-    title: 'Customer Satisfaction',
-    value: '0',
+    title: 'On-Time Fulfillment Rate',
     percentage: 0,
-    icon: 'eva:star-fill',
+    icon: 'eva:clock-fill',
   },
   {
     title: 'Order Fulfillment Rate',
-    value: '0',
     percentage: 0,
     icon: 'eva:checkmark-circle-2-fill',
   },
   {
-    title: 'Customer Retention Rate',
-    value: '0',
+    title: 'Repeat Customer Rate',
     percentage: 0,
     icon: 'eva:people-fill',
   },
@@ -124,7 +121,7 @@ export function AnalyticsKpiCards() {
             {/* Content */}
             <Box sx={{ flexGrow: 1 }}>
               <Typography variant="h3" sx={{ color: 'white', fontWeight: 700, mb: 0.5 }}>
-                {kpi.value}
+                {(Number(kpi.percentage) || 0).toFixed(1)}%
               </Typography>
               <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
                 {kpi.title}

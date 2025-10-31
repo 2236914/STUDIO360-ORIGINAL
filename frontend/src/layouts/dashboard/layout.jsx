@@ -8,13 +8,14 @@ import { iconButtonClasses } from '@mui/material/IconButton';
 
 import { useBoolean } from 'src/hooks/use-boolean';
 
-import { _contacts, _notifications } from 'src/_mock';
+import { _notifications } from 'src/_mock';
 import { varAlpha, stylesMode } from 'src/theme/styles';
 
 import { bulletColor } from 'src/components/nav-section';
 import { WelcomePopup } from 'src/components/welcome-popup';
 import { SystemAnnouncementBanner } from 'src/components/system-announcement-banner';
 import { useSettingsContext } from 'src/components/settings';
+import { useAuthContext } from 'src/auth/hooks';
 
 import { Main } from './main';
 import { NavMobile } from './nav-mobile';
@@ -34,6 +35,8 @@ export function DashboardLayout({ sx, children, data }) {
   const mobileNavOpen = useBoolean();
 
   const settings = useSettingsContext();
+  const { user } = useAuthContext();
+  const isSeller = user?.role === 'seller';
 
   const navColorVars = useNavColorVars(theme, settings);
 
@@ -72,7 +75,7 @@ export function DashboardLayout({ sx, children, data }) {
             data={{
               nav: navData,
               account: _account,
-              contacts: _contacts,
+              contacts: [],
               // workspaces removed
               notifications: _notifications,
             }}
@@ -81,8 +84,8 @@ export function DashboardLayout({ sx, children, data }) {
               purchase: false,
               helpLink: false,
               localization: false,
-              contacts: false,
-              notifications: false,
+              contacts: !!isSeller,
+              notifications: !!isSeller,
             }}
             slots={{
               topArea: (

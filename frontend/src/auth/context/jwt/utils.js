@@ -85,9 +85,9 @@ export function tokenExpired(exp) {
 
   setTimeout(() => {
     try {
-      alert('Token expired!');
-      sessionStorage.removeItem(STORAGE_KEY);
-      window.location.href = paths.auth.jwt.signIn;
+      // Supabase auto-refreshes tokens; avoid hard redirect/logout here.
+      // Let the auth provider re-validate session gracefully on visibility/activity.
+      // If using pure JWT without refresh, app-level checks will handle redirect.
     } catch (error) {
       console.error('Error during token expiration:', error);
       throw error;

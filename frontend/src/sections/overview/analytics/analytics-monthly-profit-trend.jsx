@@ -44,86 +44,22 @@ export function AnalyticsMonthlyProfitTrend() {
         setLoading(true);
         setError('');
         const cacheKey = `profit-trend:${year}`;
-        let localSnapshot = null;
-        try {
-          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-          if (cached) localSnapshot = cached;
-          if (cached && !cancelled) setData(cached);
-        } catch (_) {}
-        async function detectServerUrl() {
-          try {
-            const cached = sessionStorage.getItem('serverUrl:detected');
-            if (cached) return cached;
-          } catch (_) {}
-          const candidates = [
-            CONFIG.site.serverUrl,
-            typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
-            typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
-            'http://localhost:3001',
-            'http://localhost:3021',
-            'http://127.0.0.1:3001',
-            'http://127.0.0.1:3021',
-          ].filter(Boolean);
-          for (const base of candidates) {
-            try {
-              const ac = new AbortController();
-              const t = setTimeout(() => ac.abort(), 2500);
-              // Use backend status endpoint for detection
-              const r = await fetch(`${base}/api/status`, { signal: ac.signal });
-              clearTimeout(t);
-              if (r.ok) {
-                try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
-                return base;
-              }
-            } catch (_) {}
-          }
-          return CONFIG.site.serverUrl;
+        if (process.env.NEXT_PUBLIC_DASHBOARD_MOCK === 'true') {
+          const sales = [12000,14500,13200,14800,16000,17200,18000,19000,20500,21000,22500,24000];
+          const expenses = [9000,9200,9500,9700,10200,11000,11200,11800,12000,12500,13000,13500];
+          const snap = { sales, expenses, months: MONTHS, lastUpdated: new Date().toISOString(), source: 'mock' };
+          setData(snap);
+          try { localStorage.setItem(cacheKey, JSON.stringify(snap)); } catch (_) {}
+          return;
         }
-        const base = await detectServerUrl();
-        const res = await fetch(`${base}/api/analytics/profit?year=${year}`);
+        // Real API
+        const res = await fetch(`/api/analytics/profit?year=${year}`);
         const json = await res.json();
         if (!res.ok || !json?.success) throw new Error(json?.message || 'Failed to load');
-        if (!cancelled) {
-          const payload = json.data || {};
-          const hasAny = Array.isArray(payload?.sales) && payload.sales.some((v)=>Number(v)>0) || Array.isArray(payload?.expenses) && payload.expenses.some((v)=>Number(v)>0);
-          if (hasAny) {
-            setData(payload);
-            try { localStorage.setItem(cacheKey, JSON.stringify(payload)); } catch (_) {}
-            // sync to backend cache for persistence
-            try {
-              await fetch(`${base}/api/analytics/profit/cache`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-              });
-            } catch (_) {}
-          } else if (localSnapshot) {
-            // seed backend cache if API has no data but we have local snapshot
-            setData(localSnapshot);
-            try {
-              await fetch(`${base}/api/analytics/profit/cache`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(localSnapshot),
-              });
-            } catch (_) {}
-          } else {
-            // Try backend cache explicitly
-            try {
-              const r = await fetch(`${base}/api/analytics/profit/cache?year=${year}`);
-              const j = await r.json();
-              const cached = j?.data;
-              if (r.ok && cached) {
-                setData(cached);
-                try { localStorage.setItem(cacheKey, JSON.stringify(cached)); } catch (_) {}
-              } else {
-                setData(payload);
-              }
-            } catch (_) {
-              setData(payload);
-            }
-          }
-        }
+        const payload = json.data || {};
+        setData({ ...payload, months: MONTHS, lastUpdated: new Date().toISOString(), source: 'api' });
+        try { localStorage.setItem(cacheKey, JSON.stringify(payload)); } catch (_) {}
+        return;
       } catch (e) {
         if (!cancelled) {
           // try local cache if available

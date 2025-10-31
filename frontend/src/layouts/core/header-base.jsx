@@ -184,21 +184,7 @@ export function HeaderBase({
                 {/* -- Settings popover -- */}
                 {settings && <SettingsPopover data-slot="settings" />}
 
-                {/* -- Support (seller-only) -- */}
-                {isSeller && (
-                  <Tooltip title="Support">
-                    <IconButton
-                      component={m.button}
-                      whileTap="tap"
-                      whileHover="hover"
-                      variants={varHover(1.05)}
-                      onClick={handleOpenSupport}
-                      sx={{ color: 'text.primary' }}
-                    >
-                      <Iconify icon="eva:headphones-fill" width={24} />
-                    </IconButton>
-                  </Tooltip>
-                )}
+                {/* -- Support (seller-only) -- removed headset icon (now handled via ContactsPopover) -- */}
 
                 {/* -- Account drawer -- */}
                 {account && <AccountPopover data-slot="account" data={data?.account} />}

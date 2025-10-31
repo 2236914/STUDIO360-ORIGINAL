@@ -17,7 +17,7 @@ import { _analyticsWidgets } from 'src/_mock/_overview';
 
 // ----------------------------------------------------------------------
 
-export const metadata = { title: `Dashboard - Kitsch Studio` };
+export const metadata = { robots: { index: false, follow: false } };
 
 export default async function Page() {
   const widgets = await _analyticsWidgets();

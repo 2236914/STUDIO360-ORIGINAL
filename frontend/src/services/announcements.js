@@ -14,41 +14,19 @@ async function authFetch(path, options = {}) {
 }
 
 // Public: Get active system announcements
+// Simple 60s in-memory cache
+let _annCache = { ts: 0, data: [] };
+
 async function listSystemAnnouncements() {
   try {
     const isBrowser = typeof window !== 'undefined';
-    async function detectServerUrl() {
-      try {
-        const cached = isBrowser ? sessionStorage.getItem('serverUrl:detected') : null;
-        if (cached) return cached;
-      } catch (_) {}
-      const candidates = [
-        CONFIG.site.serverUrl,
-        isBrowser ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
-        isBrowser ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
-        'http://localhost:3001',
-        'http://localhost:3021',
-        'http://127.0.0.1:3001',
-        'http://127.0.0.1:3021',
-      ].filter(Boolean);
-      for (const base of candidates) {
-        try {
-          const ac = new AbortController();
-          const t = setTimeout(() => ac.abort(), 2000);
-          const r = await fetch(`${base}/api/status`, { signal: ac.signal });
-          clearTimeout(t);
-          if (r.ok) {
-            try { if (isBrowser) sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
-            return base;
-          }
-        } catch (_) {}
-      }
-      return CONFIG.site.serverUrl;
+    // Return cached within 60s
+    const now = Date.now();
+    if (_annCache.ts && now - _annCache.ts < 60000) {
+      return _annCache.data;
     }
 
-    const base = await detectServerUrl();
-    const primary = `${base}/api/announcements/system`;
-    const fallback = '/api/announcements/system';
+    const primary = `${CONFIG.site.serverUrl}/api/announcements/system`;
 
     async function fetchOnce(url) {
       const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
@@ -59,7 +37,9 @@ async function listSystemAnnouncements() {
     let { ok, json } = await fetchOnce(primary);
     if (!ok) ({ ok, json } = await fetchOnce(fallback));
     if (!ok) return [];
-    return json?.data ?? json;
+    const data = json?.data ?? json;
+    _annCache = { ts: Date.now(), data };
+    return data;
   } catch (error) {
     console.error('Error fetching system announcements:', error);
     console.error('[Announcements] Server URL:', CONFIG.site.serverUrl);
@@ -70,6 +50,11 @@ async function listSystemAnnouncements() {
 // Admin: Get all announcements
 async function listAllAnnouncements() {
   return authFetch('/api/announcements/admin/list', { method: 'GET' });
+}
+
+// Authenticated users (e.g., sellers): Get all announcements
+async function listAllAnnouncementsForUsers() {
+  return authFetch('/api/announcements/system/all', { method: 'GET' });
 }
 
 // Admin: Create announcement
@@ -98,6 +83,7 @@ async function deleteSystemAnnouncement(id) {
 export default {
   listSystemAnnouncements,
   listAllAnnouncements,
+  listAllAnnouncementsForUsers,
   createSystemAnnouncement,
   updateSystemAnnouncement,
   deleteSystemAnnouncement,

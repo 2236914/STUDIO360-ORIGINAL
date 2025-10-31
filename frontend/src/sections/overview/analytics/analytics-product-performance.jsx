@@ -320,53 +320,67 @@ export function AnalyticsProductPerformance({ hideHeader = false, showTableOnly 
         return;
       }
 
-      // Detect server URL
-      const base = await detectServerUrl();
-      
+      if (process.env.NEXT_PUBLIC_DASHBOARD_MOCK === 'true') {
+        // Populate mock datasets
+        const mk = (i)=>({ id:`p${i}`, name:`Product ${i+1}`, category:'General' });
+        const products = Array.from({length:10},(_,i)=>({
+          product: mk(i), totalSales: 1000 + i*500, growthRate: (i%5)-1,
+          avgMonthlySales: 80 + i*5, conversionRate: 2 + (i%4), seasonality: 'Stable',
+          actualSales: [120,140,130,150,160,170,180,190,200,210,220,230], forecast: [240,250,260], confidence: 80 - i,
+        }));
+        const categories = [
+          { category: { id:'c1', name:'Apparel', productCount: 25 }, totalRevenue: 120000, growthRate: 6, seasonality: 'Q4 peak', actualRevenue: [9,10,11,12,13,14,15,16,17,18,19,20], forecast: [21,22,23], confidence: 78 },
+          { category: { id:'c2', name:'Accessories', productCount: 18 }, totalRevenue: 80000, growthRate: 3, seasonality: 'Steady', actualRevenue: [5,6,6,7,7,8,8,8,9,9,10,10], forecast: [10,11,11], confidence: 72 },
+        ];
+        const inv = { summary: { totalProducts: 120, urgentReorders: 6, lowStockCount: 12, avgDaysSupply: 24 }, inventory: [] };
+        dataCache.productData = { year: selectedYear, products, summary: { totalProducts: products.length } };
+        dataCache.categoryData = { year: selectedYear, categories };
+        dataCache.inventoryData = inv;
+        dataCache.cacheKey = cacheKey;
+        dataCache.lastFetch = Date.now();
+        if (selectedView === 'products') setProductData(dataCache.productData);
+        else if (selectedView === 'categories') setCategoryData(dataCache.categoryData);
+        else if (selectedView === 'inventory') setInventoryData(dataCache.inventoryData);
+        setLoading(false);
+        return;
+      }
+
+      // Real API paths
       if (selectedView === 'products') {
-        const response = await fetch(`${base}/api/analytics/products/forecast`, {
+        const response = await fetch(`/api/analytics/products/forecast`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ year: selectedYear, limit: 10, dataSource })
         });
         const json = await response.json();
         if (!response.ok || !json.success) throw new Error(json.message || 'Failed to load product data');
-        
-        // Update cache
         dataCache.productData = json.data;
         dataCache.cacheKey = cacheKey;
         dataCache.lastFetch = Date.now();
-        
         setProductData(json.data);
       } else if (selectedView === 'categories') {
-        const response = await fetch(`${base}/api/analytics/products/categories/forecast`, {
+        const response = await fetch(`/api/analytics/products/categories/forecast`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ year: selectedYear })
         });
         const json = await response.json();
         if (!response.ok || !json.success) throw new Error(json.message || 'Failed to load category data');
-        
-        // Update cache
         dataCache.categoryData = json.data;
         dataCache.cacheKey = cacheKey;
         dataCache.lastFetch = Date.now();
-        
         setCategoryData(json.data);
       } else if (selectedView === 'inventory') {
-        const response = await fetch(`${base}/api/analytics/products/inventory/forecast`, {
+        const response = await fetch(`/api/analytics/products/inventory/forecast`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ year: selectedYear })
         });
         const json = await response.json();
         if (!response.ok || !json.success) throw new Error(json.message || 'Failed to load inventory data');
-        
-        // Update cache
         dataCache.inventoryData = json.data;
         dataCache.cacheKey = cacheKey;
         dataCache.lastFetch = Date.now();
-        
         setInventoryData(json.data);
       }
     } catch (e) {
@@ -376,36 +390,7 @@ export function AnalyticsProductPerformance({ hideHeader = false, showTableOnly 
     }
   };
 
-  const detectServerUrl = async () => {
-    try {
-      const cached = sessionStorage.getItem('serverUrl:detected');
-      if (cached) return cached;
-    } catch (_) {}
-    
-    const candidates = [
-      CONFIG.site.serverUrl,
-      typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
-      typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
-      'http://localhost:3001',
-      'http://localhost:3021',
-      'http://127.0.0.1:3001',
-      'http://127.0.0.1:3021',
-    ].filter(Boolean);
-    
-    for (const base of candidates) {
-      try {
-        const ac = new AbortController();
-        const t = setTimeout(() => ac.abort(), 2500);
-        const r = await fetch(`${base}/api/health`, { signal: ac.signal });
-        clearTimeout(t);
-        if (r.ok) {
-          try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
-          return base;
-        }
-      } catch (_) {}
-    }
-    return CONFIG.site.serverUrl;
-  };
+  // Removed base URL probing – rely on Next.js proxy rewrites
 
   const chartOptions = useChart({
     chart: {

@@ -2,6 +2,63 @@ const { supabase } = require('./supabaseClient');
 
 class StorePagesService {
   // ============================================
+  // SEO SETTINGS METHODS
+  // ============================================
+
+  async getSeoSettings(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('store_seo_settings')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+
+      // If table or row doesn't exist, treat as no data
+      if (error && error.code !== 'PGRST116' && error.code !== '42P01') {
+        console.error('Error fetching SEO settings:', error);
+        return null;
+      }
+      return data || null;
+    } catch (error) {
+      console.error('Error in getSeoSettings:', error);
+      return null;
+    }
+  }
+
+  async upsertSeoSettings(userId, seoData) {
+    try {
+      const payload = {
+        user_id: userId,
+        title: seoData.title ?? null,
+        description: seoData.description ?? null,
+        social_title: seoData.social_title ?? null,
+        social_description: seoData.social_description ?? null,
+        social_image_url: seoData.social_image_url ?? null,
+        canonical_url: seoData.canonical_url ?? null,
+      };
+
+      const { data, error } = await supabase
+        .from('store_seo_settings')
+        .upsert([payload], { onConflict: 'user_id' })
+        .select()
+        .single();
+
+      if (error) {
+        if (error.code === '42P01') {
+          // Table missing in this environment; return null gracefully
+          return null;
+        }
+        console.error('Error upserting SEO settings:', error);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.error('Error in upsertSeoSettings:', error);
+      return null;
+    }
+  }
+  // ============================================
   // HOMEPAGE METHODS
   // ============================================
 

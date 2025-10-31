@@ -1,37 +1,48 @@
 import { experimental_extendTheme as extendTheme } from '@mui/material/styles';
 
 import { setFont } from './styles/utils';
-import { overridesTheme } from './overrides-theme';
 import { shadows, typography, components, colorSchemes, customShadows } from './core';
 import { updateCoreWithSettings, updateComponentsWithSettings } from './with-settings/update-theme';
 
 // ----------------------------------------------------------------------
 
 export function createTheme(settings) {
+  // 1) Compute settings-specific component overrides
+  const settingsComponents = updateComponentsWithSettings(settings).components || {};
+
+  // 2) Shallow-merge components BEFORE calling extendTheme to avoid deep-merge circular refs
+  const mergedComponents = {};
+  Object.keys(components || {}).forEach((key) => {
+    mergedComponents[key] = components[key];
+  });
+  Object.keys(settingsComponents || {}).forEach((key) => {
+    if (settingsComponents[key]) {
+      mergedComponents[key] = settingsComponents[key];
+    }
+  });
+
   const initialTheme = {
     colorSchemes,
     shadows: shadows(settings.colorScheme),
     customShadows: customShadows(settings.colorScheme),
     direction: settings.direction,
     shape: { borderRadius: 8 },
-    components,
-    typography: {
-      ...typography,
-      fontFamily: setFont(settings.fontFamily),
-    },
+    components: mergedComponents,
+    typography: (() => {
+      const t = {};
+      Object.keys(typography || {}).forEach((k) => { t[k] = typography[k]; });
+      t.fontFamily = setFont(settings.fontFamily);
+      return t;
+    })(),
     cssVarPrefix: '',
     shouldSkipGeneratingVar,
   };
 
-  /**
-   * 1.Update values from settings before creating theme.
-   */
-  const updateTheme = updateCoreWithSettings(initialTheme, settings);
+  // 3) Update core values safely (no theme spread inside)
+  const themeConfig = updateCoreWithSettings(initialTheme, settings);
 
-  /**
-   * 2.Create theme + add locale + update component with settings.
-   */
-  const theme = extendTheme(updateTheme, updateComponentsWithSettings(settings), overridesTheme);
+  // 4) Create theme from a SINGLE config object to avoid deep-merge across multiple arguments
+  const theme = extendTheme(themeConfig);
 
   return theme;
 }

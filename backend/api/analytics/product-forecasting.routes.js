@@ -666,11 +666,12 @@ async function runProphetForecast(monthlySales, year) {
     const pythonCandidates = [
       process.env.PYTHON_PATH,
       path.join(process.cwd(), 'python', '.venv', 'Scripts', 'python.exe'),
+      path.join(__dirname, '..', '..', 'python', '.venv', 'Scripts', 'python.exe'),
       'python',
       'py',
     ].filter(Boolean);
     
-    const script = path.join(process.cwd(), 'backend', 'python', 'forecast_sales.py');
+    const script = path.join(__dirname, '..', '..', 'python', 'forecast_sales.py');
     if (!fs.existsSync(script)) {
       console.log('Prophet script not found, using fallback forecast');
       return generateFallbackForecast(monthlySales);

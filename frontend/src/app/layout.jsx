@@ -27,11 +27,35 @@ export const viewport = {
 };
 
 export const metadata = {
-  title: 'STUDIO360 - AI-Powered Bookkeeping',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://your-domain.com'),
+  title: {
+    default: 'STUDIO360 - AI-Powered Bookkeeping',
+    template: '%s | STUDIO360',
+  },
   description: 'Professional bookkeeping system with AI automation',
   icons: [
     { rel: 'icon', url: '/favicon.ico' },
   ],
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    type: 'website',
+    siteName: 'STUDIO360',
+    title: 'STUDIO360 - AI-Powered Bookkeeping',
+    description: 'Professional bookkeeping system with AI automation',
+    url: '/',
+    images: [
+      { url: '/og-default.jpg', width: 1200, height: 630 },
+    ],
+  },
+  twitter: {
+    card: 'summary_large_image',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
 };
 
 export default async function RootLayout({ children }) {

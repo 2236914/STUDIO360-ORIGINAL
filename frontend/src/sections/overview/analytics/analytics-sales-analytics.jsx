@@ -47,106 +47,30 @@ export function AnalyticsSalesAnalytics() {
       try {
         setLoading(true);
         setError('');
-        // Try local cache first for instant paint
         const cacheKey = `sales-analytics:${year}`;
-        let localSnapshot = null;
-        try {
-          const cached = JSON.parse(localStorage.getItem(cacheKey) || 'null');
-          if (cached) localSnapshot = cached;
-          if (cached && !cancelled) setSeriesState(cached);
-        } catch (_) {}
-
-        async function detectServerUrl() {
-          try {
-            const cached = sessionStorage.getItem('serverUrl:detected');
-            if (cached) return cached;
-          } catch (_) {}
-          const candidates = [
-            CONFIG.site.serverUrl,
-            typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3001')}` : null,
-            typeof window !== 'undefined' ? `${window.location.origin.replace(/:\d+$/, ':3021')}` : null,
-            'http://localhost:3001',
-            'http://localhost:3021',
-            'http://127.0.0.1:3001',
-            'http://127.0.0.1:3021',
-          ].filter(Boolean);
-          for (const base of candidates) {
-            try {
-              const ac = new AbortController();
-              const t = setTimeout(() => ac.abort(), 2500);
-              // Prefer backend status endpoint
-              const r = await fetch(`${base}/api/status`, { signal: ac.signal });
-              clearTimeout(t);
-              if (r.ok) {
-                try { sessionStorage.setItem('serverUrl:detected', base); } catch (_) {}
-                return base;
-              }
-            } catch (_) {}
-          }
-          return CONFIG.site.serverUrl;
+        if (process.env.NEXT_PUBLIC_DASHBOARD_MOCK === 'true') {
+          const mock = {
+            months: MONTHS,
+            series: {
+              '360': [4000,5200,4800,5300,5600,5900,6200,6400,6800,7000,7400,7800],
+              'Shopee': [2600,2800,3000,3200,3400,3600,3800,3900,4100,4300,4500,4700],
+              'TikTok Shop': [1200,1300,1400,1500,1600,1700,1800,1900,2000,2100,2200,2300],
+            },
+            hasData: true,
+            lastUpdated: new Date().toISOString(),
+            yoy: 0.11,
+            yoySource: 'mock',
+          };
+          setSeriesState(mock);
+          try { localStorage.setItem(cacheKey, JSON.stringify(mock)); } catch (_) {}
+          return;
         }
-
-        async function fetchWithFallback() {
-          const base = await detectServerUrl();
-          const primary = `${base}/api/analytics/sales?year=${year}`;
-          const fallback = `/api/analytics/sales?year=${year}`;
-          try {
-            const res1 = await fetch(primary);
-            const json1 = await res1.json();
-            if (!res1.ok || !json1?.success) throw new Error(json1?.message || `HTTP ${res1.status}`);
-            return json1;
-          } catch (e1) {
-            // try relative path
-            const res2 = await fetch(fallback);
-            const json2 = await res2.json();
-            if (!res2.ok || !json2?.success) throw new Error(json2?.message || `HTTP ${res2.status}`);
-            return json2;
-          }
-        }
-
-        const json = await fetchWithFallback();
+        // Real API
+        const res = await fetch(`/api/analytics/sales?year=${year}`);
+        const json = await res.json();
+        if (!res.ok || !json?.success) throw new Error(json?.message || `HTTP ${res.status}`);
         if (!cancelled) {
-          const base = await detectServerUrl();
-          const data = json.data || {};
-          const hasData = !!data.hasData;
-          // If API has data, persist to local and backend cache
-          if (hasData) {
-            setSeriesState(data);
-            try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (_) {}
-            // Fire-and-forget sync to backend cache to survive restarts
-            try {
-              await fetch(`${base}/api/analytics/sales/cache`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data),
-              });
-            } catch (_) {}
-          } else if (localSnapshot && localSnapshot.hasData) {
-            // If API has no data (e.g., no DB and no server cache yet), seed server cache from local snapshot
-            setSeriesState(localSnapshot);
-            try {
-              await fetch(`${base}/api/analytics/sales/cache`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(localSnapshot),
-              });
-            } catch (_) {}
-          } else {
-            // Try backend cache explicitly
-            try {
-              const r = await fetch(`${base}/api/analytics/sales/cache?year=${year}`);
-              const j = await r.json();
-              const cached = j?.data;
-              if (r.ok && cached && cached.hasData) {
-                setSeriesState(cached);
-                try { localStorage.setItem(cacheKey, JSON.stringify(cached)); } catch (_) {}
-              } else {
-                setSeriesState(data);
-              }
-            } catch (_) {
-              setSeriesState(data);
-            }
-          }
+          // persist to local cache
         }
       } catch (e) {
         if (!cancelled) {

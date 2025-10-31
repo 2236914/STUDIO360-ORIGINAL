@@ -22,6 +22,9 @@ export function AuthProvider({ children }) {
     loading: true,
   });
 
+  // Debounce health check for 60s
+  let healthTsRef = { ts: 0 };
+
   const checkUserSession = useCallback(async () => {
     console.log('checkUserSession called');
     
@@ -30,22 +33,21 @@ export function AuthProvider({ children }) {
         // Backend bootId check to detect server restarts
         let backendBootId = null;
         try {
-        const resp = await fetch(`${CONFIG.site.serverUrl}/api/health`, { cache: 'no-store' });
-        if (resp.ok) {
-          const j = await resp.json();
-          backendBootId = j?.bootId || null;
-          if (backendBootId && typeof window !== 'undefined') {
-            const prev = sessionStorage.getItem('backend-boot-id');
-            if (!prev) {
-              sessionStorage.setItem('backend-boot-id', backendBootId);
-            } else if (prev !== backendBootId) {
-              // Backend restarted: force sign-out once
-              await supabase.auth.signOut();
-              await removeSession();
-              sessionStorage.setItem('backend-boot-id', backendBootId);
-              setState({ user: null, loading: false });
-              if (typeof window !== 'undefined') window.location.href = '/auth/jwt/sign-in';
-              return;
+        const now = Date.now();
+        if (!healthTsRef.ts || now - healthTsRef.ts > 60000) {
+          const resp = await fetch(`${CONFIG.site.serverUrl}/api/health`, { cache: 'no-store' });
+          healthTsRef.ts = Date.now();
+          if (resp.ok) {
+            const j = await resp.json();
+            backendBootId = j?.bootId || null;
+            if (backendBootId && typeof window !== 'undefined') {
+              const prev = sessionStorage.getItem('backend-boot-id');
+              if (!prev) {
+                sessionStorage.setItem('backend-boot-id', backendBootId);
+              } else if (prev !== backendBootId) {
+                // Backend restarted: do not force sign-out; update marker and continue
+                sessionStorage.setItem('backend-boot-id', backendBootId);
+              }
             }
           }
         }
@@ -68,14 +70,7 @@ export function AuthProvider({ children }) {
             return;
           }
 
-          // Check if token is expired (older than 1 day)
-          const oneDay = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
-          const isExpired = (Date.now() - timestamp) > oneDay;
-          if (isExpired) {
-            console.log('Session has expired, logging out...');
-            await logout();
-            return;
-          }
+          // Do not enforce arbitrary 1-day local timestamp expiry; rely on auth provider session validity
 
           // Validate token with Supabase (persisted across refresh)
           console.log('Validating session with Supabase...');
@@ -172,26 +167,24 @@ export function AuthProvider({ children }) {
     }
   }, [setState]);
 
-  // Check session on mount
+  // Check session on mount and set up listeners only when authenticated
   useEffect(() => {
     checkUserSession();
-    
-    // Set up visibility change handler to check session when tab becomes visible
+
+    // Visibility change listener always ok
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         checkUserSession();
       }
     };
-    
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Idle auto-logout (1 hour of no activity)
+    // Only attach idle listeners when a user is present to avoid issues on auth pages
     let idleTimer;
     const IDLE_MS = 60 * 60 * 1000;
     const resetIdle = () => {
       if (idleTimer) clearTimeout(idleTimer);
       idleTimer = setTimeout(() => {
-        // Only logout if currently authenticated
         try {
           if (typeof window !== 'undefined') {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -199,22 +192,23 @@ export function AuthProvider({ children }) {
               logout();
             }
           }
-        } catch (_) {
-          // ignore
-        }
+        } catch (_) {}
       }, IDLE_MS);
     };
     const activityEvents = ['mousemove', 'mousedown', 'keydown', 'wheel', 'touchstart'];
-    activityEvents.forEach((evt) => window.addEventListener(evt, resetIdle, { passive: true }));
-    resetIdle();
-    
-    // Clean up
+    if (state.user) {
+      activityEvents.forEach((evt) => window.addEventListener(evt, resetIdle, { passive: true }));
+      resetIdle();
+    }
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (idleTimer) clearTimeout(idleTimer);
-      activityEvents.forEach((evt) => window.removeEventListener(evt, resetIdle));
+      if (state.user) {
+        activityEvents.forEach((evt) => window.removeEventListener(evt, resetIdle));
+      }
     };
-  }, [checkUserSession]);
+  }, [checkUserSession, state.user, logout]);
 
   // ----------------------------------------------------------------------
 

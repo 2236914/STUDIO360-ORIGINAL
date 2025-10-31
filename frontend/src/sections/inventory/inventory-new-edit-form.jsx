@@ -104,6 +104,11 @@ export const NewInventorySchema = zod.object({
   taxes: zod.number().optional(),
   saleLabel: zod.object({ enabled: zod.boolean(), content: zod.string() }).optional(),
   newLabel: zod.object({ enabled: zod.boolean(), content: zod.string() }).optional(),
+  // SEO fields (optional)
+  seoTitle: zod.string().optional(),
+  seoDescription: zod.string().optional(),
+  seoSlug: zod.string().optional(),
+  socialImageUrl: zod.string().url().optional().or(zod.literal('')),
 });
 
 // ----------------------------------------------------------------------
@@ -138,6 +143,11 @@ export function InventoryNewEditForm({ currentProduct, onSaved, disabled = false
       wholesalePricing: currentProduct?.wholesalePricing || [],
       newLabel: currentProduct?.newLabel || { enabled: false, content: '' },
       saleLabel: currentProduct?.saleLabel || { enabled: false, content: '' },
+      // SEO defaults
+      seoTitle: currentProduct?.seoTitle || '',
+      seoDescription: currentProduct?.seoDescription || '',
+      seoSlug: currentProduct?.seoSlug || '',
+      socialImageUrl: currentProduct?.socialImageUrl || '',
     }),
     [currentProduct]
   );
@@ -207,6 +217,15 @@ export function InventoryNewEditForm({ currentProduct, onSaved, disabled = false
         })(),
         is_taxable: includeTaxes,
         status: 'active',
+        // SEO mapping
+        seo_title: data.seoTitle || null,
+        seo_description: data.seoDescription || null,
+        slug: (data.seoSlug || data.name || '')
+          .toString()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^[-]+|[-]+$/g, ''),
+        social_image_url: data.socialImageUrl || null,
         // Store additional data in dimensions field (using JSONB)
         dimensions: {
           colors: data.colors,
@@ -567,6 +586,24 @@ export function InventoryNewEditForm({ currentProduct, onSaved, disabled = false
             }
           />
         </Stack>
+
+        <Divider sx={{ borderStyle: 'dashed' }} />
+
+        {/* SEO Section */}
+        <Typography variant="h6">SEO</Typography>
+        <Box
+          columnGap={2}
+          rowGap={3}
+          display="grid"
+          gridTemplateColumns={{ xs: 'repeat(1, 1fr)', md: 'repeat(2, 1fr)' }}
+        >
+          <Field.Text name="seoTitle" label="SEO Title" placeholder="If empty, product name is used" />
+          <Field.Text name="seoSlug" label="Slug" placeholder="my-product-slug" helperText="Leave blank to auto-generate from name" />
+          <Box sx={{ gridColumn: { xs: 'span 1', md: 'span 2' } }}>
+            <Field.Text name="seoDescription" label="Meta Description" multiline rows={3} />
+          </Box>
+          <Field.Text name="socialImageUrl" label="Social Image URL (1200x630)" placeholder="https://..." />
+        </Box>
 
         <Divider sx={{ borderStyle: 'dashed' }} />
 

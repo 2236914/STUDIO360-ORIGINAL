@@ -13,41 +13,43 @@ import { createShadowColor, customShadows as coreCustomShadows } from '../core/c
  */
 
 export function updateCoreWithSettings(theme, settings) {
-  const { colorSchemes, customShadows } = theme;
+  const { colorSchemes, customShadows, shadows, typography, components, direction, cssVarPrefix, shouldSkipGeneratingVar } = theme;
 
+  // Avoid spreading entire theme (can introduce circular refs from MUI internals)
   return {
-    ...theme,
     colorSchemes: {
-      ...colorSchemes,
       light: {
         palette: {
-          ...colorSchemes?.light?.palette,
-          /** [1] */
           primary: getPalettePrimary(settings.primaryColor),
-          /** [2] */
           background: {
-            ...colorSchemes?.light?.palette?.background,
+            ...(colorSchemes?.light?.palette?.background || {}),
             default: getBackgroundDefault(settings.contrast),
             defaultChannel: hexToRgbChannel(getBackgroundDefault(settings.contrast)),
           },
+          ...(colorSchemes?.light?.palette || {}),
         },
       },
       dark: {
         palette: {
-          ...colorSchemes?.dark?.palette,
-          /** [1] */
           primary: getPalettePrimary(settings.primaryColor),
+          ...(colorSchemes?.dark?.palette || {}),
         },
       },
     },
     customShadows: {
-      ...customShadows,
-      /** [1] */
       primary:
         settings.primaryColor === 'default'
           ? coreCustomShadows('light').primary
           : createShadowColor(getPalettePrimary(settings.primaryColor).mainChannel),
+      ...(customShadows || {}),
     },
+    // Preserve other required properties without spreading the whole theme
+    shadows,
+    typography,
+    components,
+    direction,
+    cssVarPrefix,
+    shouldSkipGeneratingVar,
   };
 }
 

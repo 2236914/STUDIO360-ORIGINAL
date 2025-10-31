@@ -15,6 +15,17 @@ router.get('/system', async (req, res) => {
   }
 });
 
+// GET /api/announcements/system/all - get all announcements (authenticated users)
+router.get('/system/all', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const data = await announcementRepo.listAllSystemAnnouncements();
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 // GET /api/announcements/admin/list - get all announcements (admin only)
 router.get('/admin/list', authenticateTokenHybrid, requireAdmin, async (req, res) => {
   try {

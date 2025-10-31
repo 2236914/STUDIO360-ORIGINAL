@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Card from '@mui/material/Card';
@@ -26,8 +26,8 @@ const MONTHS = [
   'Jan+1', 'Feb+1', 'Mar+1', 'Apr+1', 'May+1', 'Jun+1'
 ];
 
-// Empty dataset placeholders – ready for backend integration
-const MOCK_DATA = {
+// Default empty dataset – filled from backend
+const EMPTY_DATA = {
   sales: {
     actual: [],
     forecast: [],
@@ -110,14 +110,147 @@ const FORECAST_METRICS = [
 
 const RISK_FACTORS = [];
 
-const SCENARIOS = [];
-
 export function AnalyticsForecastingComprehensive() {
   const theme = useTheme();
   const [selectedMetric, setSelectedMetric] = useState('sales');
   const [selectedPeriod, setSelectedPeriod] = useState('6months');
+  const [data, setData] = useState(EMPTY_DATA);
+  const [metrics, setMetrics] = useState(FORECAST_METRICS);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [scenarios, setScenarios] = useState([]);
 
-  const currentData = MOCK_DATA[selectedMetric];
+  useEffect(() => {
+    loadCombinedForecast();
+  }, []);
+
+  // Polling and refetch on visibility/focus
+  useEffect(() => {
+    let intervalId;
+    const onVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+        loadCombinedForecast();
+      }
+    };
+    intervalId = setInterval(() => loadCombinedForecast(), 30000);
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibility);
+      window.addEventListener('focus', onVisibility);
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisibility);
+        window.removeEventListener('focus', onVisibility);
+      }
+    };
+  }, []);
+
+  // Removed base URL probing – rely on Next.js proxy rewrites
+
+  const loadCombinedForecast = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      // Use mock if explicitly enabled, otherwise fetch real data
+      let d;
+      const USE_MOCK = process.env.NEXT_PUBLIC_DASHBOARD_MOCK === 'true';
+      if (USE_MOCK) {
+        d = {
+          sales: { actual: [12000,14500,13200,14800,16000,17200,18000,19000,20500,21000,22500,24000], forecast: [25000,26000,27000,28000,29000,30000], confidence: 82, growthRate: 0.12, seasonality: 'Q4 peak' },
+          expenses: { actual: [9000,9200,9500,9700,10200,11000,11200,11800,12000,12500,13000,13500], forecast: [13800,14000,14500,14800,15000,15200], confidence: 70, growthRate: 0.05, seasonality: 'Steady' },
+        };
+      } else {
+        const response = await fetch(`/api/analytics/financial-forecast/combined`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: new Date().getFullYear() })
+      });
+      const json = await response.json();
+        if (!response.ok || !json?.success) throw new Error(json?.message || 'Failed to load combined forecast');
+        d = json.data || {};
+      }
+      const nextData = {
+        sales: {
+          actual: d.sales.actual,
+          forecast: d.sales.forecast,
+          confidence: Array(d.sales.forecast.length).fill(d.sales.confidence || 0),
+          growthRate: d.sales.growthRate || 0,
+          seasonality: d.sales.seasonality || ''
+        },
+        expenses: {
+          actual: d.expenses.actual,
+          forecast: d.expenses.forecast,
+          confidence: Array(d.expenses.forecast.length).fill(d.expenses.confidence || 0),
+          growthRate: d.expenses.growthRate || 0,
+          seasonality: d.expenses.seasonality || ''
+        },
+        profit: {
+          actual: d.sales.actual.map((v, i) => Number(v || 0) - Number(d.expenses.actual?.[i] || 0)),
+          forecast: d.sales.forecast.map((v, i) => Number(v || 0) - Number(d.expenses.forecast?.[i] || 0)),
+          confidence: Array(d.sales.forecast.length).fill(Math.min(d.sales.confidence || 0, d.expenses.confidence || 0)),
+          growthRate: 0,
+          seasonality: ''
+        },
+        inventory: EMPTY_DATA.inventory,
+        customers: EMPTY_DATA.customers,
+      };
+      setData(nextData);
+
+      const totalSales = (d.sales.actual || []).reduce((s, v) => s + Number(v || 0), 0);
+      const totalExpenses = (d.expenses.actual || []).reduce((s, v) => s + Number(v || 0), 0);
+      const profitNow = totalSales - totalExpenses;
+      // Compute short-term change based on recent average vs next 3-month forecast
+      const avgLast3 = (arr) => {
+        const last = (arr || []).slice(-3);
+        if (!last.length) return 0;
+        return last.reduce((s, v) => s + Number(v || 0), 0) / last.length;
+      };
+      const avgNext3 = (arr) => {
+        const first = (arr || []).slice(0, 3);
+        if (!first.length) return 0;
+        return first.reduce((s, v) => s + Number(v || 0), 0) / first.length;
+      };
+      const salesChange = ((avgNext3(d.sales.forecast) - avgLast3(d.sales.actual)) / (avgLast3(d.sales.actual) || 1)) * 100;
+      const expensesChange = ((avgNext3(d.expenses.forecast) - avgLast3(d.expenses.actual)) / (avgLast3(d.expenses.actual) || 1)) * 100;
+      const profitActual = (d.sales.actual || []).map((v, i) => Number(v || 0) - Number(d.expenses.actual?.[i] || 0));
+      const profitForecast = (d.sales.forecast || []).map((v, i) => Number(v || 0) - Number(d.expenses.forecast?.[i] || 0));
+      const profitChange = ((avgNext3(profitForecast) - avgLast3(profitActual)) / (avgLast3(profitActual) || 1)) * 100;
+
+      setMetrics([
+        { ...FORECAST_METRICS[0], value: `₱${fNumber(totalSales)}`, confidence: d.sales.confidence || 0, change: `${salesChange >= 0 ? '+' : ''}${(Math.round(salesChange * 10) / 10)}%`, trend: salesChange >= 0 ? 'up' : 'down' },
+        { ...FORECAST_METRICS[1], value: `₱${fNumber(totalExpenses)}`, confidence: d.expenses.confidence || 0, change: `${expensesChange >= 0 ? '+' : ''}${(Math.round(expensesChange * 10) / 10)}%`, trend: expensesChange >= 0 ? 'up' : 'down' },
+        { ...FORECAST_METRICS[2], value: `₱${fNumber(profitNow)}`, confidence: Math.min(d.sales.confidence || 0, d.expenses.confidence || 0), change: `${profitChange >= 0 ? '+' : ''}${(Math.round(profitChange * 10) / 10)}%`, trend: profitChange >= 0 ? 'up' : 'down' },
+        { ...FORECAST_METRICS[3] },
+      ]);
+
+      // Generate simple scenarios based on confidence
+      const sum = (arr) => (arr || []).reduce((s, v) => s + Number(v || 0), 0);
+      const salesF = d.sales.forecast || [];
+      const expF = d.expenses.forecast || [];
+      const midRevenue = sum(salesF);
+      const midProfit = sum(salesF.map((v, i) => Number(v || 0) - Number(expF[i] || 0)));
+      const conf = Math.min(Number(d.sales.confidence || 0), Number(d.expenses.confidence || 0));
+      const spread = Math.max(0.05, (100 - conf) / 100);
+      const bestRevenue = Math.round(midRevenue * (1 + spread));
+      const worstRevenue = Math.round(midRevenue * (1 - spread));
+      const bestProfit = Math.round(midProfit * (1 + spread));
+      const worstProfit = Math.round(midProfit * (1 - spread));
+      setScenarios([
+        { name: 'Best Case', color: 'success', probability: Math.max(10, Math.round(conf / 2)), revenue: `₱${fNumber(bestRevenue)}`, profit: `₱${fNumber(bestProfit)}`, description: 'Upside: demand outperforms baseline; costs contained.' },
+        { name: 'Most Likely', color: 'info', probability: Math.max(30, Math.round(conf)), revenue: `₱${fNumber(midRevenue)}`, profit: `₱${fNumber(midProfit)}`, description: 'Base case from Prophet forecast.' },
+        { name: 'Worst Case', color: 'warning', probability: Math.max(10, 100 - Math.round(conf)), revenue: `₱${fNumber(worstRevenue)}`, profit: `₱${fNumber(worstProfit)}`, description: 'Downside: softer sales or higher expenses.' },
+      ]);
+    } catch (e) {
+      setError(e.message);
+      setData(EMPTY_DATA);
+      setScenarios([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const currentData = data[selectedMetric];
   const isSales = selectedMetric === 'sales';
 
   const chartOptions = useChart({
@@ -203,7 +336,7 @@ export function AnalyticsForecastingComprehensive() {
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 4 }}>
         <Box>
           <Typography variant="h4" sx={{ mb: 1 }}>
-            Forecasting Analytics
+            Finance Forecasting
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
             AI-powered predictions and business insights for the next 6 months
@@ -237,7 +370,7 @@ export function AnalyticsForecastingComprehensive() {
 
       {/* Key Metrics Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        {FORECAST_METRICS.map((metric, index) => (
+        {metrics.map((metric, index) => (
           <Grid key={index} xs={12} sm={6} lg={3}>
             <Card sx={{ p: 3, height: '100%' }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
@@ -289,7 +422,7 @@ export function AnalyticsForecastingComprehensive() {
 
       {/* Main Forecasting Chart */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid xs={12} lg={8}>
+        <Grid xs={12} lg={12}>
           <Card sx={{ p: 3 }}>
             <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
               <Typography variant="h6">
@@ -297,7 +430,7 @@ export function AnalyticsForecastingComprehensive() {
               </Typography>
               
               <Stack direction="row" spacing={1}>
-                {Object.keys(MOCK_DATA).map((metric) => (
+                {Object.keys(EMPTY_DATA).map((metric) => (
                   <Button
                     key={metric}
                     variant={selectedMetric === metric ? 'contained' : 'outlined'}
@@ -384,52 +517,7 @@ export function AnalyticsForecastingComprehensive() {
           </Card>
         </Grid>
 
-        {/* Risk Analysis */}
-        <Grid xs={12} lg={4}>
-          <Card sx={{ p: 3, height: '100%' }}>
-            <Typography variant="h6" sx={{ mb: 3 }}>
-              Risk Analysis
-            </Typography>
-            
-            <Stack spacing={2}>
-              {RISK_FACTORS.length === 0 ? (
-                <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                  No risk factors available
-                </Typography>
-              ) : RISK_FACTORS.map((risk, index) => (
-                <Box key={index}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      {risk.factor}
-                    </Typography>
-                    <Chip 
-                      label={risk.impact} 
-                      size="small" 
-                      color={risk.color}
-                      variant="outlined"
-                    />
-                  </Stack>
-                  
-                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      Probability: {risk.probability}%
-                    </Typography>
-                    <LinearProgress 
-                      variant="determinate" 
-                      value={risk.probability} 
-                      sx={{ flexGrow: 1, height: 4, borderRadius: 2 }}
-                      color={risk.color}
-                    />
-                  </Stack>
-                  
-                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                    Mitigation: {risk.mitigation}
-                  </Typography>
-                </Box>
-              ))}
-            </Stack>
-          </Card>
-        </Grid>
+        
       </Grid>
 
       {/* Scenario Planning */}
@@ -441,21 +529,27 @@ export function AnalyticsForecastingComprehensive() {
             </Typography>
             
             <Grid container spacing={3}>
-              {SCENARIOS.length === 0 ? (
+              {scenarios.length === 0 ? (
                 <Grid xs={12}>
                   <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                     No scenarios available
                   </Typography>
                 </Grid>
-              ) : SCENARIOS.map((scenario, index) => (
+              ) : scenarios.map((scenario, index) => (
                 <Grid key={index} xs={12} md={4}>
-                  <Box
+                  <Card
                     sx={{
+                      position: 'relative',
                       p: 3,
+                      height: '100%',
                       borderRadius: 2,
                       border: 1,
-                      borderColor: `${scenario.color}.main`,
-                      bgcolor: `${scenario.color}.lighter`,
+                      borderColor: 'divider',
+                      bgcolor: 'background.paper',
+                      boxShadow: 0,
+                      borderLeftWidth: 4,
+                      borderLeftStyle: 'solid',
+                      borderLeftColor: `${scenario.color}.main`,
                     }}
                   >
                     <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
@@ -466,32 +560,33 @@ export function AnalyticsForecastingComprehensive() {
                         label={`${scenario.probability}%`} 
                         size="small" 
                         color={scenario.color}
+                        sx={{ fontWeight: 600 }}
                       />
                     </Stack>
-                    
-                    <Stack spacing={1} sx={{ mb: 2 }}>
-                      <Stack direction="row" justifyContent="space-between">
+
+                    <Stack spacing={1.5} sx={{ mb: 2 }}>
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                          Revenue:
+                          Revenue
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>
                           {scenario.revenue}
                         </Typography>
                       </Stack>
-                      <Stack direction="row" justifyContent="space-between">
+                      <Stack direction="row" justifyContent="space-between" alignItems="center">
                         <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-                          Profit:
+                          Profit
                         </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 700 }}>
                           {scenario.profit}
                         </Typography>
                       </Stack>
                     </Stack>
-                    
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+
+                    <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
                       {scenario.description}
                     </Typography>
-                  </Box>
+                  </Card>
                 </Grid>
               ))}
             </Grid>
@@ -500,15 +595,11 @@ export function AnalyticsForecastingComprehensive() {
       </Grid>
 
       {/* AI Insights Alert */}
-      <Alert 
-        severity="info" 
-        sx={{ mt: 3 }}
-        icon={<Iconify icon="eva:bulb-fill" />}
-      >
-        <Typography variant="body2">
-          No forecasting data yet. Connect your data source to see forecasts and insights here.
-        </Typography>
-      </Alert>
+      {error && (
+        <Alert severity="warning" sx={{ mt: 3 }} icon={<Iconify icon="eva:alert-triangle-fill" />}> 
+          <Typography variant="body2">{error}</Typography>
+        </Alert>
+      )}
     </Box>
   );
 }

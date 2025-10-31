@@ -1721,5 +1721,47 @@ router.delete('/events/:id', authenticateTokenHybrid, async (req, res) => {
   }
 });
 
+// ============================================
+// SEO SETTINGS ROUTES
+// ============================================
+
+/**
+ * @route GET /api/store-pages/seo
+ * @desc Get SEO settings
+ * @access Private
+ */
+router.get('/seo', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+    const seo = await storePagesService.getSeoSettings(userId);
+    return res.json({ success: true, data: seo });
+  } catch (error) {
+    console.error('Error fetching SEO settings:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+/**
+ * @route PUT /api/store-pages/seo
+ * @desc Update SEO settings
+ * @access Private
+ */
+router.put('/seo', authenticateTokenHybrid, async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User not authenticated' });
+    }
+    const updated = await storePagesService.upsertSeoSettings(userId, req.body || {});
+    return res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Error updating SEO settings:', error);
+    return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
 module.exports = router;
 
