@@ -269,16 +269,28 @@ class XenditService {
   processWebhookEvent(webhookData) {
     const { event, data } = webhookData;
     
+    // Normalize status for QRPH payments (Xendit sends "SUCCEEDED" for QR payments)
+    let normalizedStatus = data.status;
+    if (event === 'qr.payment' || event === 'payment.succeeded') {
+      if (data.status === 'SUCCEEDED' || data.status === 'succeeded') {
+        normalizedStatus = 'paid';
+      } else if (data.status === 'FAILED' || data.status === 'failed') {
+        normalizedStatus = 'failed';
+      } else if (data.status === 'PENDING' || data.status === 'pending') {
+        normalizedStatus = 'pending';
+      }
+    }
+    
     return {
       event,
       paymentId: data.id,
-      externalId: data.external_id,
-      status: data.status,
+      externalId: data.external_id || data.reference_id, // QRPH uses reference_id
+      status: normalizedStatus,
       amount: data.amount,
       currency: data.currency,
-      paymentMethod: data.payment_method,
+      paymentMethod: data.payment_method || (event === 'qr.payment' ? 'qrph' : null),
       createdAt: data.created,
-      updatedAt: data.updated,
+      updatedAt: data.updated || data.created,
       customer: data.customer,
       metadata: data.metadata,
     };

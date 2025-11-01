@@ -394,17 +394,40 @@ router.post('/callback', async (req, res) => {
 
     const webhookData = xenditService.processWebhookEvent(req.body);
     
-    // Update payment status in database
-    const { data: updatedPayment, error } = await supabase
-      .from('xendit_payments')
-      .update({
-        status: webhookData.status,
-        xendit_data: req.body.data,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('external_id', webhookData.externalId)
-      .select()
-      .single();
+    // Update payment status in database (try both external_id and reference_id for QRPH compatibility)
+    let updatedPayment = null;
+    let error = null;
+    
+    if (webhookData.externalId) {
+      const result = await supabase
+        .from('xendit_payments')
+        .update({
+          status: webhookData.status,
+          xendit_data: req.body.data,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('external_id', webhookData.externalId)
+        .select()
+        .single();
+      updatedPayment = result.data;
+      error = result.error;
+      
+      // If not found by external_id, try reference_id (for QRPH)
+      if (error && req.body.data?.reference_id) {
+        const result2 = await supabase
+          .from('xendit_payments')
+          .update({
+            status: webhookData.status,
+            xendit_data: req.body.data,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('external_id', req.body.data.reference_id)
+          .select()
+          .single();
+        updatedPayment = result2.data;
+        error = result2.error;
+      }
+    }
 
     if (error) {
       console.error('Error updating payment status:', error);
