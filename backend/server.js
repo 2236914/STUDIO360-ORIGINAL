@@ -144,6 +144,19 @@ loadRoute('/api/public/storefront', './api/public/public-storefront.routes', 'Pu
 loadRoute('/api/upload', './api/upload/upload.routes', 'Upload');
 loadRoute('/api/payments/xendit', './api/payments/xendit.routes', 'Xendit payment');
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'STUDIO360 Backend API is running!', 
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      status: '/api/status',
+      documentation: 'See API documentation for available endpoints'
+    }
+  });
+});
+
 // Status endpoint retained
 app.get('/api/status', (req, res) => {
   res.json({ message: 'STUDIO360 Backend API is running!', version: '1.0.0' });
