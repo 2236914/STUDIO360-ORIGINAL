@@ -11,6 +11,19 @@ const ordersService = require('../../services/ordersService');
 // ============================================
 
 /**
+ * @route GET /api/payments/xendit/test
+ * @desc Test endpoint to verify route is accessible
+ * @access Public
+ */
+router.get('/test', (req, res) => {
+  res.json({ 
+    success: true, 
+    message: 'Xendit routes are working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+/**
  * @route POST /api/payments/xendit/qrph
  * @desc Create QRPH payment
  * @access Private
