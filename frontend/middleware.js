@@ -13,6 +13,16 @@ export function middleware(request) {
   // Remove port if present (for proper domain matching)
   hostname = hostname.split(':')[0];
   
+  // EARLY LOGGING - Always log the hostname to debug
+  if (hostname.includes('kitschstudio')) {
+    console.log('[Middleware] Request received:', {
+      hostname,
+      pathname,
+      url: request.url.toString(),
+      headers: Object.fromEntries(request.headers.entries())
+    });
+  }
+  
   // Generate a per-request nonce
   const nonce = crypto.randomBytes(16).toString('base64');
 
