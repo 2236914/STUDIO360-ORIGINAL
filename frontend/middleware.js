@@ -46,6 +46,23 @@ export function middleware(request) {
   baseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   baseResponse.headers.set('Cross-Origin-Resource-Policy', 'same-site');
 
+  // Handle kitschstudio.page domain FIRST - rewrite to /kitschstudio route
+  // This must be checked before the "no subdomain" check
+  if (hostname === STORE_DOMAIN || hostname === `www.${STORE_DOMAIN}`) {
+    const storePath = pathname === '/' 
+      ? '/kitschstudio' 
+      : `/kitschstudio${pathname}`;
+    
+    const res = NextResponse.rewrite(new URL(storePath, request.url));
+    res.headers.set('Content-Security-Policy', csp);
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.headers.set('X-Content-Type-Options', 'nosniff');
+    res.headers.set('X-Frame-Options', 'DENY');
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    return res;
+  }
+
   // If no subdomain or it's the main domain, continue normally
   if (!subdomain || subdomain === 'www' || subdomain === 'app') {
     return baseResponse;
@@ -87,22 +104,6 @@ export function middleware(request) {
       : `/${subdomain}${pathname}`;
     
     const res = NextResponse.rewrite(new URL(subdomainPath, request.url));
-    res.headers.set('Content-Security-Policy', csp);
-    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.headers.set('X-Content-Type-Options', 'nosniff');
-    res.headers.set('X-Frame-Options', 'DENY');
-    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
-    return res;
-  }
-  
-  // Handle kitschstudio.page domain - rewrite to /kitschstudio route
-  if (hostname === STORE_DOMAIN || hostname === `www.${STORE_DOMAIN}`) {
-    const storePath = pathname === '/' 
-      ? '/kitschstudio' 
-      : `/kitschstudio${pathname}`;
-    
-    const res = NextResponse.rewrite(new URL(storePath, request.url));
     res.headers.set('Content-Security-Policy', csp);
     res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.headers.set('X-Content-Type-Options', 'nosniff');
