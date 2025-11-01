@@ -8,7 +8,10 @@ const LOCAL_DOMAIN = 'localhost:3000';
 
 export function middleware(request) {
   const { pathname, search } = request.nextUrl;
-  const hostname = request.headers.get('host') || '';
+  let hostname = request.headers.get('host') || '';
+  
+  // Remove port if present (for proper domain matching)
+  hostname = hostname.split(':')[0];
 
   // Generate a per-request nonce
   const nonce = crypto.randomBytes(16).toString('base64');
@@ -48,7 +51,10 @@ export function middleware(request) {
 
   // Handle kitschstudio.page domain FIRST - rewrite to /kitschstudio route
   // This must be checked before the "no subdomain" check
-  if (hostname === STORE_DOMAIN || hostname === `www.${STORE_DOMAIN}`) {
+  // Check for exact match or www variant, case-insensitive
+  const normalizedHostname = hostname.toLowerCase().trim();
+  if (normalizedHostname === STORE_DOMAIN.toLowerCase() || 
+      normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()) {
     const storePath = pathname === '/' 
       ? '/kitschstudio' 
       : `/kitschstudio${pathname}`;
