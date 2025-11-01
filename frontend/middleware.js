@@ -53,13 +53,34 @@ export function middleware(request) {
   // This must be checked before the "no subdomain" check
   // Check for exact match or www variant, case-insensitive
   const normalizedHostname = hostname.toLowerCase().trim();
+  
+  // Debug logging (will appear in Vercel logs)
+  if (normalizedHostname.includes('kitschstudio.page')) {
+    console.log('[Middleware] Detected kitschstudio.page:', { 
+      hostname, 
+      normalizedHostname, 
+      pathname,
+      matches: normalizedHostname === STORE_DOMAIN.toLowerCase() || normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()
+    });
+  }
+  
   if (normalizedHostname === STORE_DOMAIN.toLowerCase() || 
       normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()) {
-    const storePath = pathname === '/' 
-      ? '/kitschstudio' 
-      : `/kitschstudio${pathname}`;
+    // Determine the store path with proper trailing slash handling
+    let storePath;
+    if (pathname === '/' || pathname === '') {
+      storePath = '/kitschstudio/';
+    } else {
+      // Preserve trailing slash if present, add if not and pathname doesn't have extension
+      const hasTrailingSlash = pathname.endsWith('/');
+      const hasExtension = /\.\w+$/.test(pathname.split('/').pop() || '');
+      storePath = `/kitschstudio${pathname}${!hasTrailingSlash && !hasExtension ? '/' : ''}`;
+    }
     
-    const res = NextResponse.rewrite(new URL(storePath, request.url));
+    // Use pathname-based rewrite with the same origin
+    const url = request.nextUrl.clone();
+    url.pathname = storePath;
+    const res = NextResponse.rewrite(url);
     res.headers.set('Content-Security-Policy', csp);
     res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.headers.set('X-Content-Type-Options', 'nosniff');
