@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const xenditService = require('../../services/xenditService');
 const { authenticateTokenHybrid } = require('../../middleware/auth');
-const supabase = require('../../services/supabaseClient');
+const { supabase } = require('../../services/supabaseClient');
 const emailService = require('../../services/emailService');
 const ordersService = require('../../services/ordersService');
 
@@ -19,36 +19,85 @@ async function getKitschstudioUserId() {
   }
 
   try {
-    // Try to find kitschstudio shop (normalized: lowercase, remove spaces)
-    const { data: allShops, error } = await supabase
+    console.log(`[Xendit Payment] Looking up kitschstudio shop in database...`);
+    
+    // Check if supabase client is available
+    if (!supabase) {
+      console.error(`[Xendit Payment] Supabase client is not initialized`);
+      return null;
+    }
+    
+    // Try exact match first (shop name is "kitschstudio" in database)
+    const { data: exactMatch, error: exactError } = await supabase
+      .from('shop_info')
+      .select('user_id, shop_name')
+      .eq('shop_name', 'kitschstudio')
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!exactError && exactMatch) {
+      cachedKitschstudioUserId = exactMatch.user_id;
+      console.log(`[Xendit Payment] ✓ Found kitschstudio shop via exact match: "${exactMatch.shop_name}" (userId: ${exactMatch.user_id})`);
+      return exactMatch.user_id;
+    }
+
+    // Fallback: Try case-insensitive match
+    const { data: caseInsensitiveMatch, error: caseError } = await supabase
+      .from('shop_info')
+      .select('user_id, shop_name')
+      .ilike('shop_name', 'kitschstudio')
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!caseError && caseInsensitiveMatch) {
+      cachedKitschstudioUserId = caseInsensitiveMatch.user_id;
+      console.log(`[Xendit Payment] ✓ Found kitschstudio shop via case-insensitive match: "${caseInsensitiveMatch.shop_name}" (userId: ${caseInsensitiveMatch.user_id})`);
+      return caseInsensitiveMatch.user_id;
+    }
+
+    // Fallback: Get all shops and find by normalization
+    const { data: allShops, error: allError } = await supabase
       .from('shop_info')
       .select('user_id, shop_name')
       .is('deleted_at', null);
 
-    if (!error && allShops) {
-      // Look for kitschstudio with various name formats
-      const normalizedSearch = 'kitschstudio';
-      for (const shop of allShops) {
-        const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
-        if (normalizedDbShopName === normalizedSearch) {
-          cachedKitschstudioUserId = shop.user_id;
-          console.log(`[Xendit Payment] Found kitschstudio shop: "${shop.shop_name}" (userId: ${shop.user_id})`);
-          return shop.user_id;
-        }
+    if (allError) {
+      console.error(`[Xendit Payment] Database error fetching shops:`, allError);
+      return null;
+    }
+
+    if (!allShops || allShops.length === 0) {
+      console.error(`[Xendit Payment] No shops found in database. Please ensure shop_info table has at least one shop.`);
+      return null;
+    }
+
+    console.log(`[Xendit Payment] Found ${allShops.length} shop(s) in database:`, allShops.map(s => `"${s.shop_name}"`).join(', '));
+
+    // Look for kitschstudio with normalized matching (lowercase, remove spaces)
+    const normalizedSearch = 'kitschstudio';
+    for (const shop of allShops) {
+      const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
+      console.log(`[Xendit Payment] Checking shop: "${shop.shop_name}" (normalized: "${normalizedDbShopName}")`);
+      
+      if (normalizedDbShopName === normalizedSearch) {
+        cachedKitschstudioUserId = shop.user_id;
+        console.log(`[Xendit Payment] ✓ Found kitschstudio shop via normalized match: "${shop.shop_name}" (userId: ${shop.user_id})`);
+        return shop.user_id;
       }
     }
 
-    // If not found, get the first shop (fallback)
-    if (allShops && allShops.length > 0) {
+    // Final fallback: Use first shop (since all API keys are for kitschstudio anyway)
+    if (allShops.length > 0) {
       cachedKitschstudioUserId = allShops[0].user_id;
-      console.log(`[Xendit Payment] Using first available shop as fallback: "${allShops[0].shop_name}" (userId: ${allShops[0].user_id})`);
+      console.log(`[Xendit Payment] ⚠ Kitschstudio not found exactly, using first available shop as fallback: "${allShops[0].shop_name}" (userId: ${allShops[0].user_id})`);
       return allShops[0].user_id;
     }
 
     console.error(`[Xendit Payment] No shops found in database`);
     return null;
   } catch (e) {
-    console.error(`[Xendit Payment] Error getting kitschstudio userId:`, e);
+    console.error(`[Xendit Payment] Exception getting kitschstudio userId:`, e);
+    console.error(`[Xendit Payment] Error stack:`, e.stack);
     return null;
   }
 }
@@ -352,13 +401,14 @@ router.post('/public/qrph', async (req, res) => {
     // Get kitschstudio userId (all API keys are for kitschstudio)
     const userId = await getKitschstudioUserId();
     if (!userId) {
+      console.error(`[Xendit Payment] Failed to get userId for QRPH payment`);
       return res.status(500).json({ 
         success: false, 
-        message: 'Payment service unavailable. Please contact support.' 
+        message: 'Payment service configuration error. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing QRPH payment for kitschstudio (userId: ${userId})`);
+    console.log(`[Xendit Payment] Processing QRPH payment (userId: ${userId})`);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ 
@@ -447,13 +497,14 @@ router.post('/public/gcash', async (req, res) => {
     // Get kitschstudio userId (all API keys are for kitschstudio)
     const userId = await getKitschstudioUserId();
     if (!userId) {
+      console.error(`[Xendit Payment] Failed to get userId for GCash payment`);
       return res.status(500).json({ 
         success: false, 
-        message: 'Payment service unavailable. Please contact support.' 
+        message: 'Payment service configuration error. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing GCash payment for kitschstudio (userId: ${userId})`);
+    console.log(`[Xendit Payment] Processing GCash payment (userId: ${userId})`);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ 
@@ -542,13 +593,14 @@ router.post('/public/card', async (req, res) => {
     // Get kitschstudio userId (all API keys are for kitschstudio)
     const userId = await getKitschstudioUserId();
     if (!userId) {
+      console.error(`[Xendit Payment] Failed to get userId for card payment`);
       return res.status(500).json({ 
         success: false, 
-        message: 'Payment service unavailable. Please contact support.' 
+        message: 'Payment service configuration error. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing Card payment for kitschstudio (userId: ${userId})`);
+    console.log(`[Xendit Payment] Processing Card payment (userId: ${userId})`);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ 
@@ -645,13 +697,14 @@ router.post('/public/card-token', async (req, res) => {
     // Note: userId is not actually needed for token creation, but we validate it exists
     const userId = await getKitschstudioUserId();
     if (!userId) {
+      console.error(`[Xendit Payment] Failed to get userId for card token`);
       return res.status(500).json({ 
         success: false, 
-        message: 'Payment service unavailable. Please contact support.' 
+        message: 'Payment service configuration error. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing card token for kitschstudio (userId: ${userId})`);
+    console.log(`[Xendit Payment] Processing card token (userId: ${userId})`);
 
     if (!cardNumber || !expiryMonth || !expiryYear || !cvv) {
       return res.status(400).json({ 

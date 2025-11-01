@@ -456,6 +456,42 @@ export default function SubdomainCheckoutPage({ params }) {
           const orderResponse = await response.json();
           console.log('COD order created successfully:', orderResponse);
 
+          // Format order data for confirmation page
+          if (orderResponse.success && orderResponse.data) {
+            const order = orderResponse.data;
+            const formattedOrder = {
+              orderId: order.order_number || order.id,
+              items: (order.order_items || []).map(item => ({
+                name: item.product_name,
+                image: item.product_image_url,
+                price: parseFloat(item.unit_price || 0),
+                quantity: parseInt(item.quantity || 1, 10),
+                subtotal: parseFloat(item.subtotal || item.total || 0),
+              })),
+              subtotal: parseFloat(order.subtotal || 0),
+              shipping: parseFloat(order.shipping_fee || 0),
+              tax: parseFloat(order.tax || 0),
+              total: parseFloat(order.total || 0),
+              customerInfo: {
+                firstName: customerInfo.firstName,
+                lastName: customerInfo.lastName,
+                email: customerInfo.email,
+                phone: customerInfo.phone,
+                address: customerInfo.address,
+                city: customerInfo.city,
+                state: customerInfo.state,
+                zipCode: customerInfo.zipCode,
+                country: customerInfo.country || 'Philippines',
+              },
+              paymentMethod: 'cod',
+              shippingMethod: order.shipping_method || selectedShippingOption?.courierName || 'Standard',
+            };
+
+            // Save to localStorage for order confirmation page
+            localStorage.setItem('lastOrder', JSON.stringify(formattedOrder));
+            console.log('Order saved to localStorage:', formattedOrder);
+          }
+
           // Also save locally for consistency
           try {
             const { addOrder } = await import('src/services/ordersLocalService');
@@ -464,8 +500,17 @@ export default function SubdomainCheckoutPage({ params }) {
             console.warn('Could not save order locally:', err);
           }
 
-          // Redirect to confirmation
-          router.push(`/${subdomain}/order-confirmation`);
+          // Clear the cart after successful order
+          try {
+            localStorage.removeItem('app-checkout');
+            console.log('Cart cleared after successful order');
+          } catch (err) {
+            console.warn('Could not clear cart:', err);
+          }
+
+          // Save order number to URL for confirmation page
+          const orderNumber = orderResponse.data?.order_number || orderResponse.data?.id;
+          router.push(`/${subdomain}/order-confirmation${orderNumber ? `?orderNumber=${orderNumber}` : ''}`);
           return;
         } catch (error) {
           console.error('Error creating COD order:', error);
@@ -1097,8 +1142,104 @@ export default function SubdomainCheckoutPage({ params }) {
               setPaymentData(null);
             }}
             paymentData={paymentData}
-            onSuccess={(paymentResult) => {
+            onSuccess={async (paymentResult) => {
               console.log('QRPH Payment successful:', paymentResult);
+              
+              // Create order in database after successful payment
+              try {
+                const orderDbData = {
+                  shopName: subdomain,
+                  customer_name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+                  customer_email: customerInfo.email,
+                  customer_phone: customerInfo.phone,
+                  shipping_address_line1: customerInfo.address,
+                  shipping_city: customerInfo.city,
+                  shipping_state: customerInfo.state,
+                  shipping_postal_code: customerInfo.zipCode,
+                  shipping_country: customerInfo.country || 'Philippines',
+                  payment_method: 'qrph',
+                  payment_status: 'paid',
+                  payment_reference: paymentResult.externalId || paymentResult.id,
+                  status: 'confirmed',
+                  subtotal: orderData.subtotal || 0,
+                  shipping_fee: orderData.shipping || 0,
+                  tax: orderData.tax || 0,
+                  discount: 0,
+                  total: orderData.total || 0,
+                  shipping_method: selectedShippingOption?.courierName || 'Standard',
+                  items: pendingOrderData?.orderItems?.map(item => {
+                    const quantity = parseInt(item.quantity || 1, 10);
+                    const unitPrice = parseFloat(item.price || 0);
+                    const subtotal = unitPrice * quantity;
+                    
+                    return {
+                      product_name: item.name || 'Product',
+                      product_image_url: item.image || '',
+                      quantity: quantity,
+                      unit_price: unitPrice,
+                      subtotal: subtotal,
+                      discount: 0,
+                      total: subtotal,
+                    };
+                  }) || [],
+                };
+
+                const finalUrl = '/api/orders/public';
+                const response = await fetch(finalUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(orderDbData),
+                });
+
+                if (response.ok) {
+                  const orderResponse = await response.json();
+                  if (orderResponse.success && orderResponse.data) {
+                    const order = orderResponse.data;
+                    const formattedOrder = {
+                      orderId: order.order_number || order.id,
+                      items: (order.order_items || []).map(item => ({
+                        name: item.product_name,
+                        image: item.product_image_url,
+                        price: parseFloat(item.unit_price || 0),
+                        quantity: parseInt(item.quantity || 1, 10),
+                        subtotal: parseFloat(item.subtotal || item.total || 0),
+                      })),
+                      subtotal: parseFloat(order.subtotal || 0),
+                      shipping: parseFloat(order.shipping_fee || 0),
+                      tax: parseFloat(order.tax || 0),
+                      total: parseFloat(order.total || 0),
+                      customerInfo: {
+                        firstName: customerInfo.firstName,
+                        lastName: customerInfo.lastName,
+                        email: customerInfo.email,
+                        phone: customerInfo.phone,
+                        address: customerInfo.address,
+                        city: customerInfo.city,
+                        state: customerInfo.state,
+                        zipCode: customerInfo.zipCode,
+                        country: customerInfo.country || 'Philippines',
+                      },
+                      paymentMethod: 'qrph',
+                      shippingMethod: order.shipping_method || selectedShippingOption?.courierName || 'Standard',
+                    };
+
+                    // Save real order data to localStorage
+                    localStorage.setItem('lastOrder', JSON.stringify(formattedOrder));
+                    console.log('QRPH order saved to localStorage:', formattedOrder);
+                    
+                    // Also save order ID in URL params for API fetch fallback
+                    const orderNumber = order.order_number || order.id;
+                    router.push(`/${subdomain}/order-confirmation?orderNumber=${orderNumber}`);
+                    return;
+                  }
+                }
+              } catch (error) {
+                console.error('Error creating order after QRPH payment:', error);
+                // Continue to confirmation even if order creation fails
+              }
+              
               setQrphDialogOpen(false);
               setPaymentData(null);
               router.push(`/${subdomain}/order-confirmation`);
@@ -1116,8 +1257,104 @@ export default function SubdomainCheckoutPage({ params }) {
               setPaymentData(null);
             }}
             paymentData={paymentData}
-            onSuccess={(paymentResult) => {
+            onSuccess={async (paymentResult) => {
               console.log('GCash Payment successful:', paymentResult);
+              
+              // Create order in database after successful payment
+              try {
+                const orderDbData = {
+                  shopName: subdomain,
+                  customer_name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+                  customer_email: customerInfo.email,
+                  customer_phone: customerInfo.phone,
+                  shipping_address_line1: customerInfo.address,
+                  shipping_city: customerInfo.city,
+                  shipping_state: customerInfo.state,
+                  shipping_postal_code: customerInfo.zipCode,
+                  shipping_country: customerInfo.country || 'Philippines',
+                  payment_method: 'gcash',
+                  payment_status: 'paid',
+                  payment_reference: paymentResult.externalId || paymentResult.id,
+                  status: 'confirmed',
+                  subtotal: orderData.subtotal || 0,
+                  shipping_fee: orderData.shipping || 0,
+                  tax: orderData.tax || 0,
+                  discount: 0,
+                  total: orderData.total || 0,
+                  shipping_method: selectedShippingOption?.courierName || 'Standard',
+                  items: pendingOrderData?.orderItems?.map(item => {
+                    const quantity = parseInt(item.quantity || 1, 10);
+                    const unitPrice = parseFloat(item.price || 0);
+                    const subtotal = unitPrice * quantity;
+                    
+                    return {
+                      product_name: item.name || 'Product',
+                      product_image_url: item.image || '',
+                      quantity: quantity,
+                      unit_price: unitPrice,
+                      subtotal: subtotal,
+                      discount: 0,
+                      total: subtotal,
+                    };
+                  }) || [],
+                };
+
+                const finalUrl = '/api/orders/public';
+                const response = await fetch(finalUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(orderDbData),
+                });
+
+                if (response.ok) {
+                  const orderResponse = await response.json();
+                  if (orderResponse.success && orderResponse.data) {
+                    const order = orderResponse.data;
+                    const formattedOrder = {
+                      orderId: order.order_number || order.id,
+                      items: (order.order_items || []).map(item => ({
+                        name: item.product_name,
+                        image: item.product_image_url,
+                        price: parseFloat(item.unit_price || 0),
+                        quantity: parseInt(item.quantity || 1, 10),
+                        subtotal: parseFloat(item.subtotal || item.total || 0),
+                      })),
+                      subtotal: parseFloat(order.subtotal || 0),
+                      shipping: parseFloat(order.shipping_fee || 0),
+                      tax: parseFloat(order.tax || 0),
+                      total: parseFloat(order.total || 0),
+                      customerInfo: {
+                        firstName: customerInfo.firstName,
+                        lastName: customerInfo.lastName,
+                        email: customerInfo.email,
+                        phone: customerInfo.phone,
+                        address: customerInfo.address,
+                        city: customerInfo.city,
+                        state: customerInfo.state,
+                        zipCode: customerInfo.zipCode,
+                        country: customerInfo.country || 'Philippines',
+                      },
+                      paymentMethod: 'gcash',
+                      shippingMethod: order.shipping_method || selectedShippingOption?.courierName || 'Standard',
+                    };
+
+                    // Save real order data to localStorage
+                    localStorage.setItem('lastOrder', JSON.stringify(formattedOrder));
+                    console.log('GCash order saved to localStorage:', formattedOrder);
+                    
+                    // Also save order ID in URL params for API fetch fallback
+                    const orderNumber = order.order_number || order.id;
+                    router.push(`/${subdomain}/order-confirmation?orderNumber=${orderNumber}`);
+                    return;
+                  }
+                }
+              } catch (error) {
+                console.error('Error creating order after GCash payment:', error);
+                // Continue to confirmation even if order creation fails
+              }
+              
               setGcashDialogOpen(false);
               setPaymentData(null);
               router.push(`/${subdomain}/order-confirmation`);
@@ -1135,8 +1372,104 @@ export default function SubdomainCheckoutPage({ params }) {
               setPaymentData(null);
             }}
             paymentData={paymentData}
-            onSuccess={(paymentResult) => {
+            onSuccess={async (paymentResult) => {
               console.log('Card Payment successful:', paymentResult);
+              
+              // Create order in database after successful payment
+              try {
+                const orderDbData = {
+                  shopName: subdomain,
+                  customer_name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+                  customer_email: customerInfo.email,
+                  customer_phone: customerInfo.phone,
+                  shipping_address_line1: customerInfo.address,
+                  shipping_city: customerInfo.city,
+                  shipping_state: customerInfo.state,
+                  shipping_postal_code: customerInfo.zipCode,
+                  shipping_country: customerInfo.country || 'Philippines',
+                  payment_method: 'card',
+                  payment_status: 'paid',
+                  payment_reference: paymentResult.externalId || paymentResult.authorizationId || paymentResult.id,
+                  status: 'confirmed',
+                  subtotal: orderData.subtotal || 0,
+                  shipping_fee: orderData.shipping || 0,
+                  tax: orderData.tax || 0,
+                  discount: 0,
+                  total: orderData.total || 0,
+                  shipping_method: selectedShippingOption?.courierName || 'Standard',
+                  items: pendingOrderData?.orderItems?.map(item => {
+                    const quantity = parseInt(item.quantity || 1, 10);
+                    const unitPrice = parseFloat(item.price || 0);
+                    const subtotal = unitPrice * quantity;
+                    
+                    return {
+                      product_name: item.name || 'Product',
+                      product_image_url: item.image || '',
+                      quantity: quantity,
+                      unit_price: unitPrice,
+                      subtotal: subtotal,
+                      discount: 0,
+                      total: subtotal,
+                    };
+                  }) || [],
+                };
+
+                const finalUrl = '/api/orders/public';
+                const response = await fetch(finalUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(orderDbData),
+                });
+
+                if (response.ok) {
+                  const orderResponse = await response.json();
+                  if (orderResponse.success && orderResponse.data) {
+                    const order = orderResponse.data;
+                    const formattedOrder = {
+                      orderId: order.order_number || order.id,
+                      items: (order.order_items || []).map(item => ({
+                        name: item.product_name,
+                        image: item.product_image_url,
+                        price: parseFloat(item.unit_price || 0),
+                        quantity: parseInt(item.quantity || 1, 10),
+                        subtotal: parseFloat(item.subtotal || item.total || 0),
+                      })),
+                      subtotal: parseFloat(order.subtotal || 0),
+                      shipping: parseFloat(order.shipping_fee || 0),
+                      tax: parseFloat(order.tax || 0),
+                      total: parseFloat(order.total || 0),
+                      customerInfo: {
+                        firstName: customerInfo.firstName,
+                        lastName: customerInfo.lastName,
+                        email: customerInfo.email,
+                        phone: customerInfo.phone,
+                        address: customerInfo.address,
+                        city: customerInfo.city,
+                        state: customerInfo.state,
+                        zipCode: customerInfo.zipCode,
+                        country: customerInfo.country || 'Philippines',
+                      },
+                      paymentMethod: 'card',
+                      shippingMethod: order.shipping_method || selectedShippingOption?.courierName || 'Standard',
+                    };
+
+                    // Save real order data to localStorage
+                    localStorage.setItem('lastOrder', JSON.stringify(formattedOrder));
+                    console.log('Card order saved to localStorage:', formattedOrder);
+                    
+                    // Also save order ID in URL params for API fetch fallback
+                    const orderNumber = order.order_number || order.id;
+                    router.push(`/${subdomain}/order-confirmation?orderNumber=${orderNumber}`);
+                    return;
+                  }
+                }
+              } catch (error) {
+                console.error('Error creating order after Card payment:', error);
+                // Continue to confirmation even if order creation fails
+              }
+              
               setCardDialogOpen(false);
               setPaymentData(null);
               router.push(`/${subdomain}/order-confirmation`);

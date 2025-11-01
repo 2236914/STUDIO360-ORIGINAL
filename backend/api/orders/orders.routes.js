@@ -241,28 +241,52 @@ async function getKitschstudioUserId() {
   }
 
   try {
+    // Try exact match first (shop name is "kitschstudio" in database)
+    const { data: exactMatch, error: exactError } = await supabase
+      .from('shop_info')
+      .select('user_id, shop_name')
+      .eq('shop_name', 'kitschstudio')
+      .is('deleted_at', null)
+      .maybeSingle();
+
+    if (!exactError && exactMatch) {
+      cachedKitschstudioUserId = exactMatch.user_id;
+      console.log(`[Orders] ✓ Found kitschstudio shop via exact match: "${exactMatch.shop_name}" (userId: ${exactMatch.user_id})`);
+      return exactMatch.user_id;
+    }
+
+    // Fallback: Get all shops
     const { data: allShops, error } = await supabase
       .from('shop_info')
       .select('user_id, shop_name')
       .is('deleted_at', null);
 
-    if (!error && allShops) {
-      const normalizedSearch = 'kitschstudio';
-      for (const shop of allShops) {
-        const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
-        if (normalizedDbShopName === normalizedSearch) {
-          cachedKitschstudioUserId = shop.user_id;
-          console.log(`[Orders] Found kitschstudio shop: "${shop.shop_name}" (userId: ${shop.user_id})`);
-          return shop.user_id;
-        }
+    if (error) {
+      console.error(`[Orders] Database error fetching shops:`, error);
+      return null;
+    }
+
+    if (!allShops || allShops.length === 0) {
+      console.error(`[Orders] No shops found in database`);
+      return null;
+    }
+
+    // Look for kitschstudio with normalized matching
+    const normalizedSearch = 'kitschstudio';
+    for (const shop of allShops) {
+      const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
+      if (normalizedDbShopName === normalizedSearch) {
+        cachedKitschstudioUserId = shop.user_id;
+        console.log(`[Orders] ✓ Found kitschstudio shop via normalized match: "${shop.shop_name}" (userId: ${shop.user_id})`);
+        return shop.user_id;
       }
-      
-      // Fallback to first shop
-      if (allShops.length > 0) {
-        cachedKitschstudioUserId = allShops[0].user_id;
-        console.log(`[Orders] Using first available shop: "${allShops[0].shop_name}"`);
-        return allShops[0].user_id;
-      }
+    }
+    
+    // Fallback to first shop
+    if (allShops.length > 0) {
+      cachedKitschstudioUserId = allShops[0].user_id;
+      console.log(`[Orders] ⚠ Using first available shop: "${allShops[0].shop_name}" (userId: ${allShops[0].user_id})`);
+      return allShops[0].user_id;
     }
 
     return null;
@@ -272,6 +296,60 @@ async function getKitschstudioUserId() {
   }
 }
 
+/**
+ * @route GET /api/orders/public/:orderNumber
+ * @desc Get order by order number (public endpoint for order confirmation)
+ * @access Public
+ */
+router.get('/public/:orderNumber', async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+    
+    if (!orderNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order number is required'
+      });
+    }
+
+    // Get kitschstudio userId (all orders use the same shop)
+    const userId = await getKitschstudioUserId();
+    
+    if (!userId) {
+      return res.status(500).json({
+        success: false,
+        message: 'Payment service unavailable. Please contact support.'
+      });
+    }
+
+    // Get order by number
+    const order = await ordersService.getOrderByNumber(orderNumber, userId);
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error fetching public order:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error'
+    });
+  }
+});
+
+/**
+ * @route POST /api/orders/public
+ * @desc Create a new order (public endpoint for COD and guest checkout)
+ * @access Public
+ */
 router.post('/public', async (req, res) => {
   try {
     const { shopName, ...orderData } = req.body;

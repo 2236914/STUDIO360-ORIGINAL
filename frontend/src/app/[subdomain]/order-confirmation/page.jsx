@@ -29,43 +29,135 @@ export default function OrderConfirmationPage({ params }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // In a real app, fetch order data from API using order ID from URL params
-    const orderId = searchParams.get('orderId');
-    
-    // For now, get from localStorage or context
-    const storedOrder = localStorage.getItem('lastOrder');
-    
-    if (storedOrder) {
+    const loadOrderData = async () => {
       try {
-        setOrderData(JSON.parse(storedOrder));
-      } catch (e) {
-        console.error('Error parsing stored order:', e);
+        // Try to get order data from localStorage first (set by checkout page)
+        const storedOrder = localStorage.getItem('lastOrder');
+        
+        if (storedOrder) {
+          try {
+            const parsedOrder = JSON.parse(storedOrder);
+            console.log('Loaded order from localStorage:', parsedOrder);
+            
+            // Verify we have real data (not mock)
+            if (parsedOrder.orderId && parsedOrder.orderId !== 'N/A' && parsedOrder.items && parsedOrder.items.length > 0) {
+              setOrderData(parsedOrder);
+              setLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.error('Error parsing stored order:', e);
+          }
+        }
+        
+        // Try to fetch from API using order number from URL
+        const orderNumber = searchParams.get('orderNumber') || searchParams.get('orderId');
+        
+        if (orderNumber) {
+          console.log('Fetching order from API:', orderNumber);
+          
+          try {
+            // Fetch order from API
+            const response = await fetch(`/api/orders/public/${orderNumber}`);
+            
+            if (response.ok) {
+              const result = await response.json();
+              
+              if (result.success && result.data) {
+                const order = result.data;
+                const formattedOrder = {
+                  orderId: order.order_number || order.id,
+                  items: (order.order_items || []).map(item => ({
+                    name: item.product_name,
+                    image: item.product_image_url,
+                    price: parseFloat(item.unit_price || 0),
+                    quantity: parseInt(item.quantity || 1, 10),
+                    subtotal: parseFloat(item.subtotal || item.total || 0),
+                  })),
+                  subtotal: parseFloat(order.subtotal || 0),
+                  shipping: parseFloat(order.shipping_fee || 0),
+                  tax: parseFloat(order.tax || 0),
+                  total: parseFloat(order.total || 0),
+                  customerInfo: {
+                    firstName: order.customer_name?.split(' ')[0] || '',
+                    lastName: order.customer_name?.split(' ').slice(1).join(' ') || '',
+                    email: order.customer_email || '',
+                    phone: order.customer_phone || '',
+                    address: order.shipping_address_line1 || '',
+                    city: order.shipping_city || '',
+                    state: order.shipping_state || '',
+                    zipCode: order.shipping_postal_code || '',
+                    country: order.shipping_country || 'Philippines',
+                  },
+                  paymentMethod: order.payment_method || 'unknown',
+                  shippingMethod: order.shipping_method || 'Standard',
+                };
+                
+                // Save to localStorage for future reference
+                localStorage.setItem('lastOrder', JSON.stringify(formattedOrder));
+                console.log('Order loaded from API:', formattedOrder);
+                setOrderData(formattedOrder);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (apiError) {
+            console.error('Error fetching order from API:', apiError);
+          }
+        }
+        
+        // Fallback: Show what we have or empty state
+        if (storedOrder) {
+          try {
+            const parsedOrder = JSON.parse(storedOrder);
+            setOrderData(parsedOrder);
+          } catch (e) {
+            // Invalid data, show empty state
+            setOrderData({
+              orderId: orderNumber || 'N/A',
+              items: [],
+              subtotal: 0,
+              shipping: 0,
+              tax: 0,
+              total: 0,
+              customerInfo: null,
+              paymentMethod: 'unknown',
+              shippingMethod: 'unknown',
+            });
+          }
+        } else {
+          // No stored order - show empty state
+          setOrderData({
+            orderId: orderNumber || 'N/A',
+            items: [],
+            subtotal: 0,
+            shipping: 0,
+            tax: 0,
+            total: 0,
+            customerInfo: null,
+            paymentMethod: 'unknown',
+            shippingMethod: 'unknown',
+          });
+        }
+      } catch (error) {
+        console.error('Error loading order data:', error);
+        setOrderData({
+          orderId: 'N/A',
+          items: [],
+          subtotal: 0,
+          shipping: 0,
+          tax: 0,
+          total: 0,
+          customerInfo: null,
+          paymentMethod: 'unknown',
+          shippingMethod: 'unknown',
+        });
+      } finally {
+        setLoading(false);
       }
-    } else {
-      // Mock order data if nothing is stored
-      setOrderData({
-        orderId: orderId || `ORD-${Date.now()}`,
-        items: [],
-        subtotal: 0,
-        shipping: 0,
-        tax: 0,
-        total: 0,
-        customerInfo: {
-          firstName: '',
-          lastName: '',
-          email: '',
-          phone: '',
-          address: '',
-          city: '',
-          state: '',
-          zipCode: '',
-        },
-        paymentMethod: 'qrph',
-        shippingMethod: 'standard',
-      });
-    }
+    };
     
-    setLoading(false);
+    loadOrderData();
   }, [searchParams]);
 
   if (!isStoreSubdomain()) {
