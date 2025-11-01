@@ -39,6 +39,9 @@ import { useCheckoutContext } from 'src/sections/checkout/context';
 import { StoreHeader } from 'src/components/store-header';
 import { StoreFooter } from 'src/components/store-footer';
 import { Iconify } from 'src/components/iconify';
+import { QRPHPaymentDialog } from 'src/components/payment/qrph-payment-dialog';
+import { GCashPaymentDialog } from 'src/components/payment/gcash-payment-dialog';
+import { CardPaymentDialog } from 'src/components/payment/card-payment-dialog';
 
 // ----------------------------------------------------------------------
 
@@ -82,6 +85,12 @@ export default function SubdomainCheckoutPage({ params }) {
   const [editingItem, setEditingItem] = useState(null);
   const [showVariantModal, setShowVariantModal] = useState(false);
   const [selectedItemForEdit, setSelectedItemForEdit] = useState(null);
+  
+  // Payment dialog states
+  const [qrphDialogOpen, setQrphDialogOpen] = useState(false);
+  const [gcashDialogOpen, setGcashDialogOpen] = useState(false);
+  const [cardDialogOpen, setCardDialogOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState(null);
 
   // All hooks must be called in the same order every time
   useEffect(() => {
@@ -265,17 +274,125 @@ export default function SubdomainCheckoutPage({ params }) {
       return;
     }
 
+    // Validate payment method for non-zero orders
+    if (orderData.total > 0 && !paymentMethod) {
+      alert('Please select a payment method');
+      return;
+    }
+
     setLoading(true);
     
     try {
-      // Mock order placement - in real app this would call the API
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      // Redirect to order confirmation
-      router.push(`/${subdomain}/order-confirmation`);
+      // Prepare order data
+      const orderItems = orderData.items.map((item) => ({
+        id: item.id,
+        name: item.name || item.title || `Item ${item.id}`,
+        image: item.image || item.cover || item.thumbnail,
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+      }));
+
+      const orderInput = {
+        customer: {
+          name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+          email: customerInfo.email,
+          phone: customerInfo.phone,
+          avatar: '/assets/images/avatar/avatar_1.jpg',
+        },
+        items: orderItems.length,
+        orderItems,
+        price: orderData.total,
+        status: orderData.total === 0 ? 'paid' : 'pending',
+        delivery: {
+          method: selectedShippingOption?.courierName || 'Standard',
+          speed: selectedShippingOption?.estimatedDays ? `${selectedShippingOption.estimatedDays} days delivery` : '3-5 days delivery',
+          trackingNo: '',
+        },
+        shipping: {
+          address: `${customerInfo.address}, ${customerInfo.city}, ${customerInfo.state} ${customerInfo.zipCode}`,
+          phone: customerInfo.phone,
+        },
+        payment: {
+          method: orderData.total === 0 ? 'free' : paymentMethod,
+        },
+        summary: {
+          subtotal: orderData.subtotal || 0,
+          shipping: orderData.shipping || 0,
+          discount: 0,
+          taxes: orderData.tax || 0,
+          total: orderData.total || 0,
+        },
+      };
+
+      // If total is 0 (free order), create order and redirect
+      if (orderData.total === 0) {
+        // Save order locally
+        try {
+          const { addOrder } = await import('src/services/ordersLocalService');
+          addOrder(orderInput);
+        } catch (err) {
+          console.warn('Could not save order locally:', err);
+        }
+
+        // Redirect to confirmation
+        router.push(`/${subdomain}/order-confirmation`);
+        return;
+      }
+
+      // For non-zero orders, process payment
+      if (['qrph', 'gcash', 'credit'].includes(paymentMethod)) {
+        // Import Xendit payment service
+        const xenditPaymentService = (await import('src/services/xenditPaymentService')).default;
+        
+        // Format payment data
+        const paymentData = xenditPaymentService.formatPaymentData(
+          orderInput,
+          {
+            name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+            email: customerInfo.email,
+            phone: customerInfo.phone,
+            fullAddress: orderInput.shipping.address,
+          },
+          paymentMethod
+        );
+
+        // Save order locally first (before payment)
+        try {
+          const { addOrder } = await import('src/services/ordersLocalService');
+          addOrder(orderInput);
+        } catch (err) {
+          console.warn('Could not save order locally:', err);
+        }
+
+        // Set payment data and open appropriate dialog
+        setPaymentData(paymentData);
+        setLoading(false); // Reset loading since payment dialog will handle its own state
+        
+        // Process payment based on method
+        if (paymentMethod === 'qrph') {
+          // Open QRPH payment dialog
+          setQrphDialogOpen(true);
+        } else if (paymentMethod === 'gcash') {
+          // Open GCash payment dialog (it will handle redirect internally)
+          setGcashDialogOpen(true);
+        } else if (paymentMethod === 'credit') {
+          // Open card payment dialog
+          setCardDialogOpen(true);
+        }
+      } else {
+        // For other payment methods (COD, etc.), create order and redirect
+        try {
+          const { addOrder } = await import('src/services/ordersLocalService');
+          addOrder(orderInput);
+        } catch (err) {
+          console.warn('Could not save order locally:', err);
+        }
+        
+        router.push(`/${subdomain}/order-confirmation`);
+      }
     } catch (error) {
       console.error('Error placing order:', error);
-      alert('Failed to place order. Please try again.');
+      alert(`Failed to place order: ${error.message || 'Please try again.'}`);
     } finally {
       setLoading(false);
     }
@@ -821,6 +938,68 @@ export default function SubdomainCheckoutPage({ params }) {
       </Container>
 
       <StoreFooter storeId={subdomain} />
+
+      {/* Payment Dialogs */}
+      {paymentData && (
+        <>
+          <QRPHPaymentDialog
+            open={qrphDialogOpen}
+            onClose={() => {
+              setQrphDialogOpen(false);
+              setPaymentData(null);
+            }}
+            paymentData={paymentData}
+            onSuccess={(paymentResult) => {
+              console.log('QRPH Payment successful:', paymentResult);
+              setQrphDialogOpen(false);
+              setPaymentData(null);
+              router.push(`/${subdomain}/order-confirmation`);
+            }}
+            onError={(error) => {
+              console.error('QRPH Payment error:', error);
+              alert(`Payment failed: ${error}`);
+            }}
+          />
+          
+          <GCashPaymentDialog
+            open={gcashDialogOpen}
+            onClose={() => {
+              setGcashDialogOpen(false);
+              setPaymentData(null);
+            }}
+            paymentData={paymentData}
+            onSuccess={(paymentResult) => {
+              console.log('GCash Payment successful:', paymentResult);
+              setGcashDialogOpen(false);
+              setPaymentData(null);
+              router.push(`/${subdomain}/order-confirmation`);
+            }}
+            onError={(error) => {
+              console.error('GCash Payment error:', error);
+              alert(`Payment failed: ${error}`);
+            }}
+          />
+          
+          <CardPaymentDialog
+            open={cardDialogOpen}
+            onClose={() => {
+              setCardDialogOpen(false);
+              setPaymentData(null);
+            }}
+            paymentData={paymentData}
+            onSuccess={(paymentResult) => {
+              console.log('Card Payment successful:', paymentResult);
+              setCardDialogOpen(false);
+              setPaymentData(null);
+              router.push(`/${subdomain}/order-confirmation`);
+            }}
+            onError={(error) => {
+              console.error('Card Payment error:', error);
+              alert(`Payment failed: ${error}`);
+            }}
+          />
+        </>
+      )}
 
       {/* Variant Edit Modal */}
       <Dialog 

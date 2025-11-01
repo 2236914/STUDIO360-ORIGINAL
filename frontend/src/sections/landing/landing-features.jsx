@@ -59,7 +59,7 @@ export function LandingFeatures() {
         bgcolor: 'background.paper',
       }}
     >
-      <Container maxWidth="xl">
+      <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
         <Stack spacing={8}>
           {/* Header */}
           <Stack spacing={3} alignItems="center" textAlign="center">
@@ -74,18 +74,27 @@ export function LandingFeatures() {
               Platform Features
             </Typography>
             
-            <Typography
-              variant="h2"
-              sx={{
-                fontSize: { xs: '2rem', md: '2.75rem' },
-                fontWeight: 700,
-                lineHeight: 1.3,
-                color: 'text.primary',
-                maxWidth: 600,
-              }}
-            >
-              All-in-One Platform
-            </Typography>
+            <Stack direction="row" alignItems="center" spacing={2} justifyContent="center">
+              <Iconify 
+                icon="solar:widget-5-bold-duotone" 
+                width={48}
+                sx={{
+                  color: 'primary.main',
+                }}
+              />
+              <Typography
+                variant="h2"
+                sx={{
+                  fontSize: { xs: '2rem', md: '2.75rem' },
+                  fontWeight: 700,
+                  lineHeight: 1.3,
+                  color: 'text.primary',
+                  maxWidth: 600,
+                }}
+              >
+                All-in-One Platform
+              </Typography>
+            </Stack>
 
             <Typography
               variant="h6"

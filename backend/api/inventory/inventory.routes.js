@@ -142,6 +142,12 @@ router.put('/products/:id', authenticateTokenHybrid, async (req, res) => {
     const userId = req.user?.id;
     const { id } = req.params;
     
+    console.log(`[PUT /api/inventory/products/:id] Request received:`, {
+      productId: id,
+      userId: userId,
+      updateDataKeys: Object.keys(req.body || {})
+    });
+    
     if (!userId) {
       return res.status(401).json({ 
         success: false, 
@@ -149,13 +155,32 @@ router.put('/products/:id', authenticateTokenHybrid, async (req, res) => {
       });
     }
 
+    if (!id) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Product ID is required' 
+      });
+    }
+
     const updateData = req.body;
+    
+    if (!updateData || Object.keys(updateData).length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Update data is required' 
+      });
+    }
+
     const updatedProduct = await inventoryService.updateProduct(id, userId, updateData);
     
     if (!updatedProduct) {
+      console.error(`[PUT /api/inventory/products/:id] Product not found or update failed:`, {
+        productId: id,
+        userId: userId
+      });
       return res.status(404).json({ 
         success: false, 
-        message: 'Product not found or update failed' 
+        message: 'Product not found or update failed. Please check if the product exists and belongs to your account.' 
       });
     }
     
@@ -165,10 +190,11 @@ router.put('/products/:id', authenticateTokenHybrid, async (req, res) => {
       message: 'Product updated successfully'
     });
   } catch (error) {
-    console.error('Error updating product:', error);
+    console.error('[PUT /api/inventory/products/:id] Error updating product:', error);
     res.status(500).json({ 
       success: false, 
-      message: 'Internal server error' 
+      message: 'Internal server error',
+      ...(process.env.NODE_ENV === 'development' && { error: error.message })
     });
   }
 });

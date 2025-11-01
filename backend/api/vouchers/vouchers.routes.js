@@ -402,9 +402,9 @@ router.post('/validate', authenticateTokenHybrid, async (req, res) => {
       });
     }
 
-    const { code, customer_id, cart_total } = req.body;
+    const { code, customer_id, cart_total, skip_min_amount_check } = req.body;
     
-    if (!code) {
+    if (!code || !code.trim()) {
       return res.status(400).json({ 
         success: false, 
         message: 'Voucher code is required' 
@@ -415,7 +415,8 @@ router.post('/validate', authenticateTokenHybrid, async (req, res) => {
       userId, 
       code, 
       customer_id, 
-      cart_total || 0
+      cart_total || 0,
+      skip_min_amount_check || false
     );
     
     res.json({

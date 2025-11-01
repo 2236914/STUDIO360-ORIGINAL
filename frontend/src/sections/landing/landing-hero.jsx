@@ -45,7 +45,7 @@ export function LandingHero({ id, ...other }) {
         }}
         {...other}
       >
-      <Container maxWidth="xl" sx={{ mt: 0, pt: 0 }}>
+      <Container maxWidth="xl" sx={{ mt: 0, pt: 0, px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
         <Grid container spacing={{ xs: 5, md: 8 }} alignItems="center">
           {/* Text Content */}
           <Grid item xs={12} md={6}>

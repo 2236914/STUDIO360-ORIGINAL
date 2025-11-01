@@ -238,21 +238,32 @@ router.get('/:shopName/voucher/validate', ensureShop, async (req, res) => {
     console.log(`[Public Storefront] GET /voucher/validate for shop: ${req.shopName}, userId: ${req.publicUserId}`);
     const { code, cart_total } = req.query;
     
-    if (!code) {
+    if (!code || !code.trim()) {
       return res.status(400).json({ 
         success: false, 
         message: 'Voucher code is required',
-        data: { is_valid: false } 
+        data: { is_valid: false, message: 'Voucher code is required' } 
       });
     }
 
     const cartTotal = parseFloat(cart_total) || 0;
+    
+    // Skip minimum amount check if cart_total is 0 (reveal flow)
+    const skipMinAmountCheck = cartTotal === 0;
+    
     const validation = await vouchersService.validateVoucher(
       req.publicUserId,
       code,
       null, // customer_id - can be null for public validation
-      cartTotal
+      cartTotal,
+      skipMinAmountCheck // Skip min amount check during reveal
     );
+
+    console.log(`[Public Storefront] Voucher validation result:`, {
+      code,
+      is_valid: validation.is_valid,
+      message: validation.message
+    });
 
     return res.json({
       success: validation.is_valid || false,
@@ -263,7 +274,7 @@ router.get('/:shopName/voucher/validate', ensureShop, async (req, res) => {
     return res.status(500).json({ 
       success: false, 
       message: 'Internal server error',
-      data: { is_valid: false } 
+      data: { is_valid: false, message: 'Internal server error' } 
     });
   }
 });

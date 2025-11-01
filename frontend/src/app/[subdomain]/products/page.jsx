@@ -412,7 +412,9 @@ function ProductGridSection({ storeId }) {
                         transform: 'translateY(-4px)',
                         transition: 'transform 0.3s ease-in-out',
                         boxShadow: (theme) => theme.shadows[3]
-                      }
+                      },
+                      '& .prod-eye': { opacity: 0, transform: 'translateY(-6px)' },
+                      '&:hover .prod-eye': { opacity: 1, transform: 'translateY(0)' },
                     }}
                   >
                     {/* NEW Tag */}
@@ -424,7 +426,7 @@ function ProductGridSection({ storeId }) {
                           position: 'absolute',
                           top: 12,
                           left: 12,
-                          zIndex: 2,
+                          zIndex: 3,
                           bgcolor: 'success.main',
                           color: 'white',
                           fontWeight: 600,
@@ -460,6 +462,30 @@ function ProductGridSection({ storeId }) {
                           objectFit: 'cover'
                         }}
                       />
+                      {/* Eye icon top-right */}
+                      <IconButton
+                        className="prod-eye"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the card click
+                          const slug = product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^[-]+|[-]+$/g, '');
+                          router.push(`/${storeId}/${slug}`);
+                        }}
+                        sx={{
+                          position: 'absolute',
+                          top: 12,
+                          right: 12,
+                          bgcolor: 'white',
+                          boxShadow: '0 6px 12px rgba(0,0,0,0.16)',
+                          opacity: 0,
+                          transform: 'translateY(-6px)',
+                          transition: 'all 0.2s ease',
+                          zIndex: 2,
+                          '&:hover': { bgcolor: 'primary.main', color: 'white' },
+                        }}
+                        aria-label="View product"
+                      >
+                        <Iconify icon="eva:eye-fill" width={18} />
+                      </IconButton>
                       {/* cart button bottom-right */}
                       <IconButton
                         onClick={(e) => {

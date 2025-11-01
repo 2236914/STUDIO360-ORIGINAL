@@ -27,13 +27,17 @@ export default function ITMaintenanceDashboard() {
 
   const loadStats = async () => {
     try {
+      setError(null);
       const data = await supportApi.getTicketStats();
       setStats(data || { total: 0, open: 0, inProgress: 0, closed: 0 });
       setLastUpdated(new Date());
-      setError(null);
     } catch (err) {
       console.error('Error loading stats:', err);
-      setError(err.message || 'Failed to load statistics');
+      // Only show error if it's not a rate limit error (429)
+      if (err.message && !err.message.includes('429') && !err.message.includes('rate limit')) {
+        setError(err.message || 'Failed to load statistics');
+      }
+      // If rate limited, silently retry later
     } finally {
       setLoading(false);
     }
@@ -43,8 +47,10 @@ export default function ITMaintenanceDashboard() {
     document.title = 'IT Maintenance Dashboard | STUDIO360';
     loadStats();
 
-    // Auto-refresh every 5 seconds
-    const interval = setInterval(loadStats, 5000);
+    // Auto-refresh every 30 seconds (reduced from 5s to avoid rate limiting)
+    const interval = setInterval(() => {
+      loadStats();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 

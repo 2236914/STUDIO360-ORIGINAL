@@ -50,8 +50,8 @@ export function LandingHeader() {
     setMobileOpen(false);
   };
 
-  const handleGetStarted = () => {
-    console.log('Get Started clicked, routing to:', paths.auth.jwt.signIn);
+  const handleSignIn = () => {
+    console.log('Sign In clicked, routing to:', paths.auth.jwt.signIn);
     NProgress.start();
     
     try {
@@ -77,20 +77,16 @@ export function LandingHeader() {
         {/* Mobile Logo */}
         <Stack direction="row" alignItems="center" spacing={1.5}>
           <Box
+            component="img"
+            src="/favicon.ico"
+            alt="STUDIO360"
             sx={{
               width: 32,
               height: 32,
               borderRadius: 1,
-              bgcolor: 'primary.main',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              objectFit: 'contain',
             }}
-          >
-            <Typography variant="subtitle1" fontWeight={700} color="white">
-              S
-            </Typography>
-          </Box>
+          />
           <Typography
             variant="h6"
             sx={{
@@ -123,7 +119,7 @@ export function LandingHeader() {
           <Button
             fullWidth
             variant="contained"
-            onClick={handleGetStarted}
+            onClick={handleSignIn}
             sx={{
               bgcolor: 'primary.main',
               py: 1.5,
@@ -131,7 +127,7 @@ export function LandingHeader() {
               fontWeight: 600,
             }}
           >
-            Get Started
+            Sign In
           </Button>
         </ListItem>
       </List>
@@ -197,20 +193,16 @@ export function LandingHeader() {
               onClick={() => handleNavClick('#hero-section')}
             >
               <Box
+                component="img"
+                src="/favicon.ico"
+                alt="STUDIO360"
                 sx={{
                   width: 36,
                   height: 36,
                   borderRadius: 1.5,
-                  bgcolor: 'primary.main',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
+                  objectFit: 'contain',
                 }}
-              >
-                <Typography variant="h6" fontWeight={700} color="white">
-                  S
-                </Typography>
-              </Box>
+              />
               <Typography
                 variant="h6"
                 sx={{
@@ -280,7 +272,7 @@ export function LandingHeader() {
               <Button
                 variant="contained"
                 size="medium"
-                onClick={handleGetStarted}
+                onClick={handleSignIn}
                 sx={{
                   bgcolor: 'primary.main',
                   color: 'primary.contrastText',
@@ -296,7 +288,7 @@ export function LandingHeader() {
                   },
                 }}
               >
-                Get Started
+                Sign In
               </Button>
             </Stack>
 

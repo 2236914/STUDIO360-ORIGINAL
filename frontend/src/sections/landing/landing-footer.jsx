@@ -69,7 +69,7 @@ export function LandingFooter() {
         }}
       />
 
-      <Container maxWidth="xl" sx={{ position: 'relative' }}>
+      <Container maxWidth="xl" sx={{ position: 'relative', px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
         {/* Main Footer Content */}
         <Box sx={{ py: 8 }}>
           <Stack spacing={6}>

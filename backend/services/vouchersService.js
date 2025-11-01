@@ -290,33 +290,56 @@ class VouchersService {
   /**
    * Validate voucher code
    */
-  async validateVoucher(userId, code, customerId = null, cartTotal = 0) {
+  async validateVoucher(userId, code, customerId = null, cartTotal = 0, skipMinAmountCheck = false) {
     try {
+      // Normalize code: trim whitespace and convert to uppercase for consistency
+      const normalizedCode = code ? String(code).trim().toUpperCase() : '';
+      
+      if (!normalizedCode) {
+        return {
+          is_valid: false,
+          message: 'Voucher code is required'
+        };
+      }
+
       const { data, error } = await supabase
         .rpc('validate_voucher', {
           p_user_id: userId,
-          p_code: code,
+          p_code: normalizedCode,
           p_customer_id: customerId,
-          p_cart_total: cartTotal
+          p_cart_total: cartTotal || 0,
+          p_skip_min_amount_check: skipMinAmountCheck
         });
 
       if (error) {
         console.error('Error validating voucher:', error);
         return {
           is_valid: false,
-          message: 'Failed to validate voucher'
+          message: error.message || 'Failed to validate voucher'
         };
       }
 
-      return data[0] || {
-        is_valid: false,
-        message: 'Invalid voucher'
+      if (!data || data.length === 0) {
+        return {
+          is_valid: false,
+          message: 'Invalid voucher code'
+        };
+      }
+
+      const result = data[0];
+      
+      // Ensure proper response format
+      return {
+        is_valid: result.is_valid || false,
+        voucher_id: result.voucher_id,
+        discount_amount: result.discount_amount || 0,
+        message: result.message || (result.is_valid ? 'Voucher is valid' : 'Invalid voucher')
       };
     } catch (error) {
       console.error('Error in validateVoucher:', error);
       return {
         is_valid: false,
-        message: 'Failed to validate voucher'
+        message: error.message || 'Failed to validate voucher'
       };
     }
   }

@@ -49,7 +49,7 @@ export function LandingAbout() {
         bgcolor: 'background.paper',
       }}
     >
-      <Container maxWidth="xl">
+      <Container maxWidth="xl" sx={{ px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
         <Grid container spacing={{ xs: 5, md: 8 }} alignItems="center">
           {/* Text Content */}
           <Grid item xs={12} md={6}>

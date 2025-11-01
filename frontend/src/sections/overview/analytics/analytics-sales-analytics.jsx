@@ -70,7 +70,33 @@ export function AnalyticsSalesAnalytics() {
         const json = await res.json();
         if (!res.ok || !json?.success) throw new Error(json?.message || `HTTP ${res.status}`);
         if (!cancelled) {
-          // persist to local cache
+          // Set the fetched data to state
+          const data = json.data || json;
+          if (data) {
+            setSeriesState({
+              months: data.months || MONTHS,
+              series: data.series || {
+                '360': Array(12).fill(0),
+                'Shopee': Array(12).fill(0),
+                'TikTok Shop': Array(12).fill(0),
+              },
+              yoy: data.yoy || null,
+              yoySource: data.yoySource || null,
+              lastUpdated: data.lastUpdated || new Date().toISOString(),
+              hasData: data.hasData !== undefined ? data.hasData : true,
+            });
+            // Persist to local cache
+            try {
+              localStorage.setItem(cacheKey, JSON.stringify({
+                months: data.months || MONTHS,
+                series: data.series || {},
+                yoy: data.yoy || null,
+                yoySource: data.yoySource || null,
+                lastUpdated: data.lastUpdated || new Date().toISOString(),
+                hasData: data.hasData !== undefined ? data.hasData : true,
+              }));
+            } catch (_) {}
+          }
         }
       } catch (e) {
         if (!cancelled) {

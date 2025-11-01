@@ -145,8 +145,37 @@ class InventoryService {
    */
   async updateProduct(productId, userId, updateData) {
     try {
+      // Validate inputs
+      if (!productId || !userId) {
+        console.error('[InventoryService.updateProduct] Missing required parameters:', {
+          productId: !!productId,
+          userId: !!userId
+        });
+        return null;
+      }
+
+      console.log(`[InventoryService.updateProduct] Starting update:`, {
+        productId,
+        userId,
+        updateDataKeys: Object.keys(updateData || {})
+      });
+
       // Get current product to track stock changes
       const currentProduct = await this.getProductById(productId, userId);
+      
+      if (!currentProduct) {
+        console.error(`[InventoryService.updateProduct] Product not found:`, {
+          productId,
+          userId,
+          note: 'Product may not exist, be deleted, or belong to a different user'
+        });
+        return null;
+      }
+
+      console.log(`[InventoryService.updateProduct] Current product found:`, {
+        productId: currentProduct.id,
+        name: currentProduct.name
+      });
       
       const { data, error } = await supabase
         .from('inventory_products')
@@ -158,7 +187,22 @@ class InventoryService {
         .single();
 
       if (error) {
-        console.error('Error updating product:', error);
+        console.error('[InventoryService.updateProduct] Supabase error:', {
+          error: error.message,
+          code: error.code,
+          details: error.details,
+          hint: error.hint,
+          productId,
+          userId
+        });
+        return null;
+      }
+
+      if (!data) {
+        console.error('[InventoryService.updateProduct] Update succeeded but no data returned:', {
+          productId,
+          userId
+        });
         return null;
       }
 

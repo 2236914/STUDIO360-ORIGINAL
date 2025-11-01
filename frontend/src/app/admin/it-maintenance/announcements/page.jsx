@@ -66,7 +66,11 @@ export default function SystemAnnouncementsPage() {
       setAnnouncements(data || []);
     } catch (err) {
       console.error('Error loading announcements:', err);
-      toast.error('Failed to load announcements');
+      // Only show error toast for non-rate-limit errors
+      if (!err.message?.includes('429') && !err.message?.includes('rate limit')) {
+        toast.error('Failed to load announcements');
+      }
+      // For rate limits, silently fail and retry on next interval
     } finally {
       setLoading(false);
     }
@@ -159,8 +163,10 @@ export default function SystemAnnouncementsPage() {
     document.title = 'System Announcements | IT Maintenance';
     loadAnnouncements();
 
-    // Auto-refresh every 5 seconds
-    const interval = setInterval(loadAnnouncements, 5000);
+    // Auto-refresh every 30 seconds (reduced from 5s to avoid rate limiting)
+    const interval = setInterval(() => {
+      loadAnnouncements();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 

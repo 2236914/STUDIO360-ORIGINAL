@@ -116,7 +116,7 @@ export function LandingContact() {
         }}
       />
 
-      <Container maxWidth="xl" sx={{ position: 'relative' }}>
+      <Container maxWidth="xl" sx={{ position: 'relative', px: { xs: 2, sm: 3, md: 4, lg: 5 } }}>
         <Grid container spacing={{ xs: 5, md: 8 }} alignItems="center">
           {/* Left Side - Info */}
           <Grid item xs={12} md={6}>
@@ -169,19 +169,19 @@ export function LandingContact() {
                   {
                     icon: 'solar:letter-bold-duotone',
                     title: 'Email us',
-                    description: 'hello@studio360.com',
+                    description: 'hello@studio360.dev',
                     color: 'primary',
                   },
                   {
                     icon: 'solar:phone-bold-duotone',
                     title: 'Call us',
-                    description: '+1 (555) 123-4567',
+                    description: '+639 939637674',
                     color: 'info',
                   },
                   {
                     icon: 'solar:map-point-bold-duotone',
                     title: 'Visit us',
-                    description: 'San Francisco, CA',
+                    description: 'BSU Lipa Campus',
                     color: 'success',
                   },
                 ].map((item, index) => (

@@ -11,10 +11,31 @@ async function authFetch(path, options = {}) {
   const base = (CONFIG.site.serverUrl || '').replace(/\/+$/, '');
   const cleanPath = (path || '').replace(/^\/+/, '/');
   const url = typeof window !== 'undefined' ? cleanPath : `${base}${cleanPath}`;
-  const res = await fetch(url, { ...options, headers });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.message || 'Request failed');
-  return json?.data ?? json;
+  
+  try {
+    const res = await fetch(url, { ...options, headers });
+    const json = await res.json().catch(() => ({}));
+    
+    // Handle rate limiting (429) specifically
+    if (res.status === 429) {
+      const error = new Error('Rate limit exceeded. Please try again later.');
+      error.status = 429;
+      throw error;
+    }
+    
+    if (!res.ok) {
+      const error = new Error(json?.message || `Request failed with status ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
+    
+    return json?.data ?? json;
+  } catch (err) {
+    // Re-throw if it's already our custom error
+    if (err.status) throw err;
+    // Network or other errors
+    throw new Error(err.message || 'Network error occurred');
+  }
 }
 
 // Public: Get active system announcements

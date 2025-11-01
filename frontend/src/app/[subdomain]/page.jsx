@@ -30,7 +30,6 @@ import { useRouter } from 'src/routes/hooks';
 import { varFade } from 'src/components/animate';
 import { Iconify } from 'src/components/iconify';
 import { StoreHeader } from 'src/components/store-header';
-import { ChatWidget } from 'src/components/chat-widget/chat-widget';
 import { HydrationBoundary } from 'src/components/hydration-boundary';
 import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreFooter as ReusableStoreFooter } from 'src/components/store-footer';
@@ -38,6 +37,8 @@ import WelcomePopup from 'src/components/welcome-popup';
 
 import { storefrontApi } from 'src/utils/api/storefront';
 import { isStoreSubdomain, isValidStoreId } from 'src/utils/subdomain';
+import { useCheckoutContext } from 'src/sections/checkout/context';
+import { toast } from 'src/components/snackbar';
 
 // ----------------------------------------------------------------------
 
@@ -68,8 +69,51 @@ const ScrollItem = styled(Box)(({ theme }) => ({
 }));
 
 // Product Quick View Modal Component
-function ProductQuickViewModal({ open, onClose, product }) {
+function ProductQuickViewModal({ open, onClose, product, onAddToCart }) {
   if (!product) return null;
+  
+  const router = useRouter();
+  const getCurrentStoreId = () => {
+    if (typeof window !== 'undefined') {
+      const pathname = window.location.pathname;
+      const match = pathname.match(/\/([^\/]+)/);
+      return match ? match[1] : null;
+    }
+    return null;
+  };
+
+  const handleAddToCart = () => {
+    if (onAddToCart && product) {
+      // Format product for cart
+      const priceValue = parseFloat(product.price?.replace(/[^0-9.]/g, '')) || parseFloat(product.price) || 0;
+      const cartItem = {
+        id: product.id,
+        name: product.name,
+        coverUrl: product.cover_image_url || product.coverUrl || product.images?.[0] || product.image_url || product.cover_url,
+        price: priceValue,
+        quantity: 1,
+        colors: [],
+      };
+      onAddToCart(cartItem);
+      onClose();
+    }
+  };
+
+  const handleViewDetails = () => {
+    const storeId = getCurrentStoreId();
+    if (storeId && product) {
+      const slug = product.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^[-]+|[-]+$/g, '');
+      router.push(`/${storeId}/${slug}`);
+      onClose();
+    }
+  };
+
+  // Format price with peso sign
+  const formatPrice = (price) => {
+    if (!price) return '₱0.00';
+    const priceValue = typeof price === 'string' ? parseFloat(price.replace(/[^0-9.]/g, '')) : parseFloat(price);
+    return `₱${priceValue.toFixed(2)}`;
+  };
 
   return (
     <Modal
@@ -181,8 +225,8 @@ function ProductQuickViewModal({ open, onClose, product }) {
 
             {/* Right Panel - Product Details */}
             <Grid item xs={12} md={6}>
-              <Box sx={{ p: 4 }}>
-                <Stack spacing={3}>
+              <Box sx={{ p: 3 }}>
+                <Stack spacing={2}>
                   {/* Product Title */}
                   <Typography variant="h4" sx={{ fontWeight: 700, color: 'text.primary' }}>
                     {product.name}
@@ -195,7 +239,7 @@ function ProductQuickViewModal({ open, onClose, product }) {
 
                   {/* Price */}
                   <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                    {product.price}
+                    {formatPrice(product.price)}
                   </Typography>
 
                   {/* Add to Cart Button */}
@@ -203,10 +247,11 @@ function ProductQuickViewModal({ open, onClose, product }) {
                     variant="contained"
                     size="large"
                     startIcon={<Iconify icon="eva:shopping-cart-fill" />}
+                    onClick={handleAddToCart}
                     sx={{
                       bgcolor: 'primary.main',
                       color: 'white',
-                      py: 2,
+                      py: 1.5,
                       borderRadius: 2,
                       '&:hover': {
                         bgcolor: 'primary.dark',
@@ -216,35 +261,40 @@ function ProductQuickViewModal({ open, onClose, product }) {
                     Add to Cart
                   </Button>
 
-                  {/* Action Icons */}
-                  <Stack direction="row" spacing={2}>
-                    <IconButton sx={{ color: 'text.secondary' }}>
-                      <Iconify icon="eva:share-fill" />
-                    </IconButton>
-                    <IconButton sx={{ color: 'text.secondary' }}>
-                      <Iconify icon="eva:heart-fill" />
-                    </IconButton>
-                    <IconButton sx={{ color: 'text.secondary' }}>
-                      <Iconify icon="eva:email-fill" />
-                    </IconButton>
-                  </Stack>
-
-                  {/* View Full Details Link */}
-                  <Box sx={{ textAlign: 'right' }}>
+                  {/* Action Icons and See Details */}
+                  <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                    <Stack direction="row" spacing={2}>
+                      <IconButton sx={{ color: 'text.secondary' }}>
+                        <Iconify icon="eva:share-fill" />
+                      </IconButton>
+                      <IconButton sx={{ color: 'text.secondary' }}>
+                        <Iconify icon="eva:heart-fill" />
+                      </IconButton>
+                      <IconButton sx={{ color: 'text.secondary' }}>
+                        <Iconify icon="eva:email-fill" />
+                      </IconButton>
+                    </Stack>
+                    {/* See Details Link - aligned with heart icons */}
                     <Link
-                      href="#"
+                      component="button"
+                      onClick={handleViewDetails}
                       sx={{
                         color: 'primary.main',
                         textDecoration: 'none',
                         fontWeight: 500,
+                        fontSize: '0.875rem',
+                        cursor: 'pointer',
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
                         '&:hover': {
                           textDecoration: 'underline',
                         },
                       }}
                     >
-                      View full details
+                      See details
                     </Link>
-                  </Box>
+                  </Stack>
                 </Stack>
               </Box>
             </Grid>
@@ -441,6 +491,7 @@ function HeroSection({ storeId }) {
 
 // Featured Products Section
 function FeaturedProductsSection({ storeId }) {
+  const checkout = useCheckoutContext();
   const [quickViewProduct, setQuickViewProduct] = useState(null);
   const [quickViewOpen, setQuickViewOpen] = useState(false);
   const scrollRef = useRef(null);
@@ -484,6 +535,23 @@ function FeaturedProductsSection({ storeId }) {
   const handleQuickView = (product) => {
     setQuickViewProduct(product);
     setQuickViewOpen(true);
+  };
+
+  const handleAddToCartFromCard = (e, product) => {
+    e.stopPropagation();
+    if (checkout?.onAddToCart && product) {
+      const priceValue = parseFloat(product.price?.replace(/[^0-9.]/g, '')) || parseFloat(product.price) || 0;
+      const cartItem = {
+        id: product.id,
+        name: product.name,
+        coverUrl: product.cover_image_url || product.coverUrl || product.images?.[0] || product.image_url || product.cover_url,
+        price: priceValue,
+        quantity: 1,
+        colors: [],
+      };
+      checkout.onAddToCart(cartItem);
+      toast.success(`${product.name} added to cart`);
+    }
   };
 
   // Enhanced auto-scroll with smooth continuous animation
@@ -746,7 +814,7 @@ function FeaturedProductsSection({ storeId }) {
                         {/* Cart (bottom-right) */}
                           <IconButton
                           className="prod-cart"
-                          onClick={(e) => { e.stopPropagation(); /* add to cart */ }}
+                          onClick={(e) => handleAddToCartFromCard(e, product)}
                             sx={{
                             position: 'absolute',
                             bottom: 8,
@@ -812,6 +880,7 @@ function FeaturedProductsSection({ storeId }) {
         open={quickViewOpen}
         onClose={() => setQuickViewOpen(false)}
         product={quickViewProduct}
+        onAddToCart={checkout?.onAddToCart}
       />
     </Box>
     </m.div>
@@ -2412,9 +2481,6 @@ export default function SubdomainPage({ params }) {
         <HydrationBoundary>
           <FloatingActionButtons />
         </HydrationBoundary>
-
-        {/* Chat Widget */}
-        <ChatWidget storeName={subdomain} />
       </Box>
     );
   }

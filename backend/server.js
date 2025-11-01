@@ -32,10 +32,11 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.'
 });
 
-// Skip rate limiting for announcement endpoints
+// Skip rate limiting for public endpoints
 app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for announcement endpoints (public access)
-  if (req.path.startsWith('/api/announcements')) {
+  // Skip rate limiting for public endpoints (announcements and storefront)
+  if (req.path.startsWith('/api/announcements') || 
+      req.path.startsWith('/api/public/storefront')) {
     return next();
   }
   return limiter(req, res, next);

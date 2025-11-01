@@ -1,5 +1,7 @@
 import { CheckoutProvider } from 'src/sections/checkout/context';
 import { Snackbar } from 'src/components/snackbar';
+import { StoreFavicon } from 'src/components/store-favicon';
+import { ChatWidgetWrapper } from 'src/components/chat-widget-wrapper';
 
 // ----------------------------------------------------------------------
 
@@ -42,11 +44,16 @@ export async function generateMetadata({ params }) {
   };
 }
 
-export default function SubdomainLayout({ children }) {
+export default async function SubdomainLayout({ children, params }) {
+  const resolvedParams = params instanceof Promise ? await params : params;
+  const subdomain = resolvedParams?.subdomain;
+
   return (
     <CheckoutProvider>
+      <StoreFavicon storeId={subdomain} />
       <Snackbar />
       {children}
+      <ChatWidgetWrapper storeName={subdomain} />
     </CheckoutProvider>
   );
 }

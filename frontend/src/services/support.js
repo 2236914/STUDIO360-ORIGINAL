@@ -7,10 +7,30 @@ async function authFetch(path, options = {}) {
     ...(options.headers || {}),
     'Authorization': `Bearer ${session?.access_token || ''}`,
   };
-  const res = await fetch(`${CONFIG.site.serverUrl}${path}`, { ...options, headers });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(json?.message || 'Request failed');
-  return json?.data ?? json;
+  try {
+    const res = await fetch(`${CONFIG.site.serverUrl}${path}`, { ...options, headers });
+    const json = await res.json().catch(() => ({}));
+    
+    // Handle rate limiting (429) specifically
+    if (res.status === 429) {
+      const error = new Error('Rate limit exceeded. Please try again later.');
+      error.status = 429;
+      throw error;
+    }
+    
+    if (!res.ok) {
+      const error = new Error(json?.message || `Request failed with status ${res.status}`);
+      error.status = res.status;
+      throw error;
+    }
+    
+    return json?.data ?? json;
+  } catch (err) {
+    // Re-throw if it's already our custom error
+    if (err.status) throw err;
+    // Network or other errors
+    throw new Error(err.message || 'Network error occurred');
+  }
 }
 
 async function listRecentMessages() {
