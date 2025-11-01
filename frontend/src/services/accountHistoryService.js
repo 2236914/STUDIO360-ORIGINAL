@@ -29,8 +29,19 @@ async function authenticatedRequest(url, options = {}) {
       },
     };
 
-    console.log('Account History: Making request to:', url);
-    const response = await fetch(url, { ...options, ...defaultOptions });
+    // In the browser, prefer relative '/api' to use Next.js proxy and avoid CORS/port issues
+    let finalUrl = url;
+    if (typeof window !== 'undefined') {
+      try {
+        const base = (CONFIG.site.serverUrl || '').replace(/\/+$/, '');
+        if (base && url.startsWith(base)) {
+          finalUrl = url.slice(base.length);
+        }
+      } catch (_) { /* noop */ }
+    }
+
+    console.log('Account History: Making request to:', finalUrl);
+    const response = await fetch(finalUrl, { ...options, ...defaultOptions });
     
     // If we get a 401/403, the token might be invalid
     if (response.status === 401 || response.status === 403) {

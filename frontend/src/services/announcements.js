@@ -7,7 +7,11 @@ async function authFetch(path, options = {}) {
     ...(options.headers || {}),
     'Authorization': `Bearer ${session?.access_token || ''}`,
   };
-  const res = await fetch(`${CONFIG.site.serverUrl}${path}`, { ...options, headers });
+  // Normalize URL to avoid double slashes
+  const base = (CONFIG.site.serverUrl || '').replace(/\/+$/, '');
+  const cleanPath = (path || '').replace(/^\/+/, '/');
+  const url = typeof window !== 'undefined' ? cleanPath : `${base}${cleanPath}`;
+  const res = await fetch(url, { ...options, headers });
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.message || 'Request failed');
   return json?.data ?? json;
@@ -26,7 +30,10 @@ async function listSystemAnnouncements() {
       return _annCache.data;
     }
 
-    const primary = `${CONFIG.site.serverUrl}/api/announcements/system`;
+    // Use relative URL in browser, absolute in SSR
+    const primary = typeof window !== 'undefined' 
+      ? '/api/announcements/system'
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/announcements/system`;
 
     async function fetchOnce(url) {
       const res = await fetch(url, { method: 'GET', headers: { 'Content-Type': 'application/json' }, cache: 'no-store' });
