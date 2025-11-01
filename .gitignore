@@ -88,7 +88,9 @@ jspm_packages/
 
 # Gatsby files
 .cache/
-public
+# Only ignore root-level public directories, not backend/api/public (which contains code routes)
+# Note: frontend/public contains Next.js static assets and should be tracked
+/public/
 
 # Storybook build outputs
 .out
