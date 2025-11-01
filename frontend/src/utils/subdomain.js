@@ -1,6 +1,17 @@
 // ----------------------------------------------------------------------
 
 /**
+ * Check if a subdomain string is a valid store ID (not reserved)
+ * @param {string} storeId - The store ID to check
+ * @returns {boolean} True if valid store ID
+ */
+export function isValidStoreId(storeId) {
+  if (!storeId) return false;
+  const reservedRoutes = ['dashboard', 'admin', 'api', 'auth', 'stores', '_next', 'favicon.ico', 'landing', 'www', 'app'];
+  return !reservedRoutes.includes(storeId.toLowerCase());
+}
+
+/**
  * Get the current subdomain from the hostname
  * @returns {string|null} The subdomain or null if no subdomain
  */
@@ -52,8 +63,9 @@ export function isStoreSubdomain() {
     return true;
   }
   
-  // For localhost development, check if we're on a subdomain route
-  if (hostname === 'localhost') {
+  // For localhost or Vercel preview URLs, check if we're on a path-based store route
+  const isDevelopmentOrPreview = hostname === 'localhost' || hostname.endsWith('.vercel.app');
+  if (isDevelopmentOrPreview) {
     const pathParts = pathname.split('/').filter(part => part.length > 0);
     const firstPart = pathParts[0];
     
@@ -64,9 +76,9 @@ export function isStoreSubdomain() {
       firstPart !== 'api' &&
       firstPart !== 'auth' &&
       firstPart !== 'stores' &&
-      firstPart !== 'stores' &&
       firstPart !== '_next' &&
-      firstPart !== 'favicon.ico';
+      firstPart !== 'favicon.ico' &&
+      firstPart !== 'landing';
     
     return isValidStoreRoute;
   }
@@ -109,16 +121,38 @@ export function getCurrentStoreId() {
     return null;
   }
   
-  const {hostname} = window.location;
+  const {hostname, pathname} = window.location;
   
   // Check if we're on kitschstudio.page
   if (hostname === 'kitschstudio.page' || hostname === 'www.kitschstudio.page') {
     return 'kitschstudio';
   }
   
+  // For localhost or Vercel preview URLs, extract store ID from path
+  const isDevelopmentOrPreview = hostname === 'localhost' || hostname.endsWith('.vercel.app');
+  if (isDevelopmentOrPreview) {
+    const pathParts = pathname.split('/').filter(part => part.length > 0);
+    const firstPart = pathParts[0];
+    
+    // Return the first path part if it's a valid store route
+    if (firstPart && 
+        firstPart !== 'dashboard' && 
+        firstPart !== 'admin' &&
+        firstPart !== 'api' &&
+        firstPart !== 'auth' &&
+        firstPart !== 'stores' &&
+        firstPart !== '_next' &&
+        firstPart !== 'favicon.ico' &&
+        firstPart !== 'landing') {
+      return firstPart;
+    }
+  }
+  
+  // For production subdomains
   if (isStoreSubdomain()) {
     return getCurrentSubdomain();
   }
+  
   return null;
 }
 
@@ -132,10 +166,10 @@ export function buildStoreUrl(storeId, path = '') {
   const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
   const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.dev';
   
-  // For localhost development, use query params instead of subdomain
-  if (host === 'localhost') {
-    const baseUrl = `${protocol}//${host}:3033`;
-    return path ? `${baseUrl}/stores/${storeId}${path}` : `${baseUrl}/stores/${storeId}`;
+  // For localhost or Vercel preview URLs, use path-based routing
+  if (host === 'localhost' || host.endsWith('.vercel.app')) {
+    const baseUrl = host === 'localhost' ? `${protocol}//${host}:3033` : `${protocol}//${host}`;
+    return path ? `${baseUrl}/${storeId}${path}` : `${baseUrl}/${storeId}`;
   }
   
   // Special case: if storeId is 'kitschstudio', use the kitschstudio.page domain

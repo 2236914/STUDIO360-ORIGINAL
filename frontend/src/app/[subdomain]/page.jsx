@@ -37,7 +37,7 @@ import { StoreFooter as ReusableStoreFooter } from 'src/components/store-footer'
 import WelcomePopup from 'src/components/welcome-popup';
 
 import { storefrontApi } from 'src/utils/api/storefront';
-import { isStoreSubdomain } from 'src/utils/subdomain';
+import { isStoreSubdomain, isValidStoreId } from 'src/utils/subdomain';
 
 // ----------------------------------------------------------------------
 
@@ -2355,8 +2355,11 @@ export default function SubdomainPage({ params }) {
 
   useEffect(() => {
     setIsClient(true);
-    setIsValidStore(isStoreSubdomain());
-  }, []);
+    // Check if subdomain param is a valid store ID
+    const isValidStoreRoute = isValidStoreId(subdomain);
+    // Also check isStoreSubdomain for subdomain-based routing (production domains)
+    setIsValidStore(isValidStoreRoute || isStoreSubdomain());
+  }, [subdomain]);
 
   // Show loading state during hydration
   if (!isClient) {
