@@ -93,7 +93,7 @@ export const AddressPaymentSchema = zod.object({
   
   // Delivery & Payment
   delivery: zod.number(),
-  payment: zod.string().min(1, { message: 'Payment method is required!' }),
+  payment: zod.string().optional(), // Optional - will be validated conditionally for non-zero orders
 });
 
 // ----------------------------------------------------------------------
@@ -114,6 +114,9 @@ export function CheckoutAddressPayment() {
   const [paymentError, setPaymentError] = useState('');
   const [paymentSuccess, setPaymentSuccess] = useState(false);
 
+  // Watch checkout total to determine if payment is needed
+  const orderTotal = checkout.total || 0;
+  
   const defaultValues = {
     firstName: '',
     lastName: '',
@@ -126,7 +129,7 @@ export function CheckoutAddressPayment() {
     zipCode: '',
     additionalInfo: '',
     delivery: 0,
-    payment: '',
+    payment: orderTotal === 0 ? 'free' : '', // Default to 'free' if total is 0
   };
 
   const methods = useForm({
@@ -252,8 +255,8 @@ export function CheckoutAddressPayment() {
         },
         items: orderItems.length,
         orderItems,
-        price: checkout.total || 0,
-        status: 'pending',
+        price: orderTotal,
+        status: orderTotal === 0 ? 'paid' : 'pending', // Auto-mark as paid if free
         delivery: {
           method: deliveryOptions.find(opt => opt.value === data.delivery)?.label || 'Standard',
           speed: deliveryOptions.find(opt => opt.value === data.delivery)?.description || '3-5 days delivery',
@@ -264,18 +267,48 @@ export function CheckoutAddressPayment() {
           phone: data.phone,
         },
         payment: {
-          method: data.payment,
+          method: orderTotal === 0 ? 'free' : data.payment, // Mark as free if total is 0
         },
         summary: {
           subtotal: checkout.subtotal || 0,
           shipping: checkout.shipping || 0,
           discount: checkout.discount || 0,
           taxes: 0,
-          total: checkout.total || 0,
+          total: orderTotal,
         },
       };
 
-      // Check if Xendit payment method is selected
+      // Validate payment for non-zero orders
+      if (orderTotal > 0 && !data.payment) {
+        setPaymentError('Please select a payment method');
+        return;
+      }
+
+      // If total is 0 (e.g., due to voucher), skip payment and complete order directly
+      if (orderTotal === 0) {
+        // Save order locally
+        try {
+          const { addOrder } = await import('src/services/ordersLocalService');
+          addOrder(orderInput);
+        } catch (err) {
+          console.warn('Could not save order locally:', err);
+        }
+
+        // Show success message
+        setPaymentSuccess(true);
+        setPaymentError('');
+        
+        // Proceed to next step after short delay
+        setTimeout(() => {
+          checkout.onNextStep();
+          checkout.onReset();
+        }, 1500);
+        
+        console.info('Free order completed (voucher applied):', orderInput);
+        return;
+      }
+
+      // Check if Xendit payment method is selected (only for non-zero orders)
       if (['qrph', 'gcash', 'credit'].includes(data.payment)) {
         // Open appropriate Xendit payment dialog
         setPaymentError('');
@@ -543,14 +576,25 @@ export function CheckoutAddressPayment() {
           )}
           <CheckoutDelivery onApplyShipping={checkout.onApplyShipping} options={deliveryOptions} categorizedOptions={categorizedDeliveryOptions} />
 
-          {/* Payment Methods */}
-          <CheckoutPaymentMethods
-            options={{
-              payments: PAYMENT_OPTIONS,
-              cards: CARDS_OPTIONS,
-            }}
-            sx={{ my: 3 }}
-          />
+          {/* Payment Methods - Hide if total is 0 (free order) */}
+          {checkout.total > 0 ? (
+            <CheckoutPaymentMethods
+              options={{
+                payments: PAYMENT_OPTIONS,
+                cards: CARDS_OPTIONS,
+              }}
+              sx={{ my: 3 }}
+            />
+          ) : (
+            <Box sx={{ my: 3, p: 2, bgcolor: 'success.lighter', borderRadius: 1 }}>
+              <Typography variant="body1" sx={{ color: 'success.dark', fontWeight: 600 }}>
+                ✓ Free Order - No Payment Required
+              </Typography>
+              <Typography variant="body2" sx={{ color: 'success.main', mt: 0.5 }}>
+                Your voucher covers the full order amount. Click "Complete Order" to finish.
+              </Typography>
+            </Box>
+          )}
 
           {/* Payment Error/Success Messages */}
           {paymentError && (
@@ -600,6 +644,7 @@ export function CheckoutAddressPayment() {
             type="submit"
             variant="contained"
             loading={isSubmitting}
+            disabled={orderTotal > 0 && !methods.watch('payment')} // Disable if payment required but not selected
             sx={{
               py: 2.5,
               borderRadius: 2,
@@ -616,7 +661,7 @@ export function CheckoutAddressPayment() {
               }
             }}
           >
-            Complete Order
+            {orderTotal === 0 ? 'Complete Free Order' : 'Complete Order'}
           </LoadingButton>
         </Grid>
       </Grid>
