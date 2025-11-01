@@ -4,15 +4,23 @@ import packageJson from '../package.json';
 
 // ----------------------------------------------------------------------
 
+// Helper to normalize server URL - removes ALL trailing slashes
+function normalizeServerUrl(url) {
+  if (!url) return 'http://localhost:3001';
+  return url.toString().trim().replace(/\/+$/, '');
+}
+
 export const CONFIG = {
   site: {
     name: 'Kitsch Studio',
   // Ensure frontend talks to backend in dev even if env is missing
   // Remove ALL trailing slashes to prevent double slashes in URLs
-  serverUrl: (process.env.NEXT_PUBLIC_SERVER_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001')
-    .toString()
-    .trim()
-    .replace(/\/+$/, ''),
+  // Force rebuild: v1.0.1 - Fixed all double slash URL issues
+  serverUrl: normalizeServerUrl(
+    process.env.NEXT_PUBLIC_SERVER_URL ?? 
+    process.env.NEXT_PUBLIC_API_URL ?? 
+    'http://localhost:3001'
+  ),
     assetURL: process.env.NEXT_PUBLIC_ASSET_URL ?? '',
     basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? '',
     version: packageJson.version,
