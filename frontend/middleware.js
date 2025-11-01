@@ -12,7 +12,7 @@ export function middleware(request) {
   
   // Remove port if present (for proper domain matching)
   hostname = hostname.split(':')[0];
-
+  
   // Generate a per-request nonce
   const nonce = crypto.randomBytes(16).toString('base64');
 
@@ -49,12 +49,11 @@ export function middleware(request) {
   baseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   baseResponse.headers.set('Cross-Origin-Resource-Policy', 'same-site');
 
-  // Handle kitschstudio.page domain FIRST - rewrite to /kitschstudio route
-  // This must be checked before the "no subdomain" check
-  // Check for exact match or www variant, case-insensitive
+  // CRITICAL: Handle kitschstudio.page domain FIRST - before any other logic
+  // This must be checked before the "no subdomain" check to ensure rewrite works
   const normalizedHostname = hostname.toLowerCase().trim();
   
-  // Debug logging (will appear in Vercel logs)
+  // Debug logging
   if (normalizedHostname.includes('kitschstudio.page')) {
     console.log('[Middleware] Detected kitschstudio.page:', { 
       hostname, 
@@ -77,6 +76,8 @@ export function middleware(request) {
       storePath = `/kitschstudio${pathname}${!hasTrailingSlash && !hasExtension ? '/' : ''}`;
     }
     
+    console.log('[Middleware] Rewriting kitschstudio.page to:', storePath);
+    
     // Use pathname-based rewrite with the same origin
     const url = request.nextUrl.clone();
     url.pathname = storePath;
@@ -87,6 +88,18 @@ export function middleware(request) {
     res.headers.set('X-Frame-Options', 'DENY');
     res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
     res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    
+    // Add debug headers for verification
+    res.headers.set('X-Rewrite-Target', storePath);
+    res.headers.set('X-Original-Host', hostname);
+    
+    console.log('[Middleware] Rewrite complete:', { 
+      original: pathname, 
+      rewritten: storePath,
+      originalUrl: request.url.toString(),
+      newUrl: url.toString()
+    });
+    
     return res;
   }
 
