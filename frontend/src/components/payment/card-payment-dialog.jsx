@@ -152,6 +152,11 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
       isMultipleUse: false,
     };
 
+    // Add shopName if available in paymentData (for public endpoint)
+    if (paymentData?.shopName) {
+      tokenData.shopName = paymentData.shopName;
+    }
+
     try {
       const result = await xenditPaymentService.createCardToken(tokenData);
       

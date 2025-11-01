@@ -2,6 +2,40 @@ const express = require('express');
 const router = express.Router();
 const ordersService = require('../../services/ordersService');
 const { authenticateTokenHybrid } = require('../../middleware/auth');
+const { supabase } = require('../../services/supabaseClient');
+
+/**
+ * Helper function to get store owner user_id from shop name
+ */
+async function getUserIdByShopName(shopName) {
+  try {
+    let { data, error } = await supabase
+      .from('shop_info')
+      .select('user_id, shop_name')
+      .eq('shop_name', shopName)
+      .is('deleted_at', null)
+      .single();
+
+    if (error || !data) {
+      const { data: caseInsensitiveData, error: caseInsensitiveError } = await supabase
+        .from('shop_info')
+        .select('user_id, shop_name')
+        .ilike('shop_name', shopName)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (!caseInsensitiveError && caseInsensitiveData) {
+        return caseInsensitiveData.user_id;
+      }
+      return null;
+    }
+    
+    return data.user_id;
+  } catch (e) {
+    console.error(`Error looking up shop "${shopName}":`, e);
+    return null;
+  }
+}
 
 // ============================================
 // ORDER ROUTES
@@ -148,6 +182,63 @@ router.get('/number/:orderNumber', authenticateTokenHybrid, async (req, res) => 
     });
   } catch (error) {
     console.error('Error fetching order:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/orders/public
+ * @desc Create a new order (public endpoint for COD and guest checkout)
+ * @access Public
+ */
+router.post('/public', async (req, res) => {
+  try {
+    const { shopName, ...orderData } = req.body;
+    
+    if (!shopName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Shop name is required' 
+      });
+    }
+
+    const userId = await getUserIdByShopName(shopName);
+    if (!userId) {
+      console.error(`[Public Order] Shop not found for shopName: "${shopName}"`);
+      return res.status(404).json({ 
+        success: false, 
+        message: `Store "${shopName}" not found. Please check the store name.` 
+      });
+    }
+    
+    console.log(`[Public Order] Creating order for shop: "${shopName}", userId: ${userId}`);
+
+    if (!orderData.customer_name || !orderData.customer_email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Customer name and email are required' 
+      });
+    }
+
+    const newOrder = await ordersService.createOrder(userId, orderData);
+    
+    if (!newOrder) {
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Failed to create order' 
+      });
+    }
+    
+    res.status(201).json({
+      success: true,
+      data: newOrder,
+      message: 'Order created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating order:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Internal server error' 

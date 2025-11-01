@@ -234,7 +234,7 @@ function ProductQuickViewModal({ open, onClose, product, onAddToCart }) {
 
                   {/* Product Description */}
                   <Typography variant="body1" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
-                    Product description goes here. This is a placeholder for the detailed product description that would explain the features, materials, and craftsmanship of this beautiful piece.
+                    {product.description || product.short_description || 'No description available.'}
                   </Typography>
 
                   {/* Price */}

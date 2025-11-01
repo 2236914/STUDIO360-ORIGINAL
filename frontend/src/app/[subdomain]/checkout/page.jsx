@@ -35,6 +35,7 @@ import { isStoreSubdomain, getCurrentStoreId } from 'src/utils/subdomain';
 import { calculateShippingOptions, getShippingRegion } from 'src/utils/shipping-calculator';
 import { getShippingConfigForStore } from 'src/services/shippingConfigService';
 import { useCheckoutContext } from 'src/sections/checkout/context';
+import { CONFIG } from 'src/config-global';
 
 import { StoreHeader } from 'src/components/store-header';
 import { StoreFooter } from 'src/components/store-footer';
@@ -91,6 +92,10 @@ export default function SubdomainCheckoutPage({ params }) {
   const [gcashDialogOpen, setGcashDialogOpen] = useState(false);
   const [cardDialogOpen, setCardDialogOpen] = useState(false);
   const [paymentData, setPaymentData] = useState(null);
+  
+  // Confirmation dialog state
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [pendingOrderData, setPendingOrderData] = useState(null);
 
   // All hooks must be called in the same order every time
   useEffect(() => {
@@ -255,7 +260,7 @@ export default function SubdomainCheckoutPage({ params }) {
     setSelectedItemForEdit(null);
   };
 
-  const handlePlaceOrder = async () => {
+  const handlePlaceOrder = () => {
     if (!agreedToTerms) {
       alert('Please agree to the terms and conditions');
       return;
@@ -277,49 +282,65 @@ export default function SubdomainCheckoutPage({ params }) {
       return;
     }
 
+    // Prepare order data for confirmation
+    const orderItems = orderData.items.map((item) => ({
+      id: item.id,
+      name: item.name || item.title || `Item ${item.id}`,
+      image: item.image || item.cover || item.thumbnail,
+      quantity: item.quantity || 1,
+      price: item.price || 0,
+    }));
+
+    const orderInput = {
+      customer: {
+        name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+        email: customerInfo.email,
+        phone: customerInfo.phone,
+        avatar: '/assets/images/avatar/avatar_1.jpg',
+      },
+      items: orderItems.length,
+      orderItems,
+      price: orderData.total,
+      status: orderData.total === 0 ? 'paid' : 'pending',
+      delivery: {
+        method: selectedShippingOption?.courierName || 'Standard',
+        speed: selectedShippingOption?.estimatedDays ? `${selectedShippingOption.estimatedDays} days delivery` : '3-5 days delivery',
+        trackingNo: '',
+      },
+      shipping: {
+        address: `${customerInfo.address}, ${customerInfo.city}, ${customerInfo.state} ${customerInfo.zipCode}`,
+        phone: customerInfo.phone,
+      },
+      payment: {
+        method: orderData.total === 0 ? 'free' : paymentMethod,
+      },
+      summary: {
+        subtotal: orderData.subtotal || 0,
+        shipping: orderData.shipping || 0,
+        discount: 0,
+        taxes: orderData.tax || 0,
+        total: orderData.total || 0,
+      },
+    };
+
+    // Store order data and show confirmation dialog
+    setPendingOrderData(orderInput);
+    setConfirmDialogOpen(true);
+  };
+
+  const handleConfirmOrder = async () => {
+    if (!pendingOrderData) return;
+
+    setConfirmDialogOpen(false);
     setLoading(true);
     
     try {
-      // Prepare order data
-      const orderItems = orderData.items.map((item) => ({
-        id: item.id,
-        name: item.name || item.title || `Item ${item.id}`,
-        image: item.image || item.cover || item.thumbnail,
-        quantity: item.quantity || 1,
-        price: item.price || 0,
-      }));
-
-      const orderInput = {
-        customer: {
-          name: `${customerInfo.firstName} ${customerInfo.lastName}`,
-          email: customerInfo.email,
-          phone: customerInfo.phone,
-          avatar: '/assets/images/avatar/avatar_1.jpg',
-        },
-        items: orderItems.length,
-        orderItems,
-        price: orderData.total,
-        status: orderData.total === 0 ? 'paid' : 'pending',
-        delivery: {
-          method: selectedShippingOption?.courierName || 'Standard',
-          speed: selectedShippingOption?.estimatedDays ? `${selectedShippingOption.estimatedDays} days delivery` : '3-5 days delivery',
-          trackingNo: '',
-        },
-        shipping: {
-          address: `${customerInfo.address}, ${customerInfo.city}, ${customerInfo.state} ${customerInfo.zipCode}`,
-          phone: customerInfo.phone,
-        },
-        payment: {
-          method: orderData.total === 0 ? 'free' : paymentMethod,
-        },
-        summary: {
-          subtotal: orderData.subtotal || 0,
-          shipping: orderData.shipping || 0,
-          discount: 0,
-          taxes: orderData.tax || 0,
-          total: orderData.total || 0,
-        },
-      };
+      const orderInput = pendingOrderData;
+      // Use subdomain as shop name (subdomain should match shop_name in shop_info table)
+      const shopName = subdomain;
+      
+      // Log for debugging
+      console.log(`[Checkout] Processing order for shop: "${shopName}"`);
 
       // If total is 0 (free order), create order and redirect
       if (orderData.total === 0) {
@@ -336,21 +357,91 @@ export default function SubdomainCheckoutPage({ params }) {
         return;
       }
 
-      // For non-zero orders, process payment
+      // Handle COD - create order in database
+      if (paymentMethod === 'cod') {
+        try {
+          const API_BASE_URL = CONFIG.site.serverUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          
+          // Format order data for database
+          const orderDbData = {
+            shopName: shopName,
+            customer_name: `${customerInfo.firstName} ${customerInfo.lastName}`,
+            customer_email: customerInfo.email,
+            customer_phone: customerInfo.phone,
+            shipping_address_line1: customerInfo.address,
+            shipping_city: customerInfo.city,
+            shipping_state: customerInfo.state,
+            shipping_postal_code: customerInfo.zipCode,
+            shipping_country: customerInfo.country || 'Philippines',
+            payment_method: 'cod',
+            payment_status: 'pending',
+            status: 'pending',
+            subtotal: orderData.subtotal || 0,
+            shipping_fee: orderData.shipping || 0,
+            tax: orderData.tax || 0,
+            discount: 0,
+            total: orderData.total || 0,
+            shipping_method: selectedShippingOption?.courierName || 'Standard',
+            items: orderInput.orderItems.map(item => ({
+              product_name: item.name || 'Product',
+              product_image_url: item.image || '',
+              quantity: item.quantity || 1,
+              unit_price: item.price || 0,
+              subtotal: (item.price || 0) * (item.quantity || 1),
+              total: (item.price || 0) * (item.quantity || 1),
+            })),
+          };
+
+          const response = await fetch(`${API_BASE_URL}/api/orders/public`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(orderDbData),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.message || 'Failed to create order');
+          }
+
+          // Also save locally for consistency
+          try {
+            const { addOrder } = await import('src/services/ordersLocalService');
+            addOrder(orderInput);
+          } catch (err) {
+            console.warn('Could not save order locally:', err);
+          }
+
+          // Redirect to confirmation
+          router.push(`/${subdomain}/order-confirmation`);
+          return;
+        } catch (error) {
+          console.error('Error creating COD order:', error);
+          alert(`Failed to create order: ${error.message || 'Please try again.'}`);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // For non-zero orders with payment methods, process payment
       if (['qrph', 'gcash', 'credit', 'card'].includes(paymentMethod)) {
         // Import Xendit payment service
         const xenditPaymentService = (await import('src/services/xenditPaymentService')).default;
         
-        // Format payment data
+        // Format payment data with shopName
         const paymentData = xenditPaymentService.formatPaymentData(
           orderInput,
           {
+            firstName: customerInfo.firstName,
+            lastName: customerInfo.lastName,
             name: `${customerInfo.firstName} ${customerInfo.lastName}`,
             email: customerInfo.email,
             phone: customerInfo.phone,
             fullAddress: orderInput.shipping.address,
           },
-          paymentMethod
+          paymentMethod,
+          shopName
         );
 
         // Save order locally first (before payment)
@@ -377,7 +468,7 @@ export default function SubdomainCheckoutPage({ params }) {
           setCardDialogOpen(true);
         }
       } else {
-        // For other payment methods (COD, etc.), create order and redirect
+        // Fallback for other payment methods
         try {
           const { addOrder } = await import('src/services/ordersLocalService');
           addOrder(orderInput);
@@ -390,7 +481,6 @@ export default function SubdomainCheckoutPage({ params }) {
     } catch (error) {
       console.error('Error placing order:', error);
       alert(`Failed to place order: ${error.message || 'Please try again.'}`);
-    } finally {
       setLoading(false);
     }
   };
@@ -988,6 +1078,74 @@ export default function SubdomainCheckoutPage({ params }) {
           />
         </>
       )}
+
+      {/* Confirmation Dialog */}
+      <Dialog 
+        open={confirmDialogOpen} 
+        onClose={() => setConfirmDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Confirm Order
+          </Typography>
+        </DialogTitle>
+        
+        <DialogContent>
+          {pendingOrderData && (
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Please review your order details before confirming.
+              </Typography>
+              
+              <Divider />
+              
+              <Stack spacing={1}>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Items:</Typography>
+                  <Typography variant="body2">{pendingOrderData.orderItems.length}</Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Subtotal:</Typography>
+                  <Typography variant="body2">₱{orderData.subtotal.toLocaleString()}</Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Shipping:</Typography>
+                  <Typography variant="body2">₱{orderData.shipping.toLocaleString()}</Typography>
+                </Stack>
+                <Stack direction="row" justifyContent="space-between">
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>Total:</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>₱{orderData.total.toLocaleString()}</Typography>
+                </Stack>
+              </Stack>
+              
+              <Divider />
+              
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Shipping to: {customerInfo.address}, {customerInfo.city}, {customerInfo.state}
+              </Typography>
+              
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Payment method: {paymentMethod === 'cod' ? 'Cash on Delivery' : paymentMethod.toUpperCase()}
+              </Typography>
+            </Stack>
+          )}
+        </DialogContent>
+        
+        <DialogActions>
+          <Button onClick={() => setConfirmDialogOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            onClick={handleConfirmOrder}
+            disabled={loading}
+          >
+            {loading ? 'Processing...' : 'Confirm Order'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Variant Edit Modal */}
       <Dialog 

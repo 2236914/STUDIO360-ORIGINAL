@@ -13,7 +13,13 @@ class XenditPaymentService {
     });
 
     // Add auth token to requests (use Supabase session if available)
+    // Skip auth for public endpoints (those with /public/ in path)
     this.apiClient.interceptors.request.use(async (config) => {
+      // Skip auth for public endpoints
+      if (config.url?.includes('/public/')) {
+        return config;
+      }
+      
       try {
         // Try to get Supabase session first
         const { supabase } = await import('src/auth/context/jwt/supabaseClient');
@@ -49,12 +55,14 @@ class XenditPaymentService {
 
   /**
    * Create QRPH payment
-   * @param {Object} paymentData - Payment details
+   * @param {Object} paymentData - Payment details (should include shopName for public endpoint)
    * @returns {Promise<Object>} QRPH payment response
    */
   async createQRPHPayment(paymentData) {
     try {
-      const response = await this.apiClient.post('/qrph', paymentData);
+      // Use public endpoint if shopName is provided, otherwise use authenticated endpoint
+      const endpoint = paymentData.shopName ? '/public/qrph' : '/qrph';
+      const response = await this.apiClient.post(endpoint, paymentData);
       return {
         success: true,
         data: response.data.data,
@@ -79,12 +87,14 @@ class XenditPaymentService {
 
   /**
    * Create GCash payment
-   * @param {Object} paymentData - Payment details
+   * @param {Object} paymentData - Payment details (should include shopName for public endpoint)
    * @returns {Promise<Object>} GCash payment response
    */
   async createGCashPayment(paymentData) {
     try {
-      const response = await this.apiClient.post('/gcash', paymentData);
+      // Use public endpoint if shopName is provided, otherwise use authenticated endpoint
+      const endpoint = paymentData.shopName ? '/public/gcash' : '/gcash';
+      const response = await this.apiClient.post(endpoint, paymentData);
       return {
         success: true,
         data: response.data.data,
@@ -109,12 +119,14 @@ class XenditPaymentService {
 
   /**
    * Create credit/debit card payment
-   * @param {Object} paymentData - Payment details
+   * @param {Object} paymentData - Payment details (should include shopName for public endpoint)
    * @returns {Promise<Object>} Card payment response
    */
   async createCardPayment(paymentData) {
     try {
-      const response = await this.apiClient.post('/card', paymentData);
+      // Use public endpoint if shopName is provided, otherwise use authenticated endpoint
+      const endpoint = paymentData.shopName ? '/public/card' : '/card';
+      const response = await this.apiClient.post(endpoint, paymentData);
       return {
         success: true,
         data: response.data.data,
@@ -139,12 +151,14 @@ class XenditPaymentService {
 
   /**
    * Create card token for secure storage
-   * @param {Object} cardData - Card details
+   * @param {Object} cardData - Card details (should include shopName for public endpoint)
    * @returns {Promise<Object>} Token response
    */
   async createCardToken(cardData) {
     try {
-      const response = await this.apiClient.post('/card-token', cardData);
+      // Use public endpoint if shopName is provided, otherwise use authenticated endpoint
+      const endpoint = cardData.shopName ? '/public/card-token' : '/card-token';
+      const response = await this.apiClient.post(endpoint, cardData);
       return {
         success: true,
         data: response.data.data,
@@ -217,10 +231,11 @@ class XenditPaymentService {
    * @param {Object} orderData - Order information
    * @param {Object} customerData - Customer information
    * @param {string} method - Payment method
+   * @param {string} shopName - Shop name for public endpoint
    * @returns {Object} Formatted payment data
    */
-  formatPaymentData(orderData, customerData, method) {
-    return {
+  formatPaymentData(orderData, customerData, method, shopName = null) {
+    const data = {
       amount: orderData.total || orderData.amount,
       description: `Payment for order ${orderData.id || 'unknown'}`,
       customer: {
@@ -231,6 +246,13 @@ class XenditPaymentService {
       },
       orderId: orderData.id,
     };
+    
+    // Add shopName for public endpoints
+    if (shopName) {
+      data.shopName = shopName;
+    }
+    
+    return data;
   }
 
   /**

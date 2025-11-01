@@ -6,6 +6,39 @@ const supabase = require('../../services/supabaseClient');
 const emailService = require('../../services/emailService');
 const ordersService = require('../../services/ordersService');
 
+/**
+ * Helper function to get store owner user_id from shop name
+ */
+async function getUserIdByShopName(shopName) {
+  try {
+    let { data, error } = await supabase
+      .from('shop_info')
+      .select('user_id, shop_name')
+      .eq('shop_name', shopName)
+      .is('deleted_at', null)
+      .single();
+
+    if (error || !data) {
+      const { data: caseInsensitiveData, error: caseInsensitiveError } = await supabase
+        .from('shop_info')
+        .select('user_id, shop_name')
+        .ilike('shop_name', shopName)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (!caseInsensitiveError && caseInsensitiveData) {
+        return caseInsensitiveData.user_id;
+      }
+      return null;
+    }
+    
+    return data.user_id;
+  } catch (e) {
+    console.error(`Error looking up shop "${shopName}":`, e);
+    return null;
+  }
+}
+
 // ============================================
 // XENDIT PAYMENT ROUTES
 // ============================================
@@ -280,6 +313,368 @@ router.post('/card', authenticateTokenHybrid, async (req, res) => {
     });
   } catch (error) {
     console.error('Error creating card payment:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/payments/xendit/public/qrph
+ * @desc Create QRPH payment (public endpoint using shop name)
+ * @access Public
+ */
+router.post('/public/qrph', async (req, res) => {
+  try {
+    const { shopName, amount, description, customer, orderId } = req.body;
+    
+    if (!shopName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Shop name is required' 
+      });
+    }
+
+    const userId = await getUserIdByShopName(shopName);
+    if (!userId) {
+      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
+      return res.status(404).json({ 
+        success: false, 
+        message: `Store "${shopName}" not found. Please check the store name.` 
+      });
+    }
+    
+    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Valid amount is required' 
+      });
+    }
+
+    const externalId = `qrph_${Date.now()}_${userId}`;
+    
+    const paymentData = {
+      amount,
+      externalId,
+      description,
+      customer,
+      orderId,
+    };
+
+    const result = await xenditService.createQRPHPayment(paymentData);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to create QRPH payment',
+        error: result.error 
+      });
+    }
+
+    // Store payment record in database
+    const { data: paymentRecord, error } = await supabase
+      .from('xendit_payments')
+      .insert([{
+        user_id: userId,
+        external_id: externalId,
+        payment_method: 'qrph',
+        amount: amount,
+        currency: 'PHP',
+        status: 'pending',
+        order_id: orderId,
+        xendit_data: result.data,
+        created_at: new Date().toISOString(),
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error storing payment record:', error);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        paymentId: paymentRecord?.id,
+        externalId,
+        qrString: result.qrString,
+        qrCodeUrl: result.qrCodeUrl,
+        amount,
+        expiresAt: result.data.expires_at,
+      },
+      message: 'QRPH payment created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating QRPH payment:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/payments/xendit/public/gcash
+ * @desc Create GCash payment (public endpoint using shop name)
+ * @access Public
+ */
+router.post('/public/gcash', async (req, res) => {
+  try {
+    const { shopName, amount, description, customer, orderId } = req.body;
+    
+    if (!shopName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Shop name is required' 
+      });
+    }
+
+    const userId = await getUserIdByShopName(shopName);
+    if (!userId) {
+      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
+      return res.status(404).json({ 
+        success: false, 
+        message: `Store "${shopName}" not found. Please check the store name.` 
+      });
+    }
+    
+    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Valid amount is required' 
+      });
+    }
+
+    const externalId = `gcash_${Date.now()}_${userId}`;
+    
+    const paymentData = {
+      amount,
+      externalId,
+      description,
+      customer,
+      orderId,
+    };
+
+    const result = await xenditService.createGCashPayment(paymentData);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to create GCash payment',
+        error: result.error 
+      });
+    }
+
+    // Store payment record in database
+    const { data: paymentRecord, error } = await supabase
+      .from('xendit_payments')
+      .insert([{
+        user_id: userId,
+        external_id: externalId,
+        payment_method: 'gcash',
+        amount: amount,
+        currency: 'PHP',
+        status: 'pending',
+        order_id: orderId,
+        xendit_data: result.data,
+        created_at: new Date().toISOString(),
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error storing payment record:', error);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        paymentId: paymentRecord?.id,
+        externalId,
+        checkoutUrl: result.checkoutUrl,
+        deepLink: result.deepLink,
+        amount,
+      },
+      message: 'GCash payment created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating GCash payment:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/payments/xendit/public/card
+ * @desc Create credit/debit card payment (public endpoint using shop name)
+ * @access Public
+ */
+router.post('/public/card', async (req, res) => {
+  try {
+    const { shopName, amount, description, customer, orderId, cardToken } = req.body;
+    
+    if (!shopName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Shop name is required' 
+      });
+    }
+
+    const userId = await getUserIdByShopName(shopName);
+    if (!userId) {
+      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
+      return res.status(404).json({ 
+        success: false, 
+        message: `Store "${shopName}" not found. Please check the store name.` 
+      });
+    }
+    
+    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Valid amount is required' 
+      });
+    }
+
+    if (!cardToken) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Card token is required' 
+      });
+    }
+
+    const externalId = `card_${Date.now()}_${userId}`;
+    
+    const paymentData = {
+      amount,
+      externalId,
+      description,
+      customer,
+      orderId,
+      cardToken,
+    };
+
+    const result = await xenditService.createCardPayment(paymentData);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to create card payment',
+        error: result.error 
+      });
+    }
+
+    // Store payment record in database
+    const { data: paymentRecord, error } = await supabase
+      .from('xendit_payments')
+      .insert([{
+        user_id: userId,
+        external_id: externalId,
+        payment_method: 'card',
+        amount: amount,
+        currency: 'PHP',
+        status: result.status || 'pending',
+        order_id: orderId,
+        xendit_data: result.data,
+        created_at: new Date().toISOString(),
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error storing payment record:', error);
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        paymentId: paymentRecord?.id,
+        externalId,
+        status: result.status,
+        authorizationId: result.authorizationId,
+        amount,
+      },
+      message: 'Card payment created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating card payment:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error' 
+    });
+  }
+});
+
+/**
+ * @route POST /api/payments/xendit/public/card-token
+ * @desc Create card token for secure storage (public endpoint using shop name)
+ * @access Public
+ */
+router.post('/public/card-token', async (req, res) => {
+  try {
+    const { shopName, cardNumber, expiryMonth, expiryYear, cvv, isMultipleUse } = req.body;
+    
+    if (!shopName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Shop name is required' 
+      });
+    }
+
+    const userId = await getUserIdByShopName(shopName);
+    if (!userId) {
+      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
+      return res.status(404).json({ 
+        success: false, 
+        message: `Store "${shopName}" not found. Please check the store name.` 
+      });
+    }
+    
+    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+
+    if (!cardNumber || !expiryMonth || !expiryYear || !cvv) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'All card details are required' 
+      });
+    }
+
+    const cardData = {
+      cardNumber,
+      expiryMonth,
+      expiryYear,
+      cvv,
+      isMultipleUse: isMultipleUse || false,
+    };
+
+    const result = await xenditService.createCardToken(cardData);
+    
+    if (!result.success) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Failed to create card token',
+        error: result.error 
+      });
+    }
+
+    res.status(201).json({
+      success: true,
+      data: {
+        tokenId: result.tokenId,
+      },
+      message: 'Card token created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating card token:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Internal server error' 
