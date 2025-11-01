@@ -367,6 +367,13 @@ router.post('/public/qrph', async (req, res) => {
   try {
     const { shopName, amount, description, customer, orderId } = req.body;
     
+    console.log(`[Xendit Payment] QRPH request received:`, {
+      shopName,
+      amount,
+      hasShopName: !!shopName,
+      bodyKeys: Object.keys(req.body)
+    });
+    
     if (!shopName) {
       return res.status(400).json({ 
         success: false, 
@@ -463,6 +470,13 @@ router.post('/public/gcash', async (req, res) => {
   try {
     const { shopName, amount, description, customer, orderId } = req.body;
     
+    console.log(`[Xendit Payment] GCash request received:`, {
+      shopName,
+      amount,
+      hasShopName: !!shopName,
+      bodyKeys: Object.keys(req.body)
+    });
+    
     if (!shopName) {
       return res.status(400).json({ 
         success: false, 
@@ -557,6 +571,14 @@ router.post('/public/gcash', async (req, res) => {
 router.post('/public/card', async (req, res) => {
   try {
     const { shopName, amount, description, customer, orderId, cardToken } = req.body;
+    
+    console.log(`[Xendit Payment] Card request received:`, {
+      shopName,
+      amount,
+      hasShopName: !!shopName,
+      hasCardToken: !!cardToken,
+      bodyKeys: Object.keys(req.body)
+    });
     
     if (!shopName) {
       return res.status(400).json({ 
@@ -660,6 +682,13 @@ router.post('/public/card', async (req, res) => {
 router.post('/public/card-token', async (req, res) => {
   try {
     const { shopName, cardNumber, expiryMonth, expiryYear, cvv, isMultipleUse } = req.body;
+    
+    console.log(`[Xendit Payment] Card token request received:`, {
+      shopName,
+      hasShopName: !!shopName,
+      hasCardNumber: !!cardNumber,
+      bodyKeys: Object.keys(req.body)
+    });
     
     if (!shopName) {
       return res.status(400).json({ 

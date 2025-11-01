@@ -250,6 +250,9 @@ class XenditPaymentService {
     // Add shopName for public endpoints
     if (shopName) {
       data.shopName = shopName;
+      console.log(`[XenditPaymentService] Added shopName to payment data: "${shopName}"`);
+    } else {
+      console.warn(`[XenditPaymentService] No shopName provided for payment data`);
     }
     
     return data;

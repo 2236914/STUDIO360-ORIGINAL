@@ -155,6 +155,9 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
     // Add shopName if available in paymentData (for public endpoint)
     if (paymentData?.shopName) {
       tokenData.shopName = paymentData.shopName;
+      console.log(`[Card Dialog] Adding shopName to token request: "${paymentData.shopName}"`);
+    } else {
+      console.warn(`[Card Dialog] No shopName in paymentData for token request`);
     }
 
     try {
@@ -193,6 +196,13 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
         ...paymentData,
         cardToken: token,
       };
+
+      console.log(`[Card Dialog] Processing payment with:`, {
+        shopName: paymentDataWithToken?.shopName,
+        amount: paymentDataWithToken?.amount,
+        hasShopName: !!paymentDataWithToken?.shopName,
+        hasCardToken: !!paymentDataWithToken?.cardToken
+      });
 
       const result = await xenditPaymentService.createCardPayment(paymentDataWithToken);
       

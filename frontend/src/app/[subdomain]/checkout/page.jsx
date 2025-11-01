@@ -374,8 +374,8 @@ export default function SubdomainCheckoutPage({ params }) {
             shipping_postal_code: customerInfo.zipCode,
             shipping_country: customerInfo.country || 'Philippines',
             payment_method: 'cod',
-            payment_status: 'pending',
-            status: 'pending',
+            payment_status: 'pending', // Payment happens on delivery for COD
+            status: 'confirmed', // COD orders are confirmed immediately (customer will pay on delivery)
             subtotal: orderData.subtotal || 0,
             shipping_fee: orderData.shipping || 0,
             tax: orderData.tax || 0,
@@ -462,6 +462,14 @@ export default function SubdomainCheckoutPage({ params }) {
           paymentMethod,
           shopName
         );
+
+        // Log payment data for debugging
+        console.log(`[Checkout] Payment data prepared:`, {
+          shopName: paymentData.shopName,
+          amount: paymentData.amount,
+          method: paymentMethod,
+          hasShopName: !!paymentData.shopName
+        });
 
         // Save order locally first (before payment)
         try {

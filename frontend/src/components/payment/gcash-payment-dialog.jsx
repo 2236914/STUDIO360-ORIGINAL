@@ -38,6 +38,13 @@ export function GCashPaymentDialog({ open, onClose, paymentData, onSuccess, onEr
     setLoading(true);
     setError('');
 
+    console.log(`[GCash Dialog] Creating payment with data:`, {
+      shopName: paymentData?.shopName,
+      amount: paymentData?.amount,
+      hasShopName: !!paymentData?.shopName,
+      paymentDataKeys: paymentData ? Object.keys(paymentData) : []
+    });
+
     try {
       const result = await xenditPaymentService.createGCashPayment(paymentData);
       

@@ -39,6 +39,13 @@ export function QRPHPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
     setLoading(true);
     setError('');
 
+    console.log(`[QRPH Dialog] Creating payment with data:`, {
+      shopName: paymentData?.shopName,
+      amount: paymentData?.amount,
+      hasShopName: !!paymentData?.shopName,
+      paymentDataKeys: paymentData ? Object.keys(paymentData) : []
+    });
+
     try {
       const result = await xenditPaymentService.createQRPHPayment(paymentData);
       
