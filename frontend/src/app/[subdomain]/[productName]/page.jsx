@@ -7,6 +7,7 @@ import { isStoreSubdomain } from 'src/utils/subdomain';
 import { storefrontApi } from 'src/utils/api/storefront';
 import { StoreHeader } from 'src/components/store-header';
 import { StoreFooter } from 'src/components/store-footer';
+import { AnnouncementBanner } from 'src/components/announcement-banner';
 import { StoreProductDetailsView } from 'src/sections/storefront/view/store-product-details-view';
 
 // ----------------------------------------------------------------------
@@ -26,7 +27,15 @@ export default function SubdomainProductPage({ params }) {
 
       try {
         setLoading(true);
-        const response = await storefrontApi.getProductBySlug(subdomain, productName);
+        // Clean the product slug: decode URI, remove trailing slashes, trim
+        const cleanedSlug = decodeURIComponent(productName || '').replace(/\/+$/, '').trim();
+        if (!cleanedSlug) {
+          setError('Invalid product slug');
+          setLoading(false);
+          return;
+        }
+        
+        const response = await storefrontApi.getProductBySlug(subdomain, cleanedSlug);
         const productData = response?.data || response;
         
         if (!productData) {
@@ -99,6 +108,7 @@ export default function SubdomainProductPage({ params }) {
   if (error || !product) {
     return (
       <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+        <AnnouncementBanner storeId={subdomain} />
         <StoreHeader storeId={subdomain} />
         <Box sx={{ 
           display: 'flex', 
@@ -118,6 +128,7 @@ export default function SubdomainProductPage({ params }) {
 
   return (
     <Box sx={{ bgcolor: 'background.paper', minHeight: '100vh' }}>
+      <AnnouncementBanner storeId={subdomain} />
       <StoreHeader storeId={subdomain} />
       <StoreProductDetailsView 
         id={product.id} 

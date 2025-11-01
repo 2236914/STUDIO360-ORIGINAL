@@ -151,7 +151,17 @@ export const storefrontApi = {
    */
   async getProductBySlug(shopName, slug) {
     try {
-      const response = await client.get(`/public/storefront/${shopName}/products/${slug}`);
+      // Clean slug: remove any trailing slashes and encode the slug properly
+      const cleanedSlug = (slug || '').toString().replace(/\/+$/, '').trim();
+      if (!cleanedSlug) {
+        throw new Error('Product slug is required');
+      }
+      
+      // Encode each path segment separately to handle special characters
+      const encodedShopName = encodeURIComponent(shopName);
+      const encodedSlug = encodeURIComponent(cleanedSlug);
+      
+      const response = await client.get(`/public/storefront/${encodedShopName}/products/${encodedSlug}`);
       return response.data;
     } catch (error) {
       console.error('Error fetching product by slug:', error);

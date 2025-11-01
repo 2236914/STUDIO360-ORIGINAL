@@ -410,19 +410,55 @@ router.post('/callback', async (req, res) => {
   // Set timeout to prevent hanging (Xendit expects response within 30s)
   req.setTimeout(25000); // 25 seconds to be safe
   
+  // Add safety timeout - if handler takes too long, respond anyway
+  const responseTimeout = setTimeout(() => {
+    if (!res.headersSent) {
+      console.warn('Webhook response timeout - sending default response');
+      res.status(200).json({ 
+        success: true, 
+        message: 'Webhook received and queued for processing',
+        timestamp: new Date().toISOString()
+      });
+    }
+  }, 20000); // 20 seconds
+  
   try {
     // Get raw body for signature verification
-    const rawBody = req.body.toString('utf8');
+    // Handle both Buffer and string formats
+    let rawBody;
+    if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString('utf8');
+    } else if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else if (typeof req.body === 'object' && req.body !== null) {
+      // Body was already parsed as JSON, stringify it back
+      rawBody = JSON.stringify(req.body);
+    } else {
+      clearTimeout(responseTimeout);
+      console.error('Unexpected body type:', typeof req.body);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid request body format' 
+      });
+    }
     
     // Parse JSON body for processing
     let webhookBody;
     try {
-      webhookBody = JSON.parse(rawBody);
+      if (typeof req.body === 'object' && !Buffer.isBuffer(req.body)) {
+        // Body already parsed (shouldn't happen with raw middleware, but handle it)
+        webhookBody = req.body;
+      } else {
+        webhookBody = JSON.parse(rawBody);
+      }
     } catch (parseError) {
-      console.error('Failed to parse webhook body as JSON:', parseError);
+      clearTimeout(responseTimeout);
+      console.error('Failed to parse webhook body as JSON:', parseError.message);
+      console.error('Body type:', typeof req.body, 'Is Buffer:', Buffer.isBuffer(req.body));
       return res.status(400).json({ 
         success: false, 
-        message: 'Invalid JSON payload' 
+        message: 'Invalid JSON payload',
+        error: process.env.NODE_ENV === 'development' ? parseError.message : undefined
       });
     }
 
@@ -444,6 +480,7 @@ router.post('/callback', async (req, res) => {
     if (signature) {
       const isValid = xenditService.verifyWebhookSignature(signature, rawBody);
       if (!isValid) {
+        clearTimeout(responseTimeout);
         console.error('Invalid webhook signature', {
           signature: signature?.substring(0, 20) + '...',
           hasWebhookToken: !!process.env.XENDIT_WEBHOOK_TOKEN
@@ -457,6 +494,7 @@ router.post('/callback', async (req, res) => {
     } else if (callbackToken) {
       // Verify callback token matches webhook token
       if (process.env.XENDIT_WEBHOOK_TOKEN && callbackToken !== process.env.XENDIT_WEBHOOK_TOKEN) {
+        clearTimeout(responseTimeout);
         console.error('Invalid callback token');
         return res.status(401).json({ 
           success: false, 
@@ -477,6 +515,7 @@ router.post('/callback', async (req, res) => {
     
     // Handle payment_token events separately (just acknowledge, don't process)
     if (webhookData.type === 'payment_token') {
+      clearTimeout(responseTimeout);
       console.log('Payment token event received:', webhookData.event);
       return res.status(200).json({ 
         success: true, 
@@ -510,6 +549,7 @@ router.post('/callback', async (req, res) => {
         // Continue to payment update logic below
       } else {
         // No externalId found, just acknowledge immediately
+        clearTimeout(responseTimeout);
         return res.status(200).json({
           success: true,
           message: 'Payment session event acknowledged',
@@ -566,6 +606,7 @@ router.post('/callback', async (req, res) => {
       
       // For payment session events without externalId, still acknowledge success immediately
       if (webhookData.type === 'payment_session' || webhookData.type === 'payment_capture') {
+        clearTimeout(responseTimeout);
         // Acknowledge immediately to prevent timeout
         res.status(200).json({
           success: true,
@@ -710,6 +751,7 @@ router.post('/callback', async (req, res) => {
       paymentUpdated: !!updatedPayment
     });
     
+    clearTimeout(responseTimeout);
     res.status(200).json({ 
       success: true, 
       message: 'Webhook processed successfully',
@@ -717,14 +759,38 @@ router.post('/callback', async (req, res) => {
       status: webhookData.status
     });
   } catch (error) {
+    clearTimeout(responseTimeout);
+    
     console.error('Error processing webhook:', error);
     console.error('Error stack:', error.stack);
-    console.error('Webhook body:', JSON.stringify(webhookBody, null, 2));
-    res.status(500).json({ 
-      success: false, 
-      message: 'Internal server error',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    
+    // Ensure we always send a response - even if there's an error
+    // This prevents 502 Bad Gateway errors
+    if (!res.headersSent) {
+      try {
+        // For webhook errors, it's better to return 200 to prevent Xendit retries
+        // Log the error but acknowledge receipt
+        res.status(200).json({ 
+          success: true, 
+          message: 'Webhook received (processing error logged)',
+          timestamp: new Date().toISOString(),
+          error: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+      } catch (sendError) {
+        console.error('Failed to send error response:', sendError);
+        // Last resort - try to send plain text
+        try {
+          if (!res.headersSent) {
+            res.status(200).end('OK');
+          }
+        } catch (_) {
+          // If all else fails, at least log it
+          console.error('Complete failure to send response');
+        }
+      }
+    }
   }
 });
 

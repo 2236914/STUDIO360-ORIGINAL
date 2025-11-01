@@ -98,17 +98,35 @@ app.use(compression());
 
 // Body parsing middleware - exclude webhook endpoints that need raw body
 app.use((req, res, next) => {
-  // Xendit webhook needs raw body for signature verification
-  // Check both req.path and req.url to catch the route
-  const isWebhook = (req.path === '/api/payments/xendit/callback' || 
-                     req.url === '/api/payments/xendit/callback') && 
-                     req.method === 'POST';
-  
-  if (isWebhook) {
-    return express.raw({ type: 'application/json', limit: '10mb' })(req, res, next);
+  try {
+    // Xendit webhook needs raw body for signature verification
+    // Check both req.path and req.url to catch the route
+    const isWebhook = (req.path === '/api/payments/xendit/callback' || 
+                       req.url === '/api/payments/xendit/callback' ||
+                       req.url?.startsWith('/api/payments/xendit/callback')) && 
+                       req.method === 'POST';
+    
+    if (isWebhook) {
+      return express.raw({ type: 'application/json', limit: '10mb' })(req, res, (err) => {
+        if (err) {
+          console.error('Error parsing raw body:', err);
+          return next(err);
+        }
+        next();
+      });
+    }
+    // For all other routes, use JSON parsing
+    return express.json({ limit: '10mb' })(req, res, (err) => {
+      if (err) {
+        console.error('Error parsing JSON body:', err);
+        return next(err);
+      }
+      next();
+    });
+  } catch (error) {
+    console.error('Error in body parsing middleware:', error);
+    return next(error);
   }
-  // For all other routes, use JSON parsing
-  return express.json({ limit: '10mb' })(req, res, next);
 });
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 

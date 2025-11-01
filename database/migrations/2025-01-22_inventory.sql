@@ -46,13 +46,15 @@ CREATE TABLE IF NOT EXISTS public.inventory_products (
   seo_title TEXT,
   seo_description TEXT,
   seo_keywords TEXT,
+  slug TEXT, -- URL-friendly identifier for storefront routing
   
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   deleted_at TIMESTAMPTZ NULL,
   
-  UNIQUE(user_id, sku)
+  UNIQUE(user_id, sku),
+  UNIQUE(user_id, slug)
 );
 
 -- ============================================
@@ -177,6 +179,7 @@ CREATE TABLE IF NOT EXISTS public.stock_movements (
 
 CREATE INDEX IF NOT EXISTS idx_inventory_products_user_id ON public.inventory_products (user_id);
 CREATE INDEX IF NOT EXISTS idx_inventory_products_sku ON public.inventory_products (sku);
+CREATE INDEX IF NOT EXISTS idx_inventory_products_slug ON public.inventory_products (slug);
 CREATE INDEX IF NOT EXISTS idx_inventory_products_category ON public.inventory_products (category);
 CREATE INDEX IF NOT EXISTS idx_inventory_products_status ON public.inventory_products (status);
 CREATE INDEX IF NOT EXISTS idx_inventory_products_stock_status ON public.inventory_products (stock_status);

@@ -3,11 +3,15 @@ import { storefrontApi } from 'src/utils/api/storefront';
 
 export async function generateMetadata({ params }) {
   const { subdomain, productName } = params;
-  const slug = productName;
+  // Clean the product slug: decode URI, remove trailing slashes, trim
+  const slug = decodeURIComponent(productName || '').replace(/\/+$/, '').trim();
   const base = process.env.NEXT_PUBLIC_SITE_URL || 'https://your-domain.com';
   const canonical = `${base}/${subdomain}/${slug}`;
 
   try {
+    if (!slug) {
+      throw new Error('Invalid slug');
+    }
     const resp = await storefrontApi.getProductBySlug(subdomain, slug);
     const p = resp?.data || resp;
     const title = p?.seo_title || p?.name || slug.replace(/-/g, ' ');
@@ -46,13 +50,16 @@ export async function generateMetadata({ params }) {
 
 export default async function ProductLayout({ children, params }) {
   const { subdomain, productName } = params;
-  const slug = productName;
+  // Clean the product slug: decode URI, remove trailing slashes, trim
+  const slug = decodeURIComponent(productName || '').replace(/\/+$/, '').trim();
   const url = absoluteUrl(`/${subdomain}/${slug}`);
 
   let p = null;
   try {
-    const resp = await storefrontApi.getProductBySlug(subdomain, slug);
-    p = resp?.data || resp;
+    if (slug) {
+      const resp = await storefrontApi.getProductBySlug(subdomain, slug);
+      p = resp?.data || resp;
+    }
   } catch (_) { /* noop */ }
 
   const name = p?.name || decodeURIComponent(slug).replace(/-/g, ' ');

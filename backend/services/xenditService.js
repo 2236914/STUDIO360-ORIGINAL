@@ -314,12 +314,15 @@ class XenditService {
     if (event?.includes('payment_session') || event === 'payment.session.completed' || event === 'payment.session.expired' || event === 'payment_session.completed' || event === 'payment_session.expired') {
       // Payment Session events have the payment data nested differently
       const sessionData = data || webhookData;
-      let normalizedStatus = sessionData.status?.toLowerCase() || 'unknown';
+      let normalizedStatus = (sessionData.status || '').toLowerCase() || 'unknown';
       
-      if (event.includes('completed') || event.includes('succeeded')) {
+      // Handle COMPLETED status (uppercase from Xendit)
+      if (sessionData.status === 'COMPLETED' || event.includes('completed') || event.includes('succeeded')) {
         normalizedStatus = 'paid';
-      } else if (event.includes('expired') || event.includes('failed')) {
-        normalizedStatus = event.includes('expired') ? 'expired' : 'failed';
+      } else if (sessionData.status === 'EXPIRED' || event.includes('expired')) {
+        normalizedStatus = 'expired';
+      } else if (sessionData.status === 'FAILED' || event.includes('failed')) {
+        normalizedStatus = 'failed';
       }
       
       return {

@@ -321,9 +321,23 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           </Box>
         </Box>
 
-        <Grid container spacing={0.5}>
-          {product.images.map((image, index) => (
-            <Grid item xs={2.4} key={index}>
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            gap: 0.5, 
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+            justifyContent: { xs: 'center', sm: 'flex-start' }
+          }}
+        >
+          {product.images.slice(0, 5).map((image, index) => (
+            <Box
+              key={index}
+              sx={{
+                flex: { xs: '0 0 calc(20% - 4px)', sm: '0 0 calc(20% - 4px)' },
+                minWidth: { xs: '60px', sm: '80px' },
+                maxWidth: { xs: '80px', sm: '100px' },
+              }}
+            >
               <Box
                 component="img"
                 src={image || '/assets/images/product/product-placeholder.png'}
@@ -336,15 +350,17 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
                   cursor: 'pointer',
                   border: index === 0 ? '2px solid' : '1px solid',
                   borderColor: index === 0 ? 'primary.main' : 'divider',
+                  transition: 'all 0.2s',
                   '&:hover': {
                     borderColor: 'primary.main',
-                    opacity: 0.8
+                    opacity: 0.8,
+                    transform: 'scale(1.05)'
                   }
                 }}
               />
-            </Grid>
+            </Box>
           ))}
-        </Grid>
+        </Box>
       </Card>
     </Grid>
   );
@@ -398,112 +414,139 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
 
           <Divider />
 
-          <Grid spacing={1}>
-            <Stack spacing={1}>
-              <Typography variant="subtitle1">Color</Typography>
-              <Stack direction="row" spacing={1}>
-                {product.colors.map((color, index) => (
-                  <Box
-                    key={index}
-                    sx={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: '50%',
-                      bgcolor: color,
-                      border: '2px solid',
-                      borderColor: selectedColor === index ? 'primary.main' : 'divider',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      '&:hover': {
-                        borderColor: 'primary.main'
-                      }
-                    }}
-                    onClick={() => setSelectedColor(index)}
-                  >
-                    {selectedColor === index && (
-                      <Iconify icon="eva:checkmark-fill" width={20} sx={{ color: 'white' }} />
-                    )}
-                  </Box>
-                ))}
-              </Stack>
-            </Stack>
-          </Grid>
-
-          <Grid spacing={1}>
-            <Stack spacing={1}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography variant="subtitle1">Size</Typography>
-                <Typography variant="body2" sx={{ color: 'primary.main', cursor: 'pointer' }}>
-                  Size chart
-                </Typography>
-              </Stack>
-              <FormControl fullWidth>
-                <Select
-                  value={selectedSize}
-                  onChange={(e) => setSelectedSize(e.target.value)}
-                  displayEmpty
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Color</Typography>
+            <Stack direction="row" spacing={1}>
+              {product.colors.map((color, index) => (
+                <Box
+                  key={index}
+                  sx={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: '50%',
+                    bgcolor: color,
+                    border: '2px solid',
+                    borderColor: selectedColor === index ? 'primary.main' : 'divider',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s',
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      transform: 'scale(1.1)'
+                    }
+                  }}
+                  onClick={() => setSelectedColor(index)}
                 >
-                  {product.sizes.map((size) => (
-                    <MenuItem key={size} value={size}>
-                      {size}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  {selectedColor === index && (
+                    <Iconify icon="eva:checkmark-fill" width={20} sx={{ color: 'white' }} />
+                  )}
+                </Box>
+              ))}
             </Stack>
-          </Grid>
+          </Stack>
 
-          <Grid spacing={1}>
-            <Stack spacing={1}>
-              <Typography variant="subtitle1">Quantity</Typography>
-              <Stack direction="row" alignItems="center" spacing={1}>
+          <Stack spacing={1.5}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Size</Typography>
+              <Typography variant="body2" sx={{ color: 'primary.main', cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}>
+                Size chart
+              </Typography>
+            </Stack>
+            <FormControl fullWidth>
+              <Select
+                value={selectedSize}
+                onChange={(e) => setSelectedSize(e.target.value)}
+                displayEmpty
+                sx={{
+                  '& .MuiSelect-select': {
+                    py: 1.5
+                  }
+                }}
+              >
+                {product.sizes.map((size) => (
+                  <MenuItem key={size} value={size}>
+                    {size}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Stack>
+
+          <Stack spacing={1.5}>
+            <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Quantity</Typography>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 0.5 }}>
                 <IconButton
                   size="small"
                   onClick={() => handleQuantityChange(-1)}
                   disabled={quantity <= 1}
+                  sx={{
+                    '&:disabled': {
+                      opacity: 0.3
+                    }
+                  }}
                 >
                   <Iconify icon="eva:minus-fill" />
                 </IconButton>
-                <Typography sx={{ minWidth: 40, textAlign: 'center' }}>
+                <Typography sx={{ minWidth: 40, textAlign: 'center', fontWeight: 600 }}>
                   {quantity}
                 </Typography>
                 <IconButton
                   size="small"
                   onClick={() => handleQuantityChange(1)}
                   disabled={quantity >= product.availableQuantity}
+                  sx={{
+                    '&:disabled': {
+                      opacity: 0.3
+                    }
+                  }}
                 >
                   <Iconify icon="eva:plus-fill" />
                 </IconButton>
-                <Typography variant="body2" sx={{ color: 'text.secondary', ml: 2 }}>
-                  Available {product.availableQuantity}
-                </Typography>
               </Stack>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                Available {product.availableQuantity}
+              </Typography>
             </Stack>
-          </Grid>
+          </Stack>
 
           <Stack 
             direction={{ xs: 'column', sm: 'row' }} 
-            spacing={1}
+            spacing={1.5}
             sx={{ 
               width: '100%',
+              pt: 1,
               '& .MuiButton-root': {
-                minHeight: 44,
-                fontSize: '0.95rem',
+                minHeight: 48,
+                fontSize: '1rem',
                 fontWeight: 600,
-                borderRadius: 2
+                borderRadius: 2,
+                textTransform: 'none',
+                boxShadow: 'none',
+                transition: 'all 0.2s',
+                '&:hover': {
+                  boxShadow: 2,
+                  transform: 'translateY(-1px)'
+                },
+                '&:active': {
+                  transform: 'translateY(0)'
+                }
               }
             }}
           >
             <Button 
               variant="outlined" 
               size="large" 
+              fullWidth
+              startIcon={<Iconify icon="eva:shopping-cart-fill" width={20} />}
               sx={{ 
-                flex: { xs: 1, sm: 1 },
+                borderWidth: 2,
                 borderColor: 'primary.main',
                 color: 'primary.main',
                 '&:hover': {
+                  borderWidth: 2,
                   borderColor: 'primary.dark',
                   backgroundColor: 'primary.lighter'
                 }
@@ -514,11 +557,13 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
             <Button 
               variant="contained" 
               size="large" 
+              fullWidth
+              startIcon={<Iconify icon="eva:flash-fill" width={20} />}
               sx={{ 
-                flex: { xs: 1, sm: 1 },
                 backgroundColor: 'primary.main',
                 '&:hover': {
-                  backgroundColor: 'primary.dark'
+                  backgroundColor: 'primary.dark',
+                  boxShadow: 4
                 }
               }}
             >
@@ -617,18 +662,13 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
 
   return (
     <Box sx={{ position: 'relative', pb: 2 }}>
-      {/* Announcement Banner */}
-      <Box sx={{ bgcolor: 'primary.lighter', py: 2, px: { xs: 1, md: 2 }, textAlign: 'center' }}>
-        <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-          <Iconify icon="eva:shopping-cart-fill" width={20} sx={{ color: 'primary.main' }} />
-          <Typography variant="body2" sx={{ fontWeight: 600, color: 'primary.main' }}>
-            Spend ₱1,500 and get FREE tracked nationwide shipping!
-          </Typography>
-        </Stack>
-      </Box>
-
       {/* Top Controls */}
-      <Box sx={{ position: 'absolute', top: { xs: 60, md: 80 }, left: { xs: 20, md: 32 }, zIndex: 10 }}>
+      <Box sx={{ 
+        position: 'absolute', 
+        top: { xs: 12, sm: 16, md: 24 }, 
+        left: { xs: 12, sm: 16, md: 32 }, 
+        zIndex: 10 
+      }}>
         <Button
           variant="outlined"
           onClick={() => window.history.back()}
@@ -647,55 +687,61 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           }
           sx={{
             color: 'text.primary',
-            border: 'none',
-            minHeight: 40,
-            px: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            minHeight: { xs: 36, md: 40 },
+            px: { xs: 1.5, md: 2 },
+            fontSize: { xs: '0.875rem', md: '1rem' },
             fontWeight: 600,
             textTransform: 'none',
             borderRadius: 2,
-            transition: 'color 0.2s',
-            backgroundColor: 'transparent',
-            boxShadow: 'none',
+            transition: 'all 0.2s',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(4px)',
+            boxShadow: 1,
             '&:hover': {
-              backgroundColor: 'transparent',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
               color: 'primary.main',
-              border: 'none',
-              boxShadow: 'none',
+              borderColor: 'primary.main',
+              boxShadow: 2,
             }
           }}
         >
-          Back
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Back</Box>
         </Button>
       </Box>
 
-      <Stack direction="row" spacing={1.5} sx={{ position: 'absolute', top: { xs: 60, md: 80 }, right: { xs: 20, md: 32 }, zIndex: 10 }}>
+      <Stack 
+        direction="row" 
+        spacing={{ xs: 0.5, sm: 1, md: 1.5 }} 
+        sx={{ 
+          position: 'absolute', 
+          top: { xs: 12, sm: 16, md: 24 }, 
+          right: { xs: 12, sm: 16, md: 32 }, 
+          zIndex: 10 
+        }}
+      >
         <IconButton
           aria-label="search"
           onClick={() => (window.location.href = '/search')}
           sx={{
             color: 'text.primary',
-            border: 'none',
-            transition: 'color 0.2s',
-            backgroundColor: 'transparent',
-            boxShadow: 'none',
+            width: { xs: 36, md: 40 },
+            height: { xs: 36, md: 40 },
+            transition: 'all 0.2s',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(4px)',
+            boxShadow: 1,
             '&:hover': {
-              backgroundColor: 'transparent',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
               color: 'primary.main',
-              border: 'none',
-              boxShadow: 'none',
+              boxShadow: 2,
             }
           }}
         >
           <Iconify 
             icon="solar:magnifer-linear" 
             width={20}
-            sx={{
-              color: 'text.primary',
-              transition: 'color 0.2s',
-              '.MuiIconButton-root:hover &': {
-                color: 'primary.main'
-              }
-            }}
           />
         </IconButton>
         <IconButton
@@ -703,28 +749,22 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           onClick={handleShareMenuOpen}
           sx={{
             color: 'text.primary',
-            border: 'none',
-            transition: 'color 0.2s',
-            backgroundColor: 'transparent',
-            boxShadow: 'none',
+            width: { xs: 36, md: 40 },
+            height: { xs: 36, md: 40 },
+            transition: 'all 0.2s',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(4px)',
+            boxShadow: 1,
             '&:hover': {
-              backgroundColor: 'transparent',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
               color: 'primary.main',
-              border: 'none',
-              boxShadow: 'none',
+              boxShadow: 2,
             }
           }}
         >
           <Iconify 
             icon="eva:share-fill" 
             width={20}
-            sx={{
-              color: 'text.primary',
-              transition: 'color 0.2s',
-              '.MuiIconButton-root:hover &': {
-                color: 'primary.main'
-              }
-            }}
           />
         </IconButton>
         <IconButton
@@ -732,28 +772,22 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           onClick={() => (window.location.href = '/checkout')}
           sx={{
             color: 'text.primary',
-            border: 'none',
-            transition: 'color 0.2s',
-            backgroundColor: 'transparent',
-            boxShadow: 'none',
+            width: { xs: 36, md: 40 },
+            height: { xs: 36, md: 40 },
+            transition: 'all 0.2s',
+            backgroundColor: 'rgba(255, 255, 255, 0.9)',
+            backdropFilter: 'blur(4px)',
+            boxShadow: 1,
             '&:hover': {
-              backgroundColor: 'transparent',
+              backgroundColor: 'rgba(255, 255, 255, 0.95)',
               color: 'primary.main',
-              border: 'none',
-              boxShadow: 'none',
+              boxShadow: 2,
             }
           }}
         >
           <Iconify 
             icon="solar:cart-3-bold" 
             width={20}
-            sx={{
-              color: 'text.primary',
-              transition: 'color 0.2s',
-              '.MuiIconButton-root:hover &': {
-                color: 'primary.main'
-              }
-            }}
           />
         </IconButton>
       </Stack>
@@ -793,7 +827,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           maxWidth: '1200px', 
           mx: 'auto',
           px: { xs: 1.5, sm: 2, md: 3 },
-          pt: { xs: 6, sm: 8, md: 12 }
+          pt: { xs: 10, sm: 12, md: 14 }
         }}
       >
         {renderProductImages}
