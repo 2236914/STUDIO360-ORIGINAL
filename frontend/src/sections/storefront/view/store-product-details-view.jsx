@@ -379,16 +379,16 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
               />
               In stock, ready to ship
             </Box>
-            <Typography variant="h4" sx={{ mb: 0.5 }}>
+            <Typography variant="h4" sx={{ mb: 0.5, fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
               {product.name}
             </Typography>
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
               <Rating value={product.rating} readOnly size="small" />
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: { xs: '0.75rem', md: '0.875rem' } }}>
                 ({product.reviewCount.toLocaleString()} reviews)
               </Typography>
             </Stack>
-            <Typography variant="h5" sx={{ color: 'text.primary', mb: 0.5 }}>
+            <Typography variant="h5" sx={{ color: 'text.primary', mb: 0.5, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
               {fCurrencyPHPSymbol(product.price)}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
@@ -540,8 +540,8 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
         <Stack flex={1} alignItems="center" spacing={0.5}>
           <Box
             sx={{
-              width: 56,
-              height: 56,
+              width: { xs: 48, md: 56 },
+              height: { xs: 48, md: 56 },
               borderRadius: '50%',
               bgcolor: 'success.lighter',
               display: 'flex',
@@ -549,10 +549,10 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
               justifyContent: 'center'
             }}
           >
-            <Iconify icon="eva:checkmark-circle-2-fill" sx={{ color: 'success.main', width: 32 }} />
+            <Iconify icon="eva:checkmark-circle-2-fill" sx={{ color: 'success.main', width: { xs: 24, md: 32 } }} />
           </Box>
-          <Typography variant="h6">100% original</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>100% original</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: { xs: '0.75rem', md: '0.875rem' }, px: { xs: 1, md: 0 } }}>
             Guaranteed authentic products with quality assurance.
           </Typography>
         </Stack>
@@ -560,8 +560,8 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
         <Stack flex={1} alignItems="center" spacing={0.5}>
           <Box
             sx={{
-              width: 56,
-              height: 56,
+              width: { xs: 48, md: 56 },
+              height: { xs: 48, md: 56 },
               borderRadius: '50%',
               bgcolor: 'info.lighter',
               display: 'flex',
@@ -569,10 +569,10 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
               justifyContent: 'center'
             }}
           >
-            <Iconify icon="eva:clock-fill" sx={{ color: 'info.main', width: 32 }} />
+            <Iconify icon="eva:clock-fill" sx={{ color: 'info.main', width: { xs: 24, md: 32 } }} />
           </Box>
-          <Typography variant="h6">10 days replacement</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>10 days replacement</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: { xs: '0.75rem', md: '0.875rem' }, px: { xs: 1, md: 0 } }}>
             Easy returns and exchanges within 10 days of purchase.
           </Typography>
         </Stack>
@@ -580,8 +580,8 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
         <Stack flex={1} alignItems="center" spacing={0.5}>
           <Box
             sx={{
-              width: 56,
-              height: 56,
+              width: { xs: 48, md: 56 },
+              height: { xs: 48, md: 56 },
               borderRadius: '50%',
               bgcolor: 'warning.lighter',
               display: 'flex',
@@ -589,10 +589,10 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
               justifyContent: 'center'
             }}
           >
-            <Iconify icon="eva:shield-fill" sx={{ color: 'warning.main', width: 32 }} />
+            <Iconify icon="eva:shield-fill" sx={{ color: 'warning.main', width: { xs: 24, md: 32 } }} />
           </Box>
-          <Typography variant="h6">Year warranty</Typography>
-          <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+          <Typography variant="h6" sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>Year warranty</Typography>
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: { xs: '0.75rem', md: '0.875rem' }, px: { xs: 1, md: 0 } }}>
             Full manufacturer warranty coverage for one full year.
           </Typography>
         </Stack>

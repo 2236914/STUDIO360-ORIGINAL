@@ -407,6 +407,9 @@ router.get('/callback', (req, res) => {
  * @note This endpoint receives raw body via server.js middleware for signature verification
  */
 router.post('/callback', async (req, res) => {
+  // Set timeout to prevent hanging (Xendit expects response within 30s)
+  req.setTimeout(25000); // 25 seconds to be safe
+  
   try {
     // Get raw body for signature verification
     const rawBody = req.body.toString('utf8');
@@ -423,18 +426,21 @@ router.post('/callback', async (req, res) => {
       });
     }
 
+    // Xendit uses different headers for different webhook types
     const signature = req.headers['x-xendit-signature'] || req.headers['x-xendit-signature-v2'];
+    const callbackToken = req.headers['x-callback-token'] || req.headers['X-CALLBACK-TOKEN'];
     
     console.log('Xendit webhook received:', {
       method: req.method,
       path: req.path,
       hasSignature: !!signature,
+      hasCallbackToken: !!callbackToken,
       event: webhookBody?.event,
       bodyKeys: Object.keys(webhookBody || {}),
       timestamp: new Date().toISOString()
     });
     
-    // Verify webhook signature using raw body
+    // Verify webhook using signature or callback token
     if (signature) {
       const isValid = xenditService.verifyWebhookSignature(signature, rawBody);
       if (!isValid) {
@@ -448,12 +454,22 @@ router.post('/callback', async (req, res) => {
         });
       }
       console.log('✅ Webhook signature verified');
+    } else if (callbackToken) {
+      // Verify callback token matches webhook token
+      if (process.env.XENDIT_WEBHOOK_TOKEN && callbackToken !== process.env.XENDIT_WEBHOOK_TOKEN) {
+        console.error('Invalid callback token');
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid callback token' 
+        });
+      }
+      console.log('✅ Callback token verified');
     } else {
-      // Warn in production if signature is missing
+      // Warn in production if no verification headers
       if (process.env.NODE_ENV === 'production') {
-        console.warn('⚠️ Webhook received without signature in production');
+        console.warn('⚠️ Webhook received without verification headers in production');
       } else {
-        console.log('ℹ️ Webhook received without signature (development/test mode)');
+        console.log('ℹ️ Webhook received without verification (development/test mode)');
       }
     }
 
@@ -469,6 +485,17 @@ router.post('/callback', async (req, res) => {
       });
     }
     
+    // Handle payment_capture events (Payment Status API v3)
+    if (webhookData.type === 'payment_capture') {
+      console.log('Payment capture event received:', {
+        event: webhookData.event,
+        status: webhookData.status,
+        externalId: webhookData.externalId,
+        paymentId: webhookData.paymentId
+      });
+      // Continue to payment update logic below
+    }
+    
     // Handle payment_session events - acknowledge even if no matching payment record
     if (webhookData.type === 'payment_session') {
       console.log('Payment session event received:', {
@@ -482,7 +509,7 @@ router.post('/callback', async (req, res) => {
       if (webhookData.externalId) {
         // Continue to payment update logic below
       } else {
-        // No externalId found, just acknowledge
+        // No externalId found, just acknowledge immediately
         return res.status(200).json({
           success: true,
           message: 'Payment session event acknowledged',
@@ -537,14 +564,24 @@ router.post('/callback', async (req, res) => {
         webhookBodyKeys: Object.keys(webhookBody || {})
       });
       
-      // For payment session events without externalId, still acknowledge success
-      if (webhookData.type === 'payment_session') {
-        return res.status(200).json({
+      // For payment session events without externalId, still acknowledge success immediately
+      if (webhookData.type === 'payment_session' || webhookData.type === 'payment_capture') {
+        // Acknowledge immediately to prevent timeout
+        res.status(200).json({
           success: true,
-          message: 'Payment session event acknowledged (no matching payment record)',
+          message: `${webhookData.type} event acknowledged (no matching payment record)`,
           event: webhookData.event,
           status: webhookData.status
         });
+        
+        // Log for investigation
+        console.warn('Webhook processed but no payment record found:', {
+          type: webhookData.type,
+          event: webhookData.event,
+          externalId: webhookData.externalId,
+          paymentId: webhookData.paymentId
+        });
+        return;
       }
     }
 
@@ -574,50 +611,79 @@ router.post('/callback', async (req, res) => {
         if (orderError) {
           console.error('Error updating order status:', orderError);
         } else {
-        // Auto-post cash receipt to clear A/R (accrual basis) using bookkeeping endpoint
-        try {
-          const { data: orderData } = await supabase
-            .from('orders')
-            .select('*, order_items(*)')
-            .eq('id', updatedPayment.order_id)
-            .single();
-          if (orderData) {
+          // Process async operations in background (don't await - respond immediately)
+          // This prevents webhook timeout issues
+          setImmediate(async () => {
             try {
-              const receiptPayload = ordersService.buildReceiptFromOrder(orderData, updatedPayment.amount);
-              if (receiptPayload) {
-                const port = process.env.PORT || 3001;
-                const url = `http://127.0.0.1:${port}/api/bookkeeping/cash-receipts`;
-                try { await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(receiptPayload) }); } catch (_) {}
+              // Auto-post cash receipt to clear A/R (accrual basis) using bookkeeping endpoint
+              const { data: orderData } = await supabase
+                .from('orders')
+                .select('*, order_items(*)')
+                .eq('id', updatedPayment.order_id)
+                .single();
+              
+              if (orderData) {
+                try {
+                  const receiptPayload = ordersService.buildReceiptFromOrder(orderData, updatedPayment.amount);
+                  if (receiptPayload) {
+                    // Use BACKEND_URL if available, otherwise construct URL
+                    const baseUrl = process.env.BACKEND_URL || `http://localhost:${process.env.PORT || 3001}`;
+                    const url = `${baseUrl}/api/bookkeeping/cash-receipts`;
+                    try {
+                      // Use AbortController for timeout
+                      const controller = new AbortController();
+                      const timeoutId = setTimeout(() => controller.abort(), 10000);
+                      
+                      await fetch(url, { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify(receiptPayload),
+                        signal: controller.signal
+                      });
+                      
+                      clearTimeout(timeoutId);
+                    } catch (fetchErr) {
+                      if (fetchErr.name === 'AbortError') {
+                        console.error('Cash receipt request timed out');
+                      } else {
+                        console.error('Error posting cash receipt:', fetchErr.message);
+                      }
+                    }
+                  }
+                } catch (postErr) {
+                  console.error('Error building receipt payload:', postErr.message);
+                }
               }
-            } catch (postErr) { /* ignore to not fail webhook */ }
-          }
-        } catch (_) { /* ignore */ }
-        // Send order confirmation email to customer
-        try {
-          const { data: orderData } = await supabase
-            .from('orders')
-            .select('*, order_items(*)')
-            .eq('id', updatedPayment.order_id)
-            .single();
+            } catch (err) {
+              console.error('Error fetching order data for receipt:', err.message);
+            }
+            
+            // Send order confirmation email to customer
+            try {
+              const { data: orderData } = await supabase
+                .from('orders')
+                .select('*, order_items(*)')
+                .eq('id', updatedPayment.order_id)
+                .single();
 
-          if (orderData && orderData.customer_email) {
-            const emailData = {
-              orderId: orderData.id,
-              orderNumber: orderData.order_number,
-              customerName: orderData.customer_name,
-              customerEmail: orderData.customer_email,
-              orderDate: new Date(orderData.order_date || orderData.created_at).toLocaleDateString(),
-              orderItems: orderData.order_items || [],
-              orderTotal: `$${orderData.total?.toFixed(2) || '0.00'}`,
-              shippingAddress: `${orderData.shipping_street || ''}, ${orderData.shipping_city || ''}, ${orderData.shipping_province || ''} ${orderData.shipping_zip_code || ''}`.trim()
-            };
-            await emailService.sendOrderConfirmation(orderData.user_id, emailData);
-            console.log('✅ Order confirmation email sent');
-          }
-        } catch (emailError) {
-          console.error('Error sending order confirmation email:', emailError);
-          // Don't fail webhook processing if email fails
-        }
+              if (orderData && orderData.customer_email) {
+                const emailData = {
+                  orderId: orderData.id,
+                  orderNumber: orderData.order_number,
+                  customerName: orderData.customer_name,
+                  customerEmail: orderData.customer_email,
+                  orderDate: new Date(orderData.order_date || orderData.created_at).toLocaleDateString(),
+                  orderItems: orderData.order_items || [],
+                  orderTotal: `$${orderData.total?.toFixed(2) || '0.00'}`,
+                  shippingAddress: `${orderData.shipping_street || ''}, ${orderData.shipping_city || ''}, ${orderData.shipping_province || ''} ${orderData.shipping_zip_code || ''}`.trim()
+                };
+                await emailService.sendOrderConfirmation(orderData.user_id, emailData);
+                console.log('✅ Order confirmation email sent');
+              }
+            } catch (emailError) {
+              console.error('Error sending order confirmation email:', emailError.message);
+            }
+          });
         }
       } else if (webhookData.status === 'failed' || webhookData.status === 'expired') {
         // Update order status for failed/expired payments

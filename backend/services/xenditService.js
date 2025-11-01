@@ -281,8 +281,37 @@ class XenditService {
       };
     }
     
+    // Handle payment.capture events (Payment Status API v3)
+    if (event === 'payment.capture' || event?.includes('payment.capture')) {
+      const captureData = data || webhookData;
+      let normalizedStatus = captureData.status?.toLowerCase() || 'unknown';
+      
+      if (captureData.status === 'SUCCEEDED' || captureData.status === 'succeeded') {
+        normalizedStatus = 'paid';
+      } else if (captureData.status === 'FAILED' || captureData.status === 'failed') {
+        normalizedStatus = 'failed';
+      } else if (captureData.status === 'PENDING' || captureData.status === 'pending') {
+        normalizedStatus = 'pending';
+      }
+      
+      return {
+        event,
+        type: 'payment_capture',
+        paymentId: captureData.payment_id,
+        externalId: captureData.reference_id || captureData.payment_request_id,
+        status: normalizedStatus,
+        amount: captureData.request_amount || captureData.amount,
+        currency: captureData.currency || 'PHP',
+        paymentMethod: captureData.channel_code?.toLowerCase(),
+        createdAt: captureData.created,
+        updatedAt: captureData.updated || captureData.created,
+        customer: captureData.customer_id ? { id: captureData.customer_id } : null,
+        metadata: captureData.metadata,
+      };
+    }
+    
     // Handle Payment Session events (different structure)
-    if (event?.includes('payment_session') || event === 'payment.session.completed' || event === 'payment.session.expired') {
+    if (event?.includes('payment_session') || event === 'payment.session.completed' || event === 'payment.session.expired' || event === 'payment_session.completed' || event === 'payment_session.expired') {
       // Payment Session events have the payment data nested differently
       const sessionData = data || webhookData;
       let normalizedStatus = sessionData.status?.toLowerCase() || 'unknown';

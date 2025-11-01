@@ -56,32 +56,59 @@ export function StoreFooter({ storeId }) {
   };
 
   return (
-    <Box sx={{ bgcolor: 'background.paper', py: 6, borderTop: '1px solid', borderColor: 'divider' }}>
-      <Container maxWidth="lg">
-        <Grid container spacing={4}>
+    <Box sx={{ bgcolor: 'background.paper', py: { xs: 4, md: 6 }, borderTop: '1px solid', borderColor: 'divider' }}>
+      <Container maxWidth="lg" sx={{ px: { xs: 2, sm: 3, md: 4 } }}>
+        <Grid container spacing={{ xs: 3, md: 4 }}>
           {/* Column 1: Logo */}
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <Stack spacing={2}>
               <Stack direction="row" spacing={1.5} alignItems="center">
                 {shopInfo?.profile_photo_url ? (
-                  <Avatar src={shopInfo.profile_photo_url} alt={shopInfo.shop_name || 'Store'} sx={{ width: 40, height: 40 }} />
+                  <Avatar 
+                    src={shopInfo.profile_photo_url} 
+                    alt={shopInfo.shop_name || 'Store'} 
+                    sx={{ width: { xs: 36, md: 40 }, height: { xs: 36, md: 40 } }} 
+                  />
                 ) : (
-                  <Avatar sx={{ width: 40, height: 40 }}>{(shopInfo?.shop_name || 'S').charAt(0).toUpperCase()}</Avatar>
+                  <Avatar sx={{ width: { xs: 36, md: 40 }, height: { xs: 36, md: 40 } }}>
+                    {(shopInfo?.shop_name || 'S').charAt(0).toUpperCase()}
+                  </Avatar>
                 )}
-                <Typography variant="h6" sx={{ fontWeight: 700, color: 'text.primary' }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    fontWeight: 700, 
+                    color: 'text.primary',
+                    fontSize: { xs: '1rem', md: '1.25rem' }
+                  }}
+                >
                   {shopInfo?.shop_name || 'Store Name'}
                 </Typography>
               </Stack>
-              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  lineHeight: 1.6,
+                  fontSize: { xs: '0.875rem', md: '0.9375rem' }
+                }}
+              >
                 {shopInfo?.shop_category ? `Category: ${shopInfo.shop_category}` : 'Quality products for your needs.'}
               </Typography>
             </Stack>
           </Grid>
 
           {/* Column 2: Shop */}
-          <Grid item xs={12} md={4}>
+          <Grid item xs={12} sm={6} md={4}>
             <Stack spacing={2}>
-              <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  fontWeight: 600, 
+                  color: 'text.primary',
+                  fontSize: { xs: '1rem', md: '1.25rem' }
+                }}
+              >
                 Shop
               </Typography>
               <Stack spacing={1}>
@@ -91,6 +118,7 @@ export function StoreFooter({ storeId }) {
                     color: 'text.secondary', 
                     textDecoration: 'none', 
                     cursor: 'pointer',
+                    fontSize: { xs: '0.875rem', md: '0.9375rem' },
                     '&:hover': { color: 'primary.main' } 
                   }}
                 >
@@ -102,6 +130,7 @@ export function StoreFooter({ storeId }) {
                     color: 'text.secondary', 
                     textDecoration: 'none', 
                     cursor: 'pointer',
+                    fontSize: { xs: '0.875rem', md: '0.9375rem' },
                     '&:hover': { color: 'primary.main' } 
                   }}
                 >
@@ -113,6 +142,7 @@ export function StoreFooter({ storeId }) {
                     color: 'text.secondary', 
                     textDecoration: 'none', 
                     cursor: 'pointer',
+                    fontSize: { xs: '0.875rem', md: '0.9375rem' },
                     '&:hover': { color: 'primary.main' } 
                   }}
                 >
@@ -125,7 +155,14 @@ export function StoreFooter({ storeId }) {
           {/* Column 3: Newsletter */}
           <Grid item xs={12} md={4}>
             <Stack spacing={2}>
-              <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  lineHeight: 1.6,
+                  fontSize: { xs: '0.875rem', md: '0.9375rem' }
+                }}
+              >
                 Join our newsletter and receive news and information on upcoming events, our brand and partnerships
               </Typography>
               <form onSubmit={handleEmailSubmit}>
@@ -140,6 +177,7 @@ export function StoreFooter({ storeId }) {
                     }}
                     size="small"
                     error={emailError}
+                    fullWidth
                     sx={{
                       '& .MuiOutlinedInput-root': {
                         bgcolor: 'background.paper',
@@ -158,7 +196,7 @@ export function StoreFooter({ storeId }) {
                       color: 'white',
                       textTransform: 'none',
                       fontWeight: 500,
-                      width: 'fit-content',
+                      width: { xs: '100%', sm: 'fit-content' },
                       px: 3,
                       '&:hover': {
                         bgcolor: 'grey.700',
@@ -170,7 +208,13 @@ export function StoreFooter({ storeId }) {
                 </Stack>
               </form>
               {emailError && (
-                <Typography variant="caption" sx={{ color: 'error.main' }}>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    color: 'error.main',
+                    fontSize: { xs: '0.75rem', md: '0.8125rem' }
+                  }}
+                >
                   Something went wrong, check your email and try again.
                 </Typography>
               )}
@@ -179,21 +223,47 @@ export function StoreFooter({ storeId }) {
         </Grid>
 
         {/* Bottom Section */}
-        <Box sx={{ mt: 6, pt: 4, borderTop: '1px solid', borderColor: 'divider' }}>
+        <Box sx={{ mt: { xs: 4, md: 6 }, pt: { xs: 3, md: 4 }, borderTop: '1px solid', borderColor: 'divider' }}>
           <Stack
             direction={{ xs: 'column', md: 'row' }}
-            alignItems="center"
+            alignItems={{ xs: 'flex-start', md: 'center' }}
             justifyContent="space-between"
             spacing={2}
           >
-            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+            <Typography 
+              variant="body2" 
+              sx={{ 
+                color: 'text.secondary',
+                fontSize: { xs: '0.75rem', md: '0.875rem' }
+              }}
+            >
               Made with STUDIO360
             </Typography>
-            <Stack direction="row" spacing={2}>
-              <Link href="#" sx={{ color: 'text.secondary', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}>
+            <Stack 
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={{ xs: 1, sm: 2 }}
+              sx={{ width: { xs: '100%', md: 'auto' } }}
+            >
+              <Link 
+                href="#" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  textDecoration: 'none',
+                  fontSize: { xs: '0.75rem', md: '0.875rem' },
+                  '&:hover': { color: 'primary.main' } 
+                }}
+              >
                 Terms of Service
               </Link>
-              <Link href="#" sx={{ color: 'text.secondary', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}>
+              <Link 
+                href="#" 
+                sx={{ 
+                  color: 'text.secondary', 
+                  textDecoration: 'none',
+                  fontSize: { xs: '0.75rem', md: '0.875rem' },
+                  '&:hover': { color: 'primary.main' } 
+                }}
+              >
                 Privacy Policy
               </Link>
             </Stack>
