@@ -9,14 +9,26 @@ const { supabase } = require('../../services/supabaseClient');
  */
 async function getUserIdByShopName(shopName) {
   try {
+    if (!shopName || typeof shopName !== 'string') {
+      console.error(`[Orders] Invalid shopName: ${shopName}`);
+      return null;
+    }
+
+    // Normalize shop name: lowercase and remove spaces for comparison
+    const normalizedShopName = shopName.toLowerCase().replace(/\s+/g, '');
+    
+    console.log(`[Orders] Looking up shop: "${shopName}" (normalized: "${normalizedShopName}")`);
+
+    // Try exact match first
     let { data, error } = await supabase
       .from('shop_info')
       .select('user_id, shop_name')
       .eq('shop_name', shopName)
       .is('deleted_at', null)
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
+      // Try case-insensitive match
       const { data: caseInsensitiveData, error: caseInsensitiveError } = await supabase
         .from('shop_info')
         .select('user_id, shop_name')
@@ -25,14 +37,40 @@ async function getUserIdByShopName(shopName) {
         .maybeSingle();
 
       if (!caseInsensitiveError && caseInsensitiveData) {
+        console.log(`[Orders] Found shop via case-insensitive match: "${caseInsensitiveData.shop_name}"`);
         return caseInsensitiveData.user_id;
       }
+
+      // Try normalized match (remove spaces and case differences)
+      // Fetch all shops and match manually
+      const { data: allShops, error: allShopsError } = await supabase
+        .from('shop_info')
+        .select('user_id, shop_name')
+        .is('deleted_at', null);
+
+      if (!allShopsError && allShops) {
+        for (const shop of allShops) {
+          const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
+          if (normalizedDbShopName === normalizedShopName) {
+            console.log(`[Orders] Found shop via normalized match: "${shop.shop_name}"`);
+            return shop.user_id;
+          }
+        }
+      }
+
+      // Log all available shops for debugging
+      console.error(`[Orders] Shop not found: "${shopName}"`);
+      if (!allShopsError && allShops && allShops.length > 0) {
+        console.error(`[Orders] Available shops: ${allShops.map(s => `"${s.shop_name}"`).join(', ')}`);
+      }
+      
       return null;
     }
     
+    console.log(`[Orders] Found shop via exact match: "${data.shop_name}"`);
     return data.user_id;
   } catch (e) {
-    console.error(`Error looking up shop "${shopName}":`, e);
+    console.error(`[Orders] Error looking up shop "${shopName}":`, e);
     return null;
   }
 }
@@ -232,10 +270,16 @@ router.post('/public', async (req, res) => {
       });
     }
     
+    // Send HTTP response immediately (don't wait for emails)
     res.status(201).json({
       success: true,
       data: newOrder,
       message: 'Order created successfully'
+    });
+    
+    // Send emails asynchronously after response (non-blocking)
+    ordersService.sendOrderEmails(newOrder.id, userId).catch(err => {
+      console.error('Background email sending error:', err);
     });
   } catch (error) {
     console.error('Error creating order:', error);

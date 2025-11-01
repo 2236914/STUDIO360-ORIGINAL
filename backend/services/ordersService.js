@@ -236,48 +236,70 @@ class OrdersService {
       // Fetch complete order with items
       const completeOrder = await this.getOrderById(order.id, userId);
       
-      // Send order confirmation email to customer
-      try {
-        const emailData = {
-          orderId: order.id,
-          orderNumber: order.order_number,
-          customerName: order.customer_name,
-          customerEmail: order.customer_email,
-          orderDate: new Date(order.order_date || order.created_at).toLocaleDateString(),
-          orderItems: await this.getOrderItems(order.id, userId),
-          orderTotal: `$${order.total?.toFixed(2) || '0.00'}`,
-          shippingAddress: `${order.shipping_street}, ${order.shipping_city}, ${order.shipping_province} ${order.shipping_zip_code}`
-        };
-        await emailService.sendOrderConfirmation(userId, emailData);
-      } catch (emailError) {
-        console.error('Error sending order confirmation email:', emailError);
-        // Don't fail order creation if email fails
-      }
-      
-      // Send new order alert to seller
-      try {
-        const emailData = {
-          orderId: order.id,
-          orderNumber: order.order_number,
-          customerName: order.customer_name,
-          customerEmail: order.customer_email,
-          orderDate: new Date(order.order_date || order.created_at).toLocaleDateString(),
-          orderItems: await this.getOrderItems(order.id, userId),
-          orderTotal: `$${order.total?.toFixed(2) || '0.00'}`,
-          sellerEmail: order.seller_email,
-          sellerName: order.seller_name || 'Seller'
-        };
-        await emailService.sendNewOrderAlert(userId, emailData);
-      } catch (emailError) {
-        console.error('Error sending new order alert:', emailError);
-        // Don't fail order creation if email fails
-      }
-      
+      // Return order immediately - emails will be sent asynchronously via sendOrderEmails
       return completeOrder;
     } catch (error) {
       console.error('Error in createOrder:', error);
       return null;
     }
+  }
+
+  /**
+   * Send order confirmation emails asynchronously (non-blocking)
+   * This should be called after the HTTP response is sent
+   */
+  async sendOrderEmails(orderId, userId) {
+    // Run in background - don't await, don't block
+    setImmediate(async () => {
+      try {
+        const order = await this.getOrderById(orderId, userId);
+        if (!order) {
+          console.error(`[Email] Order ${orderId} not found for email sending`);
+          return;
+        }
+
+        const orderItems = await this.getOrderItems(orderId, userId);
+
+        // Send order confirmation email to customer
+        try {
+          const emailData = {
+            orderId: order.id,
+            orderNumber: order.order_number,
+            customerName: order.customer_name,
+            customerEmail: order.customer_email,
+            orderDate: new Date(order.order_date || order.created_at).toLocaleDateString(),
+            orderItems: orderItems,
+            orderTotal: `$${order.total?.toFixed(2) || '0.00'}`,
+            shippingAddress: `${order.shipping_street || ''}, ${order.shipping_city || ''}, ${order.shipping_province || ''} ${order.shipping_zip_code || ''}`.trim()
+          };
+          await emailService.sendOrderConfirmation(userId, emailData);
+          console.log(`[Email] Order confirmation sent for order ${order.order_number}`);
+        } catch (emailError) {
+          console.error('Error sending order confirmation email:', emailError);
+        }
+        
+        // Send new order alert to seller
+        try {
+          const emailData = {
+            orderId: order.id,
+            orderNumber: order.order_number,
+            customerName: order.customer_name,
+            customerEmail: order.customer_email,
+            orderDate: new Date(order.order_date || order.created_at).toLocaleDateString(),
+            orderItems: orderItems,
+            orderTotal: `$${order.total?.toFixed(2) || '0.00'}`,
+            sellerEmail: order.seller_email,
+            sellerName: order.seller_name || 'Seller'
+          };
+          await emailService.sendNewOrderAlert(userId, emailData);
+          console.log(`[Email] New order alert sent for order ${order.order_number}`);
+        } catch (emailError) {
+          console.error('Error sending new order alert:', emailError);
+        }
+      } catch (error) {
+        console.error('Error in sendOrderEmails background task:', error);
+      }
+    });
   }
 
   /**

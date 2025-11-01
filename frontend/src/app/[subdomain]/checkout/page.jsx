@@ -392,13 +392,32 @@ export default function SubdomainCheckoutPage({ params }) {
             })),
           };
 
-          const response = await fetch(`${API_BASE_URL}/api/orders/public`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(orderDbData),
-          });
+          // Create AbortController for timeout
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+          
+          let response;
+          try {
+            response = await fetch(`${API_BASE_URL}/api/orders/public`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(orderDbData),
+              signal: controller.signal,
+            });
+            
+            clearTimeout(timeoutId);
+          } catch (fetchError) {
+            clearTimeout(timeoutId);
+            if (fetchError.name === 'AbortError') {
+              console.error('Order creation request timed out');
+              alert('Order creation is taking too long. Please check your connection and try again.');
+              setLoading(false);
+              return;
+            }
+            throw fetchError;
+          }
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));

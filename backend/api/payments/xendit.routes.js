@@ -11,14 +11,26 @@ const ordersService = require('../../services/ordersService');
  */
 async function getUserIdByShopName(shopName) {
   try {
+    if (!shopName || typeof shopName !== 'string') {
+      console.error(`[Xendit Payment] Invalid shopName: ${shopName}`);
+      return null;
+    }
+
+    // Normalize shop name: lowercase and remove spaces for comparison
+    const normalizedShopName = shopName.toLowerCase().replace(/\s+/g, '');
+    
+    console.log(`[Xendit Payment] Looking up shop: "${shopName}" (normalized: "${normalizedShopName}")`);
+
+    // Try exact match first
     let { data, error } = await supabase
       .from('shop_info')
       .select('user_id, shop_name')
       .eq('shop_name', shopName)
       .is('deleted_at', null)
-      .single();
+      .maybeSingle();
 
     if (error || !data) {
+      // Try case-insensitive match
       const { data: caseInsensitiveData, error: caseInsensitiveError } = await supabase
         .from('shop_info')
         .select('user_id, shop_name')
@@ -27,14 +39,40 @@ async function getUserIdByShopName(shopName) {
         .maybeSingle();
 
       if (!caseInsensitiveError && caseInsensitiveData) {
+        console.log(`[Xendit Payment] Found shop via case-insensitive match: "${caseInsensitiveData.shop_name}"`);
         return caseInsensitiveData.user_id;
       }
+
+      // Try normalized match (remove spaces and case differences)
+      // Fetch all shops and match manually
+      const { data: allShops, error: allShopsError } = await supabase
+        .from('shop_info')
+        .select('user_id, shop_name')
+        .is('deleted_at', null);
+
+      if (!allShopsError && allShops) {
+        for (const shop of allShops) {
+          const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
+          if (normalizedDbShopName === normalizedShopName) {
+            console.log(`[Xendit Payment] Found shop via normalized match: "${shop.shop_name}"`);
+            return shop.user_id;
+          }
+        }
+      }
+
+      // Log all available shops for debugging
+      console.error(`[Xendit Payment] Shop not found: "${shopName}"`);
+      if (!allShopsError && allShops && allShops.length > 0) {
+        console.error(`[Xendit Payment] Available shops: ${allShops.map(s => `"${s.shop_name}"`).join(', ')}`);
+      }
+      
       return null;
     }
     
+    console.log(`[Xendit Payment] Found shop via exact match: "${data.shop_name}"`);
     return data.user_id;
   } catch (e) {
-    console.error(`Error looking up shop "${shopName}":`, e);
+    console.error(`[Xendit Payment] Error looking up shop "${shopName}":`, e);
     return null;
   }
 }
