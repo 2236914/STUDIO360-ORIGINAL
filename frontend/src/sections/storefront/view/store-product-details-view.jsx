@@ -6,20 +6,16 @@ import Box from '@mui/material/Box';
 // import Tab from '@mui/material/Tab';
 import Card from '@mui/material/Card';
 import Grid from '@mui/material/Grid';
-import Menu from '@mui/material/Menu';
 // import Tabs from '@mui/material/Tabs';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import Rating from '@mui/material/Rating';
 import Select from '@mui/material/Select';
 import Divider from '@mui/material/Divider';
-import MenuItem from '@mui/material/MenuItem';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import FormControl from '@mui/material/FormControl';
 // import Pagination from '@mui/material/Pagination';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
 
 import { fCurrencyPHPSymbol } from 'src/utils/format-number';
 
@@ -194,6 +190,7 @@ const PRODUCT_DATA = {
 export function StoreProductDetailsView({ id, additionalProducts = {} }) {
   const [mounted, setMounted] = useState(false);
   const [showBackToTop, setShowBackToTop] = useState(false);
+  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   
   // tabs removed for simplified mock layout
   const [selectedColor, setSelectedColor] = useState(0);
@@ -203,7 +200,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
     return productData.sizes[0] || '9';
   });
   const [quantity, setQuantity] = useState(1);
-  const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
+  // const [shareMenuAnchor, setShareMenuAnchor] = useState(null);
   // const [reviewsPage, setReviewsPage] = useState(1);
 
   // Get product data (in real app, this would be from API)
@@ -236,63 +233,21 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
     setQuantity(prev => Math.max(1, Math.min(prev + delta, product.availableQuantity)));
   }, [product.availableQuantity]);
 
-  const handleShareMenuOpen = useCallback((event) => {
-    setShareMenuAnchor(event.currentTarget);
-  }, []);
-
-  const handleShareMenuClose = useCallback(() => {
-    setShareMenuAnchor(null);
-  }, []);
-
   const handleBackToTop = useCallback(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  const handleShareFacebook = useCallback(() => {
-    const url = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(window.location.href)}`;
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setShareMenuAnchor(null);
-  }, []);
-
-  const handleShareInstagram = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      window.alert('Link copied. Paste into Instagram to share.');
-    } catch (e) {
-      window.prompt('Copy this link to share on Instagram:', window.location.href);
-    }
-    setShareMenuAnchor(null);
-  }, []);
-
-  const handleShareNative = useCallback(async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: document.title, url: window.location.href });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        window.alert('Link copied to clipboard');
-      }
-    } catch (e) {
-      // user cancelled or not supported
-    }
-    setShareMenuAnchor(null);
+  const handleImageClick = useCallback((index) => {
+    setSelectedImageIndex(index);
   }, []);
 
   const renderProductImages = (
     <Grid item xs={12} lg={6}>
-      <Card sx={{ p: { xs: 1.5, md: 2 }, boxShadow: 'none', border: 'none', mt: { xs: 1.5, md: 2 } }}>
-        <Box sx={{ position: 'relative', mb: 1.5 }}>
-          {/* Share icon button in the top-right of main image */}
-          <IconButton
-            aria-label="share"
-            onClick={handleShareMenuOpen}
-            sx={{ position: 'absolute', top: 8, right: 8, zIndex: 2, bgcolor: 'white', boxShadow: 1, '&:hover': { bgcolor: 'primary.lighter' } }}
-          >
-            <Iconify icon="solar:share-bold" sx={{ color: 'primary.main' }} />
-          </IconButton>
+      <Card sx={{ p: { xs: 1, md: 1.5 }, boxShadow: 'none', border: 'none', mt: { xs: 1, md: 1.5 } }}>
+        <Box sx={{ position: 'relative', mb: 1 }}>
           <Box
             component="img"
-            src={product.images?.[0] || '/assets/images/product/product-placeholder.png'}
+            src={product.images?.[selectedImageIndex] || product.images?.[0] || '/assets/images/product/product-placeholder.png'}
             alt={`${product.name} main image`}
             sx={{
               width: '100%',
@@ -300,74 +255,80 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
               maxHeight: { xs: 300, sm: 400, md: 500 },
               objectFit: 'cover',
               borderRadius: 2,
-              bgcolor: 'grey.100'
+              bgcolor: 'grey.100',
+              cursor: 'pointer'
             }}
           />
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 16,
-              left: 16,
-              bgcolor: 'rgba(0,0,0,0.7)',
-              color: 'white',
-              px: 2,
-              py: 0.5,
-              borderRadius: 1,
-              fontSize: '0.75rem',
-              fontWeight: 600
-            }}
-          >
-            1/{product.images.length}
-          </Box>
-        </Box>
-
-        <Box 
-          sx={{ 
-            display: 'flex', 
-            gap: 0.5, 
-            flexWrap: { xs: 'wrap', sm: 'nowrap' },
-            justifyContent: { xs: 'center', sm: 'flex-start' }
-          }}
-        >
-          {product.images.slice(0, 5).map((image, index) => (
+          {product.images?.length > 1 && (
             <Box
-              key={index}
               sx={{
-                flex: { xs: '0 0 calc(20% - 4px)', sm: '0 0 calc(20% - 4px)' },
-                minWidth: { xs: '60px', sm: '80px' },
-                maxWidth: { xs: '80px', sm: '100px' },
+                position: 'absolute',
+                bottom: 8,
+                left: 8,
+                bgcolor: 'rgba(0,0,0,0.7)',
+                color: 'white',
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 1,
+                fontSize: '0.75rem',
+                fontWeight: 600
               }}
             >
-              <Box
-                component="img"
-                src={image || '/assets/images/product/product-placeholder.png'}
-                alt={`${product.name} ${index + 1}`}
-                sx={{
-                  width: '100%',
-                  aspectRatio: '1/1',
-                  objectFit: 'cover',
-                  borderRadius: 1,
-                  cursor: 'pointer',
-                  border: index === 0 ? '2px solid' : '1px solid',
-                  borderColor: index === 0 ? 'primary.main' : 'divider',
-                  transition: 'all 0.2s',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    opacity: 0.8,
-                    transform: 'scale(1.05)'
-                  }
-                }}
-              />
+              {selectedImageIndex + 1}/{product.images.length}
             </Box>
-          ))}
+          )}
         </Box>
+
+        {product.images?.length > 1 && (
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              gap: 0.5, 
+              flexWrap: 'wrap',
+              justifyContent: { xs: 'center', sm: 'flex-start' }
+            }}
+          >
+            {product.images.slice(0, 5).map((image, index) => (
+              <Box
+                key={index}
+                onClick={() => handleImageClick(index)}
+                sx={{
+                  width: { xs: 60, sm: 80 },
+                  height: { xs: 60, sm: 80 },
+                  cursor: 'pointer',
+                }}
+              >
+                <Box
+                  component="img"
+                  src={image || '/assets/images/product/product-placeholder.png'}
+                  alt={`${product.name} ${index + 1}`}
+                  sx={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    borderRadius: 1,
+                    border: selectedImageIndex === index ? '2px solid' : '1px solid',
+                    borderColor: selectedImageIndex === index ? 'primary.main' : 'divider',
+                    transition: 'all 0.2s',
+                    opacity: selectedImageIndex === index ? 1 : 0.7,
+                    '&:hover': {
+                      borderColor: 'primary.main',
+                      opacity: 1,
+                      transform: 'scale(1.05)'
+                    }
+                  }}
+                />
+              </Box>
+            ))}
+          </Box>
+        )}
       </Card>
     </Grid>
   );
 
   const renderProductInfo = (
     <Grid item xs={12} lg={6}>
-      <Card sx={{ p: { xs: 1.5, md: 2 }, boxShadow: 'none', border: 'none', mt: { xs: 1.5, md: 2 } }}>
+      <Card sx={{ p: { xs: 1.5, md: 2 }, boxShadow: 'none', border: 'none', mt: { xs: 1, md: 1.5 } }}>
         <Stack spacing={1.5}>
           <Box>
             <Box
@@ -405,7 +366,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
               </Typography>
             </Stack>
             <Typography variant="h5" sx={{ color: 'text.primary', mb: 0.5, fontSize: { xs: '1.25rem', md: '1.5rem' } }}>
-              {fCurrencyPHPSymbol(product.price)}
+              {fCurrencyPHPSymbol(product.price, '₱')}
             </Typography>
             <Typography variant="body2" sx={{ color: 'text.secondary' }}>
               {product.description}
@@ -580,7 +541,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
       <Stack 
         direction={{ xs: 'column', md: 'row' }} 
         spacing={{ xs: 2, md: 3 }} 
-        sx={{ textAlign: 'center', py: { xs: 2, md: 3 }, mt: { xs: 1.5, md: 2 } }}
+        sx={{ textAlign: 'center', py: { xs: 2, md: 2.5 }, mt: { xs: 1, md: 1.5 } }}
       >
         <Stack flex={1} alignItems="center" spacing={0.5}>
           <Box
@@ -647,7 +608,7 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
 
   const renderDescription = (
     <Grid item xs={12}>
-      <Card sx={{ mt: { xs: 1.5, md: 2 }, p: { xs: 2, md: 2.5 } }}>
+      <Card sx={{ mt: { xs: 1, md: 1.5 }, p: { xs: 1.5, md: 2 } }}>
         <Typography variant="h6" sx={{ mb: 1 }}>Description</Typography>
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>
           {product.description}
@@ -745,29 +706,6 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
           />
         </IconButton>
         <IconButton
-          aria-label="share"
-          onClick={handleShareMenuOpen}
-          sx={{
-            color: 'text.primary',
-            width: { xs: 36, md: 40 },
-            height: { xs: 36, md: 40 },
-            transition: 'all 0.2s',
-            backgroundColor: 'rgba(255, 255, 255, 0.9)',
-            backdropFilter: 'blur(4px)',
-            boxShadow: 1,
-            '&:hover': {
-              backgroundColor: 'rgba(255, 255, 255, 0.95)',
-              color: 'primary.main',
-              boxShadow: 2,
-            }
-          }}
-        >
-          <Iconify 
-            icon="eva:share-fill" 
-            width={20}
-          />
-        </IconButton>
-        <IconButton
           aria-label="cart"
           onClick={() => (window.location.href = '/checkout')}
           sx={{
@@ -792,42 +730,15 @@ export function StoreProductDetailsView({ id, additionalProducts = {} }) {
         </IconButton>
       </Stack>
 
-      {/* Share menu */}
-      <Menu
-        anchorEl={shareMenuAnchor}
-        open={Boolean(shareMenuAnchor)}
-        onClose={handleShareMenuClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <MenuItem onClick={handleShareFacebook}>
-          <ListItemIcon>
-            <Iconify icon="eva:facebook-fill" width={20} />
-          </ListItemIcon>
-          <ListItemText>Facebook</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleShareInstagram}>
-          <ListItemIcon>
-            <Iconify icon="logos:instagram-icon" width={20} />
-          </ListItemIcon>
-          <ListItemText>Instagram</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={handleShareNative}>
-          <ListItemIcon>
-            <Iconify icon="eva:share-fill" width={20} />
-          </ListItemIcon>
-          <ListItemText>Share</ListItemText>
-        </MenuItem>
-      </Menu>
 
       <Grid 
         container 
-        spacing={{ xs: 1.5, md: 2 }}
+        spacing={{ xs: 1, md: 1.5 }}
         sx={{ 
           maxWidth: '1200px', 
           mx: 'auto',
-          px: { xs: 1.5, sm: 2, md: 3 },
-          pt: { xs: 10, sm: 12, md: 14 }
+          px: { xs: 1, sm: 1.5, md: 2 },
+          pt: { xs: 5, sm: 6, md: 8 }
         }}
       >
         {renderProductImages}

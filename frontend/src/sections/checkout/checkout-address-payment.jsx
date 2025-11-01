@@ -24,6 +24,13 @@ import { CheckoutSummary } from './checkout-summary';
 import { CheckoutDelivery } from './checkout-delivery';
 import { CheckoutPaymentMethods } from './checkout-payment-methods';
 
+// Import Xendit payment service and dialogs
+import xenditPaymentService from 'src/services/xenditPaymentService';
+import { QRPHPaymentDialog } from 'src/components/payment/qrph-payment-dialog';
+import { GCashPaymentDialog } from 'src/components/payment/gcash-payment-dialog';
+import { CardPaymentDialog } from 'src/components/payment/card-payment-dialog';
+import Alert from '@mui/material/Alert';
+
 // ----------------------------------------------------------------------
 
 // Default delivery options (fallback when no address is selected)
@@ -99,6 +106,13 @@ export function CheckoutAddressPayment() {
   const [categorizedDeliveryOptions, setCategorizedDeliveryOptions] = useState([]);
   const [customerRegion, setCustomerRegion] = useState(null);
   const [isClient, setIsClient] = useState(false);
+  
+  // Xendit payment dialog states
+  const [qrphDialogOpen, setQrphDialogOpen] = useState(false);
+  const [gcashDialogOpen, setGcashDialogOpen] = useState(false);
+  const [cardDialogOpen, setCardDialogOpen] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
 
   const defaultValues = {
     firstName: '',
@@ -212,6 +226,7 @@ export function CheckoutAddressPayment() {
         name: `${data.firstName} ${data.lastName}`,
         phoneNumber: data.phone,
         fullAddress: `${data.address}, ${data.barangay}, ${data.city}, ${data.province}, ${data.zipCode}`,
+        email: data.email,
         addressType: 'Home',
         primary: true,
       };
@@ -219,23 +234,123 @@ export function CheckoutAddressPayment() {
       // Update checkout context
       checkout.onCreateBilling(billingAddress);
       
-      console.info('Order Data:', {
+      // Prepare order data
+      const orderItems = (checkout.items || []).map((item) => ({
+        id: item.id,
+        name: item.name || item.title || `Item ${item.id}`,
+        image: item.image || item.cover || item.thumbnail,
+        quantity: item.quantity || 1,
+        price: item.price || 0,
+      }));
+
+      const orderInput = {
         customer: {
-          firstName: data.firstName,
-          lastName: data.lastName,
+          name: `${data.firstName} ${data.lastName}`,
           email: data.email,
           phone: data.phone,
+          avatar: '/assets/images/avatar/avatar_1.jpg',
         },
-        address: billingAddress,
-        delivery: data.delivery,
-        payment: data.payment,
-        items: checkout.items,
-        total: checkout.total,
-      });
+        items: orderItems.length,
+        orderItems,
+        price: checkout.total || 0,
+        status: 'pending',
+        delivery: {
+          method: deliveryOptions.find(opt => opt.value === data.delivery)?.label || 'Standard',
+          speed: deliveryOptions.find(opt => opt.value === data.delivery)?.description || '3-5 days delivery',
+          trackingNo: '',
+        },
+        shipping: {
+          address: billingAddress.fullAddress,
+          phone: data.phone,
+        },
+        payment: {
+          method: data.payment,
+        },
+        summary: {
+          subtotal: checkout.subtotal || 0,
+          shipping: checkout.shipping || 0,
+          discount: checkout.discount || 0,
+          taxes: 0,
+          total: checkout.total || 0,
+        },
+      };
+
+      // Check if Xendit payment method is selected
+      if (['qrph', 'gcash', 'credit'].includes(data.payment)) {
+        // Open appropriate Xendit payment dialog
+        setPaymentError('');
+        setPaymentSuccess(false);
+        
+        switch (data.payment) {
+          case 'qrph':
+            setQrphDialogOpen(true);
+            break;
+          case 'gcash':
+            setGcashDialogOpen(true);
+            break;
+          case 'credit':
+            setCardDialogOpen(true);
+            break;
+          default:
+            // Fall through to next step for non-Xendit methods
+            checkout.onNextStep();
+            checkout.onReset();
+        }
+      } else {
+        // For other payment methods (e.g., PayPal), proceed normally
+        checkout.onNextStep();
+        checkout.onReset();
+      }
+      
+      console.info('Order Data:', orderInput);
     } catch (error) {
-      console.error(error);
+      console.error('Error in checkout:', error);
+      setPaymentError('Failed to process checkout. Please try again.');
     }
   });
+
+  const handlePaymentSuccess = (paymentResult) => {
+    console.log('Payment successful:', paymentResult);
+    setPaymentSuccess(true);
+    setPaymentError('');
+    
+    // Close all dialogs
+    setQrphDialogOpen(false);
+    setGcashDialogOpen(false);
+    setCardDialogOpen(false);
+    
+    // Proceed to next step
+    setTimeout(() => {
+      checkout.onNextStep();
+      checkout.onReset();
+    }, 2000);
+  };
+
+  const handlePaymentError = (error) => {
+    console.error('Payment error:', error);
+    setPaymentError(typeof error === 'string' ? error : 'Payment failed. Please try again.');
+    setPaymentSuccess(false);
+  };
+
+  const handleCloseDialogs = () => {
+    setQrphDialogOpen(false);
+    setGcashDialogOpen(false);
+    setCardDialogOpen(false);
+    setPaymentError('');
+  };
+
+  // Prepare payment data for dialogs
+  const paymentData = {
+    amount: checkout.total || 0,
+    description: `Payment for order`,
+    customer: {
+      firstName: methods.watch('firstName') || 'Customer',
+      lastName: methods.watch('lastName') || '',
+      email: methods.watch('email') || '',
+      phone: methods.watch('phone') || '',
+    },
+    orderId: `order_${Date.now()}`,
+  };
 
   return (
     <ClientOnly fallback={<div>Loading checkout form...</div>}>
@@ -437,6 +552,19 @@ export function CheckoutAddressPayment() {
             sx={{ my: 3 }}
           />
 
+          {/* Payment Error/Success Messages */}
+          {paymentError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {paymentError}
+            </Alert>
+          )}
+
+          {paymentSuccess && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              Payment successful! Redirecting...
+            </Alert>
+          )}
+
           <Button
             size="medium"
             color="inherit"
@@ -492,7 +620,32 @@ export function CheckoutAddressPayment() {
           </LoadingButton>
         </Grid>
       </Grid>
-    </Form>
+      </Form>
+
+      {/* Xendit Payment Dialogs */}
+      <QRPHPaymentDialog
+        open={qrphDialogOpen}
+        onClose={handleCloseDialogs}
+        paymentData={paymentData}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+      />
+
+      <GCashPaymentDialog
+        open={gcashDialogOpen}
+        onClose={handleCloseDialogs}
+        paymentData={paymentData}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+      />
+
+      <CardPaymentDialog
+        open={cardDialogOpen}
+        onClose={handleCloseDialogs}
+        paymentData={paymentData}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+      />
     </ClientOnly>
   );
 }
