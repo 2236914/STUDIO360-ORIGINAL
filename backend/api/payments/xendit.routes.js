@@ -404,36 +404,60 @@ router.get('/callback', (req, res) => {
  * @route POST /api/payments/xendit/callback
  * @desc Handle Xendit webhook callbacks
  * @access Public (Xendit webhook)
+ * @note This endpoint receives raw body via server.js middleware for signature verification
  */
 router.post('/callback', async (req, res) => {
   try {
+    // Get raw body for signature verification
+    const rawBody = req.body.toString('utf8');
+    
+    // Parse JSON body for processing
+    let webhookBody;
+    try {
+      webhookBody = JSON.parse(rawBody);
+    } catch (parseError) {
+      console.error('Failed to parse webhook body as JSON:', parseError);
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Invalid JSON payload' 
+      });
+    }
+
+    const signature = req.headers['x-xendit-signature'] || req.headers['x-xendit-signature-v2'];
+    
     console.log('Xendit webhook received:', {
       method: req.method,
       path: req.path,
-      headers: Object.keys(req.headers),
-      bodyKeys: Object.keys(req.body || {}),
+      hasSignature: !!signature,
+      event: webhookBody?.event,
+      bodyKeys: Object.keys(webhookBody || {}),
       timestamp: new Date().toISOString()
     });
-
-    const signature = req.headers['x-xendit-signature'];
-    const payload = JSON.stringify(req.body);
     
-    // Verify webhook signature (skip in test mode if no signature provided)
-    if (signature && !xenditService.verifyWebhookSignature(signature, payload)) {
-      console.error('Invalid webhook signature');
-      return res.status(401).json({ 
-        success: false, 
-        message: 'Invalid signature' 
-      });
-    }
-    
-    // Allow test calls without signature for initial setup
-    if (!signature && process.env.NODE_ENV === 'production') {
-      console.warn('Webhook received without signature in production');
-      // Still process but log warning
+    // Verify webhook signature using raw body
+    if (signature) {
+      const isValid = xenditService.verifyWebhookSignature(signature, rawBody);
+      if (!isValid) {
+        console.error('Invalid webhook signature', {
+          signature: signature?.substring(0, 20) + '...',
+          hasWebhookToken: !!process.env.XENDIT_WEBHOOK_TOKEN
+        });
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Invalid signature' 
+        });
+      }
+      console.log('✅ Webhook signature verified');
+    } else {
+      // Warn in production if signature is missing
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('⚠️ Webhook received without signature in production');
+      } else {
+        console.log('ℹ️ Webhook received without signature (development/test mode)');
+      }
     }
 
-    const webhookData = xenditService.processWebhookEvent(req.body);
+    const webhookData = xenditService.processWebhookEvent(webhookBody);
     
     // Handle payment_token events separately (just acknowledge, don't process)
     if (webhookData.type === 'payment_token') {
@@ -454,7 +478,7 @@ router.post('/callback', async (req, res) => {
         .from('xendit_payments')
         .update({
           status: webhookData.status,
-          xendit_data: req.body.data,
+          xendit_data: webhookBody.data || webhookBody,
           updated_at: new Date().toISOString(),
         })
         .eq('external_id', webhookData.externalId)
@@ -464,40 +488,56 @@ router.post('/callback', async (req, res) => {
       error = result.error;
       
       // If not found by external_id, try reference_id (for QRPH)
-      if (error && req.body.data?.reference_id) {
+      if (error && (webhookBody.data?.reference_id || webhookBody.reference_id)) {
+        const referenceId = webhookBody.data?.reference_id || webhookBody.reference_id;
+        console.log('Trying to find payment by reference_id:', referenceId);
         const result2 = await supabase
           .from('xendit_payments')
           .update({
             status: webhookData.status,
-            xendit_data: req.body.data,
+            xendit_data: webhookBody.data || webhookBody,
             updated_at: new Date().toISOString(),
           })
-          .eq('external_id', req.body.data.reference_id)
+          .eq('external_id', referenceId)
           .select()
           .single();
         updatedPayment = result2.data;
         error = result2.error;
       }
+    } else {
+      console.warn('No externalId found in webhook data:', {
+        event: webhookData.event,
+        paymentId: webhookData.paymentId,
+        referenceId: webhookBody.data?.reference_id || webhookBody.reference_id
+      });
     }
 
-    if (error) {
+    if (error && !updatedPayment) {
       console.error('Error updating payment status:', error);
+      // Still return success to Xendit to prevent retries if it's just a DB issue
+      // Log the issue for manual investigation
+      console.warn('Payment record not found or update failed:', {
+        externalId: webhookData.externalId,
+        event: webhookData.event,
+        status: webhookData.status
+      });
     }
 
-    // Update order status if payment is successful
-    if (webhookData.status === 'paid' && updatedPayment?.order_id) {
-      const { error: orderError } = await supabase
-        .from('orders')
-        .update({
-          status: 'paid',
-          payment_status: 'completed',
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', updatedPayment.order_id);
+    // Update order status based on payment result
+    if (updatedPayment?.order_id) {
+      if (webhookData.status === 'paid') {
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update({
+            status: 'paid',
+            payment_status: 'completed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', updatedPayment.order_id);
 
-      if (orderError) {
-        console.error('Error updating order status:', orderError);
-      } else {
+        if (orderError) {
+          console.error('Error updating order status:', orderError);
+        } else {
         // Auto-post cash receipt to clear A/R (accrual basis) using bookkeeping endpoint
         try {
           const { data: orderData } = await supabase
@@ -542,14 +582,37 @@ router.post('/callback', async (req, res) => {
           console.error('Error sending order confirmation email:', emailError);
           // Don't fail webhook processing if email fails
         }
+        }
+      } else if (webhookData.status === 'failed' || webhookData.status === 'expired') {
+        // Update order status for failed/expired payments
+        const { error: orderError } = await supabase
+          .from('orders')
+          .update({
+            payment_status: 'failed',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', updatedPayment.order_id);
+
+        if (orderError) {
+          console.error('Error updating order status for failed payment:', orderError);
+        } else {
+          console.log('Order payment status updated to failed');
+        }
       }
     }
 
-    console.log('Webhook processed successfully:', webhookData);
+    console.log('✅ Webhook processed successfully:', {
+      event: webhookData.event,
+      status: webhookData.status,
+      externalId: webhookData.externalId,
+      paymentUpdated: !!updatedPayment
+    });
     
     res.status(200).json({ 
       success: true, 
-      message: 'Webhook processed successfully' 
+      message: 'Webhook processed successfully',
+      event: webhookData.event,
+      status: webhookData.status
     });
   } catch (error) {
     console.error('Error processing webhook:', error);
