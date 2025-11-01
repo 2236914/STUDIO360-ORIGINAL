@@ -75,6 +75,25 @@ export function middleware(request) {
   
   if (normalizedHostname === STORE_DOMAIN.toLowerCase() || 
       normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()) {
+    // If the path already starts with /kitschstudio/, just pass it through
+    if (pathname.startsWith('/kitschstudio/') || pathname === '/kitschstudio') {
+      // Already on the correct path, just continue
+      const url = request.nextUrl.clone();
+      if (pathname === '/kitschstudio') {
+        url.pathname = '/kitschstudio/';
+      }
+      const res = NextResponse.rewrite(url);
+      res.headers.set('Content-Security-Policy', csp);
+      res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+      res.headers.set('X-Content-Type-Options', 'nosniff');
+      res.headers.set('X-Frame-Options', 'DENY');
+      res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+      res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+      res.headers.set('X-Rewrite-Target', url.pathname);
+      res.headers.set('X-Original-Host', hostname);
+      return res;
+    }
+    
     // Determine the store path with proper trailing slash handling
     let storePath;
     if (pathname === '/' || pathname === '') {
