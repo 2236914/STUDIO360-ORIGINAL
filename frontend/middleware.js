@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import crypto from 'crypto';
 
 // Main domain and subdomain configuration
-const MAIN_DOMAIN = 'studio360.com';
+const MAIN_DOMAIN = 'studio360.dev';
+const STORE_DOMAIN = 'kitschstudio.page';
 const LOCAL_DOMAIN = 'localhost:3000';
 
 export function middleware(request) {
@@ -95,6 +96,22 @@ export function middleware(request) {
     return res;
   }
   
+  // Handle kitschstudio.page domain - rewrite to /kitschstudio route
+  if (hostname === STORE_DOMAIN || hostname === `www.${STORE_DOMAIN}`) {
+    const storePath = pathname === '/' 
+      ? '/kitschstudio' 
+      : `/kitschstudio${pathname}`;
+    
+    const res = NextResponse.rewrite(new URL(storePath, request.url));
+    res.headers.set('Content-Security-Policy', csp);
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.headers.set('X-Content-Type-Options', 'nosniff');
+    res.headers.set('X-Frame-Options', 'DENY');
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    return res;
+  }
+  
   // If subdomain doesn't match any pattern, redirect to main domain
   const res = NextResponse.redirect(new URL(`https://${MAIN_DOMAIN}${pathname}${search}`, request.url));
   res.headers.set('Content-Security-Policy', csp);
@@ -121,9 +138,14 @@ function getSubdomain(hostname) {
     return null;
   }
   
-  // Extract subdomain
+  // Handle store domain (kitschstudio.page)
+  if (host === STORE_DOMAIN || host === `www.${STORE_DOMAIN}`) {
+    return null;
+  }
+  
+  // Extract subdomain from studio360.dev
   const parts = host.split('.');
-  if (parts.length >= 2 && parts[parts.length - 1] === 'com' && parts[parts.length - 2] === 'studio360') {
+  if (parts.length >= 2 && parts[parts.length - 1] === 'dev' && parts[parts.length - 2] === 'studio360') {
     return parts[0];
   }
   

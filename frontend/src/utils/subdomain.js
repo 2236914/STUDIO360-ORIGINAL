@@ -17,13 +17,18 @@ export function getCurrentSubdomain() {
   }
   
   // Handle main domain
-  if (hostname === 'studio360.com' || hostname === 'www.studio360.com') {
+  if (hostname === 'studio360.dev' || hostname === 'www.studio360.dev') {
     return null;
   }
   
-  // Extract subdomain
+  // Handle store domain (kitschstudio.page)
+  if (hostname === 'kitschstudio.page' || hostname === 'www.kitschstudio.page') {
+    return null;
+  }
+  
+  // Extract subdomain from studio360.dev
   const parts = hostname.split('.');
-  if (parts.length >= 2 && parts[parts.length - 1] === 'com' && parts[parts.length - 2] === 'studio360') {
+  if (parts.length >= 2 && parts[parts.length - 1] === 'dev' && parts[parts.length - 2] === 'studio360') {
     return parts[0];
   }
   
@@ -41,6 +46,11 @@ export function isStoreSubdomain() {
 
   const subdomain = getCurrentSubdomain();
   const {hostname, pathname} = window.location;
+  
+  // Check if we're on kitschstudio.page (store domain)
+  if (hostname === 'kitschstudio.page' || hostname === 'www.kitschstudio.page') {
+    return true;
+  }
   
   // For localhost development, check if we're on a subdomain route
   if (hostname === 'localhost') {
@@ -95,6 +105,17 @@ export function isDashboardSubdomain() {
  * @returns {string|null} The store ID or null if not on a store subdomain
  */
 export function getCurrentStoreId() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+  
+  const {hostname} = window.location;
+  
+  // Check if we're on kitschstudio.page
+  if (hostname === 'kitschstudio.page' || hostname === 'www.kitschstudio.page') {
+    return 'kitschstudio';
+  }
+  
   if (isStoreSubdomain()) {
     return getCurrentSubdomain();
   }
@@ -109,7 +130,7 @@ export function getCurrentStoreId() {
  */
 export function buildStoreUrl(storeId, path = '') {
   const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.com';
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.dev';
   
   // For localhost development, use query params instead of subdomain
   if (host === 'localhost') {
@@ -117,8 +138,14 @@ export function buildStoreUrl(storeId, path = '') {
     return path ? `${baseUrl}/stores/${storeId}${path}` : `${baseUrl}/stores/${storeId}`;
   }
   
+  // Special case: if storeId is 'kitschstudio', use the kitschstudio.page domain
+  if (storeId === 'kitschstudio') {
+    const baseUrl = `${protocol}//kitschstudio.page`;
+    return path ? `${baseUrl}${path}` : baseUrl;
+  }
+  
   // For production, use subdomain
-  const baseUrl = `${protocol}//${storeId}.studio360.com`;
+  const baseUrl = `${protocol}//${storeId}.studio360.dev`;
   return path ? `${baseUrl}${path}` : baseUrl;
 }
 
@@ -129,7 +156,7 @@ export function buildStoreUrl(storeId, path = '') {
  */
 export function buildAdminUrl(path = '') {
   const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.com';
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.dev';
   
   // For localhost development, use regular admin routes
   if (host === 'localhost') {
@@ -138,7 +165,7 @@ export function buildAdminUrl(path = '') {
   }
   
   // For production, use admin subdomain
-  const baseUrl = `${protocol}//admin.studio360.com`;
+  const baseUrl = `${protocol}//admin.studio360.dev`;
   return path ? `${baseUrl}${path}` : baseUrl;
 }
 
@@ -149,7 +176,7 @@ export function buildAdminUrl(path = '') {
  */
 export function buildDashboardUrl(path = '') {
   const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'https:' : 'http:';
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.com';
+  const host = typeof window !== 'undefined' ? window.location.hostname : 'studio360.dev';
   
   // For localhost development, use regular dashboard routes
   if (host === 'localhost') {
@@ -158,7 +185,7 @@ export function buildDashboardUrl(path = '') {
   }
   
   // For production, use dashboard subdomain
-  const baseUrl = `${protocol}//dashboard.studio360.com`;
+  const baseUrl = `${protocol}//dashboard.studio360.dev`;
   return path ? `${baseUrl}${path}` : baseUrl;
 }
 

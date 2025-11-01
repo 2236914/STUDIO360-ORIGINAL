@@ -435,6 +435,16 @@ router.post('/callback', async (req, res) => {
 
     const webhookData = xenditService.processWebhookEvent(req.body);
     
+    // Handle payment_token events separately (just acknowledge, don't process)
+    if (webhookData.type === 'payment_token') {
+      console.log('Payment token event received:', webhookData.event);
+      return res.status(200).json({ 
+        success: true, 
+        message: 'Payment token event acknowledged',
+        event: webhookData.event
+      });
+    }
+    
     // Update payment status in database (try both external_id and reference_id for QRPH compatibility)
     let updatedPayment = null;
     let error = null;

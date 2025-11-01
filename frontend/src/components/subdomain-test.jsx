@@ -166,10 +166,10 @@ export function SubdomainTest() {
                 Example URLs:
               </Typography>
               <Typography variant="caption" component="div" sx={{ fontFamily: 'monospace', mt: 1 }}>
-                • Store: kitschstudio.studio360.com<br />
-                • Dashboard: dashboard.studio360.com<br />
-                • Admin: admin.studio360.com<br />
-                • Main: studio360.com
+                • Store: kitschstudio.page<br />
+                • Dashboard: dashboard.studio360.dev<br />
+                • Admin: admin.studio360.dev<br />
+                • Main: studio360.dev
               </Typography>
             </Box>
           </Stack>
