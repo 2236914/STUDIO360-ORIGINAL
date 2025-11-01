@@ -8,8 +8,11 @@ export const CONFIG = {
   site: {
     name: 'Kitsch Studio',
   // Ensure frontend talks to backend in dev even if env is missing
-  // Remove trailing slashes to prevent double slashes in URLs
-  serverUrl: (process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3001').replace(/\/+$/, ''),
+  // Remove ALL trailing slashes to prevent double slashes in URLs
+  serverUrl: (process.env.NEXT_PUBLIC_SERVER_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001')
+    .toString()
+    .trim()
+    .replace(/\/+$/, ''),
     assetURL: process.env.NEXT_PUBLIC_ASSET_URL ?? '',
     basePath: process.env.NEXT_PUBLIC_BASE_PATH ?? '',
     version: packageJson.version,

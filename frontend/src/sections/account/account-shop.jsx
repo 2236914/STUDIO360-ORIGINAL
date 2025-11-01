@@ -110,7 +110,11 @@ async function authenticatedRequest(url, options = {}) {
 // API Service Functions
 const shopApi = {
   async getCompleteShopData() {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/complete`);
+    // Use relative URL in browser (Next.js proxy), absolute in SSR
+    const shopUrl = typeof window !== 'undefined'
+      ? '/api/shop/complete'
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/complete`;
+    const response = await authenticatedRequest(shopUrl);
     const data = await response.json();
     if (!data.success) throw new Error(data.message);
     return data.data;

@@ -35,7 +35,11 @@ export function AuthProvider({ children }) {
         try {
         const now = Date.now();
         if (!healthTsRef.ts || now - healthTsRef.ts > 60000) {
-          const resp = await fetch(`${CONFIG.site.serverUrl}/api/health`, { cache: 'no-store' });
+          // Use relative URL in browser (Next.js proxy), absolute in SSR
+          const healthUrl = typeof window !== 'undefined' 
+            ? '/api/health'
+            : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/health`;
+          const resp = await fetch(healthUrl, { cache: 'no-store' });
           healthTsRef.ts = Date.now();
           if (resp.ok) {
             const j = await resp.json();
