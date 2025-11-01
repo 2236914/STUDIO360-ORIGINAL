@@ -74,27 +74,18 @@ export function LandingFeatures() {
               Platform Features
             </Typography>
             
-            <Stack direction="row" alignItems="center" spacing={2} justifyContent="center">
-              <Iconify 
-                icon="solar:widget-5-bold-duotone" 
-                width={48}
-                sx={{
-                  color: 'primary.main',
-                }}
-              />
-              <Typography
-                variant="h2"
-                sx={{
-                  fontSize: { xs: '2rem', md: '2.75rem' },
-                  fontWeight: 700,
-                  lineHeight: 1.3,
-                  color: 'text.primary',
-                  maxWidth: 600,
-                }}
-              >
-                All-in-One Platform
-              </Typography>
-            </Stack>
+            <Typography
+              variant="h2"
+              sx={{
+                fontSize: { xs: '2rem', md: '2.75rem' },
+                fontWeight: 700,
+                lineHeight: 1.3,
+                color: 'text.primary',
+                maxWidth: 600,
+              }}
+            >
+              All-in-One Platform
+            </Typography>
 
             <Typography
               variant="h6"

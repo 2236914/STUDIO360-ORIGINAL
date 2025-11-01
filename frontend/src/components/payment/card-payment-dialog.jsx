@@ -39,6 +39,23 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
   const [cardToken, setCardToken] = useState('');
   const [step, setStep] = useState('form'); // 'form', 'processing', 'success', 'error'
 
+  // Reset form when dialog opens
+  useEffect(() => {
+    if (open) {
+      setStep('form');
+      setError('');
+      setLoading(false);
+      setCardData({
+        cardNumber: '',
+        expiryMonth: '',
+        expiryYear: '',
+        cvv: '',
+        cardholderName: '',
+      });
+      setCardToken('');
+    }
+  }, [open]);
+
   const handleClose = () => {
     setCardData({
       cardNumber: '',
@@ -61,6 +78,12 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
   };
 
   const formatCardNumber = (value) => {
+    // Ensure value is a string
+    if (typeof value !== 'string' && value != null) {
+      value = String(value);
+    }
+    if (!value) return '';
+    
     // Remove all non-digits
     const digits = value.replace(/\D/g, '');
     // Add spaces every 4 digits
@@ -68,7 +91,8 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
   };
 
   const handleCardNumberChange = (event) => {
-    const formatted = formatCardNumber(event.target.value);
+    const inputValue = event?.target?.value ?? event ?? '';
+    const formatted = formatCardNumber(inputValue);
     setCardData(prev => ({
       ...prev,
       cardNumber: formatted,
@@ -78,7 +102,9 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
   const validateForm = () => {
     const { cardNumber, expiryMonth, expiryYear, cvv, cardholderName } = cardData;
     
-    if (!cardNumber || cardNumber.replace(/\s/g, '').length < 13) {
+    // Ensure cardNumber is a string before calling replace
+    const cleanCardNumber = typeof cardNumber === 'string' ? cardNumber : String(cardNumber || '');
+    if (!cleanCardNumber || cleanCardNumber.replace(/\s/g, '').length < 13) {
       setError('Please enter a valid card number');
       return false;
     }
@@ -115,20 +141,31 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
   const createCardToken = async () => {
     const { cardNumber, expiryMonth, expiryYear, cvv } = cardData;
     
+    // Ensure cardNumber is a string before calling replace
+    const cleanCardNumber = typeof cardNumber === 'string' ? cardNumber.replace(/\s/g, '') : String(cardNumber || '').replace(/\s/g, '');
+    
     const tokenData = {
-      cardNumber: cardNumber.replace(/\s/g, ''),
+      cardNumber: cleanCardNumber,
       expiryMonth: parseInt(expiryMonth),
       expiryYear: parseInt(expiryYear),
-      cvv,
+      cvv: String(cvv || ''),
       isMultipleUse: false,
     };
 
-    const result = await xenditPaymentService.createCardToken(tokenData);
-    
-    if (result.success) {
-      return result.data.tokenId;
-    } else {
-      throw new Error(result.error || 'Failed to create card token');
+    try {
+      const result = await xenditPaymentService.createCardToken(tokenData);
+      
+      if (result.success && result.data?.tokenId) {
+        return result.data.tokenId;
+      } else {
+        throw new Error(result.error || 'Failed to create card token');
+      }
+    } catch (err) {
+      // Re-throw with better error message for connection issues
+      if (err?.message?.includes('CONNECTION_REFUSED') || err?.message?.includes('ERR_CONNECTION_REFUSED') || err?.code === 'ECONNREFUSED') {
+        throw new Error('Cannot connect to payment server. Please check your connection.');
+      }
+      throw err;
     }
   };
 
@@ -163,9 +200,11 @@ export function CardPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
         onError?.(result.error);
       }
     } catch (err) {
-      setError(err.message || 'An unexpected error occurred');
+      console.error('Card Payment Error:', err);
+      const errorMessage = err?.message || err?.response?.data?.message || 'Failed to connect to payment server. Please check your connection.';
+      setError(errorMessage);
       setStep('error');
-      onError?.(err.message);
+      onError?.(errorMessage);
     } finally {
       setLoading(false);
     }

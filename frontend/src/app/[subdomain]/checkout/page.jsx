@@ -156,9 +156,6 @@ export default function SubdomainCheckoutPage({ params }) {
     }
   }, [customerInfo.state, customerInfo.city, orderData.subtotal, shippingConfig, isClient, subdomain]);
 
-  const handleBackToHome = () => {
-    router.push(`/${subdomain}`);
-  };
 
   const handleInputChange = (field) => (event) => {
     setCustomerInfo(prev => ({
@@ -340,7 +337,7 @@ export default function SubdomainCheckoutPage({ params }) {
       }
 
       // For non-zero orders, process payment
-      if (['qrph', 'gcash', 'credit'].includes(paymentMethod)) {
+      if (['qrph', 'gcash', 'credit', 'card'].includes(paymentMethod)) {
         // Import Xendit payment service
         const xenditPaymentService = (await import('src/services/xenditPaymentService')).default;
         
@@ -375,7 +372,7 @@ export default function SubdomainCheckoutPage({ params }) {
         } else if (paymentMethod === 'gcash') {
           // Open GCash payment dialog (it will handle redirect internally)
           setGcashDialogOpen(true);
-        } else if (paymentMethod === 'credit') {
+        } else if (paymentMethod === 'credit' || paymentMethod === 'card') {
           // Open card payment dialog
           setCardDialogOpen(true);
         }
@@ -463,15 +460,6 @@ export default function SubdomainCheckoutPage({ params }) {
       <StoreHeader storeId={subdomain} />
       
       <Container maxWidth="lg" sx={{ py: 6 }}>
-        {/* Back Button */}
-        <Button
-          startIcon={<Iconify icon="eva:arrow-back-fill" />}
-          onClick={handleBackToHome}
-          sx={{ mb: 4 }}
-        >
-          Back to Home
-        </Button>
-
         {/* Page Header */}
         <Stack spacing={2} sx={{ mb: 6, textAlign: 'center' }}>
           <Avatar sx={{ bgcolor: 'primary.main', width: 60, height: 60, mx: 'auto' }}>

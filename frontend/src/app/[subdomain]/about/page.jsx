@@ -64,9 +64,6 @@ export default function SubdomainAboutPage({ params }) {
     }
   };
 
-  const handleBackToHome = () => {
-    router.push(`/${subdomain}`);
-  };
 
   // Conditional rendering instead of early returns
   if (!isClient) {
@@ -113,15 +110,6 @@ export default function SubdomainAboutPage({ params }) {
       <StoreHeader storeId={subdomain} />
       
       <Container maxWidth="lg" sx={{ py: 6 }}>
-        {/* Back Button */}
-        <Button
-          startIcon={<Iconify icon="eva:arrow-back-fill" />}
-          onClick={handleBackToHome}
-          sx={{ mb: 4 }}
-        >
-          Back to Home
-        </Button>
-
         {/* About Page Content */}
         <Grid container spacing={4}>
           {/* Shop Story Section */}

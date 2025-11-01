@@ -107,8 +107,9 @@ export function StoreHeader({ storeId: propStoreId }) {
   };
 
   const handleSearchClick = () => {
-    // In a real app, this would open a search modal or navigate to search page
-    console.log('Search clicked');
+    // Navigate to products page where search functionality is available
+    // Add a query parameter to indicate search should be focused
+    router.push(`/${storeId}/products?focusSearch=true`);
   };
 
   const handleCartClick = () => {

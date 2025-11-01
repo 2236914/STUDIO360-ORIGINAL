@@ -1,7 +1,7 @@
 'use client';
 
 import { m } from 'framer-motion';
-import { use, useState, useEffect } from 'react';
+import { use, useState, useEffect, useRef } from 'react';
 
 import Box from '@mui/material/Box';
 import Grid from '@mui/material/Grid';
@@ -193,6 +193,7 @@ function ProductGridSection({ storeId }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const checkout = useCheckoutContext();
+  const searchInputRef = useRef(null);
   const [search, setSearch] = useState('');
   
   // Read category from URL query parameter
@@ -213,6 +214,21 @@ function ProductGridSection({ storeId }) {
       setCategory(urlCategory);
     }
   }, [urlCategory]);
+
+  // Auto-focus search field when coming from header search button
+  useEffect(() => {
+    const focusSearch = searchParams?.get('focusSearch');
+    if (focusSearch === 'true' && searchInputRef.current) {
+      // Small delay to ensure the field is rendered
+      setTimeout(() => {
+        searchInputRef.current?.focus();
+        // Remove the query parameter from URL without page reload
+        const url = new URL(window.location.href);
+        url.searchParams.delete('focusSearch');
+        window.history.replaceState({}, '', url);
+      }, 100);
+    }
+  }, [searchParams]);
 
   // Handle add to cart
   const handleAddToCart = (product) => {
@@ -341,6 +357,7 @@ function ProductGridSection({ storeId }) {
           {/* Filters Row */}
           <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} alignItems={{ xs: 'stretch', md: 'center' }}>
             <TextField
+              inputRef={searchInputRef}
               placeholder="Search products..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}

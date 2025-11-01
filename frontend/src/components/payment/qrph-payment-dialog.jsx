@@ -53,8 +53,10 @@ export function QRPHPaymentDialog({ open, onClose, paymentData, onSuccess, onErr
         onError?.(result.error);
       }
     } catch (err) {
-      setError('An unexpected error occurred');
-      onError?.(err.message);
+      console.error('QRPH Payment Error:', err);
+      const errorMessage = err?.message || err?.response?.data?.message || 'Failed to connect to payment server. Please check your connection.';
+      setError(errorMessage);
+      onError?.(errorMessage);
     } finally {
       setLoading(false);
     }

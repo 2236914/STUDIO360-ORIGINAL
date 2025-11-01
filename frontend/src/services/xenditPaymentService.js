@@ -1,9 +1,10 @@
 import axios from 'axios';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+import { CONFIG } from 'src/config-global';
 
 class XenditPaymentService {
   constructor() {
+    const API_BASE_URL = CONFIG.site.serverUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+    
     this.apiClient = axios.create({
       baseURL: `${API_BASE_URL}/api/payments/xendit`,
       headers: {
@@ -11,14 +12,39 @@ class XenditPaymentService {
       },
     });
 
-    // Add auth token to requests
-    this.apiClient.interceptors.request.use((config) => {
+    // Add auth token to requests (use Supabase session if available)
+    this.apiClient.interceptors.request.use(async (config) => {
+      try {
+        // Try to get Supabase session first
+        const { supabase } = await import('src/auth/context/jwt/supabaseClient');
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          config.headers.Authorization = `Bearer ${session.access_token}`;
+          return config;
+        }
+      } catch (err) {
+        // Fallback to localStorage token
+      }
+      
+      // Fallback to localStorage token
       const token = localStorage.getItem('authToken');
       if (token) {
         config.headers.Authorization = `Bearer ${token}`;
       }
       return config;
     });
+    
+    // Handle errors better
+    this.apiClient.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        // If connection refused, provide better error message
+        if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED')) {
+          error.message = 'Cannot connect to payment server. Please check your connection or contact support.';
+        }
+        return Promise.reject(error);
+      }
+    );
   }
 
   /**
@@ -36,9 +62,16 @@ class XenditPaymentService {
       };
     } catch (error) {
       console.error('Error creating QRPH payment:', error);
+      let errorMessage = error.response?.data?.message || error.message || 'Failed to create QRPH payment';
+      
+      // Handle connection errors specifically
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED') || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to payment server. Please check if the backend server is running.';
+      }
+      
       return {
         success: false,
-        error: error.response?.data?.message || error.message,
+        error: errorMessage,
         data: error.response?.data,
       };
     }
@@ -59,9 +92,16 @@ class XenditPaymentService {
       };
     } catch (error) {
       console.error('Error creating GCash payment:', error);
+      let errorMessage = error.response?.data?.message || error.message || 'Failed to create GCash payment';
+      
+      // Handle connection errors specifically
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED') || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to payment server. Please check if the backend server is running.';
+      }
+      
       return {
         success: false,
-        error: error.response?.data?.message || error.message,
+        error: errorMessage,
         data: error.response?.data,
       };
     }
@@ -82,9 +122,16 @@ class XenditPaymentService {
       };
     } catch (error) {
       console.error('Error creating card payment:', error);
+      let errorMessage = error.response?.data?.message || error.message || 'Failed to create card payment';
+      
+      // Handle connection errors specifically
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED') || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to payment server. Please check if the backend server is running.';
+      }
+      
       return {
         success: false,
-        error: error.response?.data?.message || error.message,
+        error: errorMessage,
         data: error.response?.data,
       };
     }
@@ -105,9 +152,16 @@ class XenditPaymentService {
       };
     } catch (error) {
       console.error('Error creating card token:', error);
+      let errorMessage = error.response?.data?.message || error.message || 'Failed to create card token';
+      
+      // Handle connection errors specifically
+      if (error.code === 'ECONNREFUSED' || error.message?.includes('ERR_CONNECTION_REFUSED') || error.message?.includes('Network Error')) {
+        errorMessage = 'Cannot connect to payment server. Please check if the backend server is running.';
+      }
+      
       return {
         success: false,
-        error: error.response?.data?.message || error.message,
+        error: errorMessage,
         data: error.response?.data,
       };
     }

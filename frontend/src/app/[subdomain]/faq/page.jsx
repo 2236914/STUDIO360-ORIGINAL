@@ -90,9 +90,6 @@ export default function SubdomainFAQPage({ params }) {
     setFilteredFAQs(filtered);
   };
 
-  const handleBackToHome = () => {
-    router.push(`/${subdomain}`);
-  };
 
   const handleFAQChange = (panel) => (event, isExpanded) => {
     setExpandedFAQ(isExpanded ? panel : false);
@@ -143,15 +140,6 @@ export default function SubdomainFAQPage({ params }) {
       <StoreHeader storeId={subdomain} />
       
       <Container maxWidth="lg" sx={{ py: 6 }}>
-        {/* Back Button */}
-        <Button
-          startIcon={<Iconify icon="eva:arrow-back-fill" />}
-          onClick={handleBackToHome}
-          sx={{ mb: 4 }}
-        >
-          Back to Home
-        </Button>
-
         {/* Page Header */}
         <Stack spacing={3} sx={{ mb: 6, textAlign: 'center' }}>
           <Avatar sx={{ bgcolor: 'primary.main', width: 80, height: 80, mx: 'auto' }}>
@@ -290,14 +278,6 @@ export default function SubdomainFAQPage({ params }) {
                     sx={{ borderRadius: 2 }}
                   >
                     Contact Us
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    startIcon={<Iconify icon="eva:arrow-back-fill" />}
-                    onClick={handleBackToHome}
-                    sx={{ borderRadius: 2 }}
-                  >
-                    Back to Home
                   </Button>
                 </Stack>
               </Stack>
