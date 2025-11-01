@@ -72,6 +72,15 @@ app.use(cors({
       if ((process.env.NODE_ENV || 'development') !== 'production' && isLocalhost) {
         return callback(null, true);
       }
+      // Allow all Vercel preview URLs (ends with .vercel.app)
+      if (host.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+      // Allow production domains (studio360.dev, kitschstudio.page)
+      if (host === 'studio360.dev' || host === 'www.studio360.dev' || 
+          host === 'kitschstudio.page' || host === 'www.kitschstudio.page') {
+        return callback(null, true);
+      }
     } catch (_) {
       // fallthrough
     }
