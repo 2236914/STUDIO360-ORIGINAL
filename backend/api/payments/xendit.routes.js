@@ -469,6 +469,29 @@ router.post('/callback', async (req, res) => {
       });
     }
     
+    // Handle payment_session events - acknowledge even if no matching payment record
+    if (webhookData.type === 'payment_session') {
+      console.log('Payment session event received:', {
+        event: webhookData.event,
+        status: webhookData.status,
+        externalId: webhookData.externalId,
+        sessionId: webhookData.sessionId
+      });
+      
+      // Try to update payment if we can find it, but don't fail if we can't
+      if (webhookData.externalId) {
+        // Continue to payment update logic below
+      } else {
+        // No externalId found, just acknowledge
+        return res.status(200).json({
+          success: true,
+          message: 'Payment session event acknowledged',
+          event: webhookData.event,
+          status: webhookData.status
+        });
+      }
+    }
+    
     // Update payment status in database (try both external_id and reference_id for QRPH compatibility)
     let updatedPayment = null;
     let error = null;
@@ -507,9 +530,22 @@ router.post('/callback', async (req, res) => {
     } else {
       console.warn('No externalId found in webhook data:', {
         event: webhookData.event,
+        type: webhookData.type,
         paymentId: webhookData.paymentId,
-        referenceId: webhookBody.data?.reference_id || webhookBody.reference_id
+        sessionId: webhookData.sessionId,
+        referenceId: webhookBody.data?.reference_id || webhookBody.reference_id,
+        webhookBodyKeys: Object.keys(webhookBody || {})
       });
+      
+      // For payment session events without externalId, still acknowledge success
+      if (webhookData.type === 'payment_session') {
+        return res.status(200).json({
+          success: true,
+          message: 'Payment session event acknowledged (no matching payment record)',
+          event: webhookData.event,
+          status: webhookData.status
+        });
+      }
     }
 
     if (error && !updatedPayment) {
@@ -616,9 +652,12 @@ router.post('/callback', async (req, res) => {
     });
   } catch (error) {
     console.error('Error processing webhook:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Webhook body:', JSON.stringify(webhookBody, null, 2));
     res.status(500).json({ 
       success: false, 
-      message: 'Internal server error' 
+      message: 'Internal server error',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

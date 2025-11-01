@@ -13,6 +13,68 @@ export function middleware(request) {
   // Remove port if present (for proper domain matching)
   hostname = hostname.split(':')[0];
   
+  // CRITICAL: Check kitschstudio.page FIRST - before any other processing
+  // This ensures the rewrite happens before anything else
+  const normalizedHostname = hostname.toLowerCase().trim();
+  
+  if (normalizedHostname === STORE_DOMAIN.toLowerCase() || 
+      normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()) {
+    // Generate CSP nonce for this request
+    const nonce = crypto.randomBytes(16).toString('base64');
+    
+    // Build CSP
+    const csp = [
+      "default-src 'self'",
+      `script-src 'self' 'nonce-${nonce}'` + (process.env.NODE_ENV !== 'production' ? " 'unsafe-eval'" : ''),
+      `style-src 'self' 'nonce-${nonce}' 'unsafe-inline'`,
+      "img-src 'self' data: blob:",
+      "font-src 'self' data:",
+      "connect-src 'self' https: http:",
+      "frame-ancestors 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      process.env.NODE_ENV === 'production' ? 'upgrade-insecure-requests' : '',
+    ].filter(Boolean).join('; ');
+    
+    // Determine the store path
+    let storePath;
+    if (pathname === '/' || pathname === '') {
+      storePath = '/kitschstudio/';
+    } else if (pathname.startsWith('/kitschstudio/') || pathname === '/kitschstudio') {
+      storePath = pathname === '/kitschstudio' ? '/kitschstudio/' : pathname;
+    } else {
+      const hasTrailingSlash = pathname.endsWith('/');
+      const hasExtension = /\.\w+$/.test(pathname.split('/').pop() || '');
+      storePath = `/kitschstudio${pathname}${!hasTrailingSlash && !hasExtension ? '/' : ''}`;
+    }
+    
+    // Create rewrite URL
+    const url = request.nextUrl.clone();
+    url.pathname = storePath;
+    
+    // Create rewrite response
+    const res = NextResponse.rewrite(url);
+    
+    // Set headers
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.set('x-nonce', nonce);
+    res.headers.set('Content-Security-Policy', csp);
+    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    res.headers.set('X-Content-Type-Options', 'nosniff');
+    res.headers.set('X-Frame-Options', 'DENY');
+    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
+    
+    // Debug headers (these will show in browser network tab)
+    res.headers.set('X-Rewrite-Target', storePath);
+    res.headers.set('X-Original-Host', hostname);
+    res.headers.set('X-Middleware-Executed', 'true');
+    res.headers.set('X-Store-Domain-Detected', 'kitschstudio.page');
+    
+    return res;
+  }
+  
   // EARLY LOGGING - Always log the hostname to debug
   if (hostname.includes('kitschstudio')) {
     console.log('[Middleware] Request received:', {
@@ -58,79 +120,6 @@ export function middleware(request) {
   baseResponse.headers.set('X-Frame-Options', 'DENY');
   baseResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
   baseResponse.headers.set('Cross-Origin-Resource-Policy', 'same-site');
-
-  // CRITICAL: Handle kitschstudio.page domain FIRST - before any other logic
-  // This must be checked before the "no subdomain" check to ensure rewrite works
-  const normalizedHostname = hostname.toLowerCase().trim();
-  
-  // Debug logging
-  if (normalizedHostname.includes('kitschstudio.page')) {
-    console.log('[Middleware] Detected kitschstudio.page:', { 
-      hostname, 
-      normalizedHostname, 
-      pathname,
-      matches: normalizedHostname === STORE_DOMAIN.toLowerCase() || normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()
-    });
-  }
-  
-  if (normalizedHostname === STORE_DOMAIN.toLowerCase() || 
-      normalizedHostname === `www.${STORE_DOMAIN}`.toLowerCase()) {
-    // If the path already starts with /kitschstudio/, just pass it through
-    if (pathname.startsWith('/kitschstudio/') || pathname === '/kitschstudio') {
-      // Already on the correct path, just continue
-      const url = request.nextUrl.clone();
-      if (pathname === '/kitschstudio') {
-        url.pathname = '/kitschstudio/';
-      }
-      const res = NextResponse.rewrite(url);
-      res.headers.set('Content-Security-Policy', csp);
-      res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-      res.headers.set('X-Content-Type-Options', 'nosniff');
-      res.headers.set('X-Frame-Options', 'DENY');
-      res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-      res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
-      res.headers.set('X-Rewrite-Target', url.pathname);
-      res.headers.set('X-Original-Host', hostname);
-      return res;
-    }
-    
-    // Determine the store path with proper trailing slash handling
-    let storePath;
-    if (pathname === '/' || pathname === '') {
-      storePath = '/kitschstudio/';
-    } else {
-      // Preserve trailing slash if present, add if not and pathname doesn't have extension
-      const hasTrailingSlash = pathname.endsWith('/');
-      const hasExtension = /\.\w+$/.test(pathname.split('/').pop() || '');
-      storePath = `/kitschstudio${pathname}${!hasTrailingSlash && !hasExtension ? '/' : ''}`;
-    }
-    
-    console.log('[Middleware] Rewriting kitschstudio.page to:', storePath);
-    
-    // Use pathname-based rewrite with the same origin
-    const url = request.nextUrl.clone();
-    url.pathname = storePath;
-    const res = NextResponse.rewrite(url);
-    res.headers.set('Content-Security-Policy', csp);
-    res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.headers.set('X-Content-Type-Options', 'nosniff');
-    res.headers.set('X-Frame-Options', 'DENY');
-    res.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
-    res.headers.set('Cross-Origin-Resource-Policy', 'same-site');
-    
-    // Add debug headers for verification
-    res.headers.set('X-Rewrite-Target', storePath);
-    res.headers.set('X-Original-Host', hostname);
-    
-    console.log('[Middleware] Rewrite complete:', { 
-      original: pathname, 
-      rewritten: storePath,
-      originalUrl: request.url.toString(),
-      newUrl: url.toString()
-    });
-    
-    return res;
-  }
 
   // If no subdomain or it's the main domain, continue normally
   if (!subdomain || subdomain === 'www' || subdomain === 'app') {

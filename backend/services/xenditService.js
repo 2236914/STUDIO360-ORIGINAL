@@ -281,40 +281,80 @@ class XenditService {
       };
     }
     
+    // Handle Payment Session events (different structure)
+    if (event?.includes('payment_session') || event === 'payment.session.completed' || event === 'payment.session.expired') {
+      // Payment Session events have the payment data nested differently
+      const sessionData = data || webhookData;
+      let normalizedStatus = sessionData.status?.toLowerCase() || 'unknown';
+      
+      if (event.includes('completed') || event.includes('succeeded')) {
+        normalizedStatus = 'paid';
+      } else if (event.includes('expired') || event.includes('failed')) {
+        normalizedStatus = event.includes('expired') ? 'expired' : 'failed';
+      }
+      
+      return {
+        event,
+        type: 'payment_session',
+        paymentId: sessionData.id || sessionData.payment_id || sessionData.payment_request_id,
+        sessionId: sessionData.session_id,
+        externalId: sessionData.external_id || sessionData.reference_id || sessionData.payment_request_id,
+        status: normalizedStatus,
+        amount: sessionData.amount || sessionData.requested_amount,
+        currency: sessionData.currency || 'PHP',
+        paymentMethod: sessionData.payment_method,
+        createdAt: sessionData.created || sessionData.created_at,
+        updatedAt: sessionData.updated || sessionData.updated_at || new Date().toISOString(),
+        customer: sessionData.customer,
+        metadata: sessionData.metadata,
+      };
+    }
+    
     // Handle payment events
-    if (!data) {
+    if (!data && !webhookData.id) {
       console.warn('Webhook data missing:', webhookData);
       return {
         event: event || 'unknown',
         externalId: null,
         status: 'unknown',
+        type: 'unknown',
       };
     }
     
-    // Normalize status for QRPH payments (Xendit sends "SUCCEEDED" for QR payments)
-    let normalizedStatus = data.status;
-    if (event === 'qr.payment' || event === 'payment.succeeded' || event === 'payment.paid') {
-      if (data.status === 'SUCCEEDED' || data.status === 'succeeded' || data.status === 'PAID') {
+    // Handle direct payment data (some events have data at root level)
+    const paymentData = data || webhookData;
+    
+    // Normalize status for various payment events
+    let normalizedStatus = paymentData.status?.toLowerCase() || paymentData.status || 'unknown';
+    
+    // Handle different event types and status formats
+    if (event === 'qr.payment' || event === 'payment.succeeded' || event === 'payment.paid' || 
+        event === 'payment.status' || event?.includes('payment.succeeded')) {
+      if (paymentData.status === 'SUCCEEDED' || paymentData.status === 'succeeded' || 
+          paymentData.status === 'PAID' || paymentData.status === 'paid' ||
+          paymentData.status === 'COMPLETED' || paymentData.status === 'completed') {
         normalizedStatus = 'paid';
-      } else if (data.status === 'FAILED' || data.status === 'failed') {
+      } else if (paymentData.status === 'FAILED' || paymentData.status === 'failed') {
         normalizedStatus = 'failed';
-      } else if (data.status === 'PENDING' || data.status === 'pending') {
+      } else if (paymentData.status === 'PENDING' || paymentData.status === 'pending') {
         normalizedStatus = 'pending';
+      } else if (paymentData.status === 'EXPIRED' || paymentData.status === 'expired') {
+        normalizedStatus = 'expired';
       }
     }
     
     return {
       event,
-      paymentId: data.id,
-      externalId: data.external_id || data.reference_id, // QRPH uses reference_id
+      paymentId: paymentData.id || paymentData.payment_id,
+      externalId: paymentData.external_id || paymentData.reference_id || paymentData.payment_request_id,
       status: normalizedStatus,
-      amount: data.amount,
-      currency: data.currency,
-      paymentMethod: data.payment_method || (event === 'qr.payment' ? 'qrph' : null),
-      createdAt: data.created,
-      updatedAt: data.updated || data.created,
-      customer: data.customer,
-      metadata: data.metadata,
+      amount: paymentData.amount || paymentData.requested_amount,
+      currency: paymentData.currency || 'PHP',
+      paymentMethod: paymentData.payment_method,
+      createdAt: paymentData.created || paymentData.created_at,
+      updatedAt: paymentData.updated || paymentData.updated_at || paymentData.created || new Date().toISOString(),
+      customer: paymentData.customer,
+      metadata: paymentData.metadata,
     };
   }
 }
