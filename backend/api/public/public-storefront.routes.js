@@ -5,6 +5,7 @@ const { supabase } = require('../../services/supabaseClient');
 const storePagesService = require('../../services/storePagesService');
 const shopService = require('../../services/shopService');
 const inventoryService = require('../../services/inventoryService');
+const vouchersService = require('../../services/vouchersService');
 
 async function getUserIdByShopName(shopName) {
   try {
@@ -228,6 +229,42 @@ router.get('/:shopName/faqs', ensureShop, async (req, res) => {
   } catch (error) {
     console.error('Public storefront: faqs error', error);
     return res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// GET /api/public/storefront/:shopName/voucher/validate
+router.get('/:shopName/voucher/validate', ensureShop, async (req, res) => {
+  try {
+    console.log(`[Public Storefront] GET /voucher/validate for shop: ${req.shopName}, userId: ${req.publicUserId}`);
+    const { code, cart_total } = req.query;
+    
+    if (!code) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Voucher code is required',
+        data: { is_valid: false } 
+      });
+    }
+
+    const cartTotal = parseFloat(cart_total) || 0;
+    const validation = await vouchersService.validateVoucher(
+      req.publicUserId,
+      code,
+      null, // customer_id - can be null for public validation
+      cartTotal
+    );
+
+    return res.json({
+      success: validation.is_valid || false,
+      data: validation
+    });
+  } catch (error) {
+    console.error(`[Public Storefront] Voucher validation error for shop "${req.shopName}":`, error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error',
+      data: { is_valid: false } 
+    });
   }
 });
 
