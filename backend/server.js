@@ -94,7 +94,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static files
 app.use('/uploads', express.static('uploads'));
 
-// Health check endpoint
+// Health check endpoint - MUST be defined before routes so it's available immediately
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
@@ -125,9 +125,24 @@ try { app.use('/api/mail', require('./api/mail/mail.routes')); } catch (_) { con
 try { app.use('/api/support', require('./api/support/support.routes')); } catch (_) { console.warn('Support routes missing'); }
 try { app.use('/api/announcements', require('./api/announcements/announcements.routes')); } catch (_) { console.warn('Announcements routes missing'); }
 try { app.use('/api/account', require('./api/account/account-history.routes')); } catch (_) { console.warn('Account history routes missing'); }
-try { app.use('/api/public/storefront', require('./api/public/public-storefront.routes')); } catch (_) { console.warn('Public storefront routes missing'); }
-try { app.use('/api/upload', require('./api/upload/upload.routes')); } catch (_) { console.warn('Upload routes missing'); }
-try { app.use('/api/payments/xendit', require('./api/payments/xendit.routes')); } catch (_) { console.warn('Xendit payment routes missing'); }
+// Load routes with detailed error logging
+let routesLoaded = { success: 0, failed: 0 };
+const loadRoute = (path, routePath, name) => {
+  try {
+    app.use(path, require(routePath));
+    routesLoaded.success++;
+    console.log(`✅ Loaded ${name} routes`);
+  } catch (err) {
+    routesLoaded.failed++;
+    console.error(`❌ Failed to load ${name} routes:`, err.message);
+    console.error(`   Path: ${routePath}`);
+    console.error(`   Stack: ${err.stack}`);
+  }
+};
+
+loadRoute('/api/public/storefront', './api/public/public-storefront.routes', 'Public storefront');
+loadRoute('/api/upload', './api/upload/upload.routes', 'Upload');
+loadRoute('/api/payments/xendit', './api/payments/xendit.routes', 'Xendit payment');
 
 // Status endpoint retained
 app.get('/api/status', (req, res) => {
@@ -160,6 +175,7 @@ if (require.main === module) {
     console.log(`⭐ STUDIO360 Backend running on port ${PORT}`);
     console.log(` Health check: http://localhost:${PORT}/api/health`);
     console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📊 Routes loaded: ${routesLoaded.success} successful, ${routesLoaded.failed} failed`);
   });
 }
 
