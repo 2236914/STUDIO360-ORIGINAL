@@ -121,7 +121,10 @@ const shopApi = {
   },
 
   async updateShopInfo(shopData) {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/info`, {
+    const shopUrl = typeof window !== 'undefined'
+      ? '/api/shop/info'
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/info`;
+    const response = await authenticatedRequest(shopUrl, {
       method: 'PUT',
       body: JSON.stringify(shopData),
     });
@@ -131,7 +134,10 @@ const shopApi = {
   },
 
   async updateShippingSettings(settingsData) {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/shipping`, {
+    const shopUrl = typeof window !== 'undefined'
+      ? '/api/shop/shipping'
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/shipping`;
+    const response = await authenticatedRequest(shopUrl, {
       method: 'PUT',
       body: JSON.stringify(settingsData),
     });
@@ -141,7 +147,10 @@ const shopApi = {
   },
 
   async createCourier(courierData) {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers`, {
+    const shopUrl = typeof window !== 'undefined'
+      ? '/api/shop/couriers'
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/couriers`;
+    const response = await authenticatedRequest(shopUrl, {
       method: 'POST',
       body: JSON.stringify(courierData),
     });
@@ -151,7 +160,10 @@ const shopApi = {
   },
 
   async updateCourier(courierId, updateData) {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}`, {
+    const shopUrl = typeof window !== 'undefined'
+      ? `/api/shop/couriers/${courierId}`
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/couriers/${courierId}`;
+    const response = await authenticatedRequest(shopUrl, {
       method: 'PUT',
       body: JSON.stringify(updateData),
     });
@@ -161,7 +173,10 @@ const shopApi = {
   },
 
   async deleteCourier(courierId) {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}`, {
+    const shopUrl = typeof window !== 'undefined'
+      ? `/api/shop/couriers/${courierId}`
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/couriers/${courierId}`;
+    const response = await authenticatedRequest(shopUrl, {
       method: 'DELETE',
     });
     const data = await response.json();
@@ -170,7 +185,10 @@ const shopApi = {
   },
 
   async updateRegionalRates(courierId, rates) {
-    const response = await authenticatedRequest(`${CONFIG.site.serverUrl}/api/shop/couriers/${courierId}/rates`, {
+    const shopUrl = typeof window !== 'undefined'
+      ? `/api/shop/couriers/${courierId}/rates`
+      : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/shop/couriers/${courierId}/rates`;
+    const response = await authenticatedRequest(shopUrl, {
       method: 'PUT',
       body: JSON.stringify({ rates }),
     });

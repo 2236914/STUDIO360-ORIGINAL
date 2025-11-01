@@ -56,8 +56,12 @@ async function authenticatedRequest(url, options = {}) {
 }
 
 // Create axios instance with default config (keeping for compatibility)
+// Use relative URL in browser (Next.js proxy), absolute in SSR
+const accountBaseUrl = typeof window !== 'undefined'
+  ? '/api/account'
+  : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account`;
 const apiClient = axios.create({
-  baseURL: `${CONFIG.site.serverUrl}/api/account`,
+  baseURL: accountBaseUrl,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -123,8 +127,11 @@ class AccountHistoryService {
       if (endDate) params.append('endDate', endDate);
       if (search) params.append('search', search);
 
-      const url = `${CONFIG.site.serverUrl}/api/account/history?${params.toString()}`;
-      const response = await authenticatedRequest(url);
+      // Use relative URL in browser (Next.js proxy), absolute in SSR
+      const historyUrl = typeof window !== 'undefined'
+        ? `/api/account/history?${params.toString()}`
+        : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account/history?${params.toString()}`;
+      const response = await authenticatedRequest(historyUrl);
       const data = await response.json();
       
       console.log('Account History Service: API response:', data);
@@ -152,10 +159,13 @@ class AccountHistoryService {
   async logActivity(activityData) {
     try {
       console.log('Account History Service: Attempting to log activity:', activityData);
-      const url = `${CONFIG.site.serverUrl}/api/account/history`;
-      console.log('Account History Service: Making request to:', url);
+      // Use relative URL in browser (Next.js proxy), absolute in SSR
+      const historyUrl = typeof window !== 'undefined'
+        ? '/api/account/history'
+        : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account/history`;
+      console.log('Account History Service: Making request to:', historyUrl);
       
-      const response = await authenticatedRequest(url, {
+      const response = await authenticatedRequest(historyUrl, {
         method: 'POST',
         body: JSON.stringify(activityData)
       });
@@ -185,8 +195,11 @@ class AccountHistoryService {
    */
   async clearHistory(activityType = 'login') {
     try {
-      const url = `${CONFIG.site.serverUrl}/api/account/history`;
-      const response = await authenticatedRequest(url, {
+      // Use relative URL in browser (Next.js proxy), absolute in SSR
+      const historyUrl = typeof window !== 'undefined'
+        ? '/api/account/history'
+        : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account/history`;
+      const response = await authenticatedRequest(historyUrl, {
         method: 'DELETE',
         body: JSON.stringify({ activityType })
       });
@@ -208,8 +221,11 @@ class AccountHistoryService {
    */
   async deleteHistoryEntry(entryId) {
     try {
-      const url = `${CONFIG.site.serverUrl}/api/account/history/${entryId}`;
-      const response = await authenticatedRequest(url, {
+      // Use relative URL in browser (Next.js proxy), absolute in SSR
+      const historyUrl = typeof window !== 'undefined'
+        ? `/api/account/history/${entryId}`
+        : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account/history/${entryId}`;
+      const response = await authenticatedRequest(historyUrl, {
         method: 'DELETE'
       });
       const data = await response.json();
@@ -230,8 +246,11 @@ class AccountHistoryService {
    */
   async getHistoryStats() {
     try {
-      const url = `${CONFIG.site.serverUrl}/api/account/history/stats`;
-      const response = await authenticatedRequest(url);
+      // Use relative URL in browser (Next.js proxy), absolute in SSR
+      const historyUrl = typeof window !== 'undefined'
+        ? '/api/account/history/stats'
+        : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account/history/stats`;
+      const response = await authenticatedRequest(historyUrl);
       const data = await response.json();
       
       if (!response.ok) {
@@ -266,8 +285,11 @@ class AccountHistoryService {
       if (endDate) params.append('endDate', endDate);
       if (status) params.append('status', status);
 
-      const url = `${CONFIG.site.serverUrl}/api/account/history/export?${params.toString()}`;
-      const response = await authenticatedRequest(url);
+      // Use relative URL in browser (Next.js proxy), absolute in SSR
+      const historyUrl = typeof window !== 'undefined'
+        ? `/api/account/history/export?${params.toString()}`
+        : `${(CONFIG.site.serverUrl || '').replace(/\/+$/, '')}/api/account/history/export?${params.toString()}`;
+      const response = await authenticatedRequest(historyUrl);
       
       if (!response.ok) {
         const errorData = await response.json();
