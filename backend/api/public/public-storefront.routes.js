@@ -57,7 +57,7 @@ async function getUserIdByShopName(shopName) {
           }
         }
       }
-
+      
       // Log for debugging in production
       console.warn(`[Public Storefront] Shop not found: "${shopName}"`, { 
         exactError: error?.message, 

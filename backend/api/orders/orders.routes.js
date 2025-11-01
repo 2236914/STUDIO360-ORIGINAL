@@ -232,27 +232,65 @@ router.get('/number/:orderNumber', authenticateTokenHybrid, async (req, res) => 
  * @desc Create a new order (public endpoint for COD and guest checkout)
  * @access Public
  */
+// Get the default kitschstudio user_id (cached)
+let cachedKitschstudioUserId = null;
+
+async function getKitschstudioUserId() {
+  if (cachedKitschstudioUserId) {
+    return cachedKitschstudioUserId;
+  }
+
+  try {
+    const { data: allShops, error } = await supabase
+      .from('shop_info')
+      .select('user_id, shop_name')
+      .is('deleted_at', null);
+
+    if (!error && allShops) {
+      const normalizedSearch = 'kitschstudio';
+      for (const shop of allShops) {
+        const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
+        if (normalizedDbShopName === normalizedSearch) {
+          cachedKitschstudioUserId = shop.user_id;
+          console.log(`[Orders] Found kitschstudio shop: "${shop.shop_name}" (userId: ${shop.user_id})`);
+          return shop.user_id;
+        }
+      }
+      
+      // Fallback to first shop
+      if (allShops.length > 0) {
+        cachedKitschstudioUserId = allShops[0].user_id;
+        console.log(`[Orders] Using first available shop: "${allShops[0].shop_name}"`);
+        return allShops[0].user_id;
+      }
+    }
+
+    return null;
+  } catch (e) {
+    console.error(`[Orders] Error getting kitschstudio userId:`, e);
+    return null;
+  }
+}
+
 router.post('/public', async (req, res) => {
   try {
     const { shopName, ...orderData } = req.body;
     
-    if (!shopName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Shop name is required' 
-      });
-    }
+    console.log(`[Public Order] Order creation request:`, {
+      shopName: shopName || '(not provided)',
+      hasOrderData: !!orderData.customer_name
+    });
 
-    const userId = await getUserIdByShopName(shopName);
+    // Get kitschstudio userId (only one shop using this system)
+    const userId = await getKitschstudioUserId();
     if (!userId) {
-      console.error(`[Public Order] Shop not found for shopName: "${shopName}"`);
-      return res.status(404).json({ 
+      return res.status(500).json({ 
         success: false, 
-        message: `Store "${shopName}" not found. Please check the store name.` 
+        message: 'Order service unavailable. Please contact support.' 
       });
     }
     
-    console.log(`[Public Order] Creating order for shop: "${shopName}", userId: ${userId}`);
+    console.log(`[Public Order] Creating order for kitschstudio (userId: ${userId})`);
 
     if (!orderData.customer_name || !orderData.customer_email) {
       return res.status(400).json({ 

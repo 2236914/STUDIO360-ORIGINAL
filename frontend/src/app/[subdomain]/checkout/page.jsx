@@ -360,7 +360,9 @@ export default function SubdomainCheckoutPage({ params }) {
       // Handle COD - create order in database
       if (paymentMethod === 'cod') {
         try {
-          const API_BASE_URL = CONFIG.site.serverUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+          // Use relative URL to leverage Next.js rewrites (proxies to backend)
+          // This works in both dev and production, avoiding CORS issues
+          const finalUrl = '/api/orders/public';
           
           // Format order data for database
           const orderDbData = {
@@ -382,15 +384,30 @@ export default function SubdomainCheckoutPage({ params }) {
             discount: 0,
             total: orderData.total || 0,
             shipping_method: selectedShippingOption?.courierName || 'Standard',
-            items: orderInput.orderItems.map(item => ({
-              product_name: item.name || 'Product',
-              product_image_url: item.image || '',
-              quantity: item.quantity || 1,
-              unit_price: item.price || 0,
-              subtotal: (item.price || 0) * (item.quantity || 1),
-              total: (item.price || 0) * (item.quantity || 1),
-            })),
+            items: orderInput.orderItems.map(item => {
+              const quantity = parseInt(item.quantity || 1, 10);
+              const unitPrice = parseFloat(item.price || 0);
+              const subtotal = unitPrice * quantity;
+              
+              return {
+                product_name: item.name || 'Product',
+                product_image_url: item.image || '',
+                quantity: quantity,
+                unit_price: unitPrice,
+                subtotal: subtotal,
+                discount: 0,
+                total: subtotal,
+              };
+            }),
           };
+
+          console.log(`[Checkout] Creating COD order:`, {
+            url: finalUrl,
+            shopName: shopName || '(not provided)',
+            customerName: `${customerInfo.firstName} ${customerInfo.lastName}`,
+            total: orderData.total,
+            orderItems: orderDbData.items?.length || 0
+          });
 
           // Create AbortController for timeout
           const controller = new AbortController();
@@ -398,7 +415,7 @@ export default function SubdomainCheckoutPage({ params }) {
           
           let response;
           try {
-            response = await fetch(`${API_BASE_URL}/api/orders/public`, {
+            response = await fetch(finalUrl, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -416,13 +433,28 @@ export default function SubdomainCheckoutPage({ params }) {
               setLoading(false);
               return;
             }
+            // Log more details about the error
+            console.error('COD order fetch error:', {
+              name: fetchError.name,
+              message: fetchError.message,
+              url: finalUrl,
+              body: orderDbData
+            });
             throw fetchError;
           }
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(errorData.message || 'Failed to create order');
+            console.error('COD order creation failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              error: errorData
+            });
+            throw new Error(errorData.message || `Failed to create order (${response.status})`);
           }
+
+          const orderResponse = await response.json();
+          console.log('COD order created successfully:', orderResponse);
 
           // Also save locally for consistency
           try {
@@ -437,7 +469,18 @@ export default function SubdomainCheckoutPage({ params }) {
           return;
         } catch (error) {
           console.error('Error creating COD order:', error);
-          alert(`Failed to create order: ${error.message || 'Please try again.'}`);
+          
+          // Better error messages based on error type
+          let errorMessage = 'Failed to create order';
+          if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+            errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
+          } else if (error.message?.includes('AbortError') || error.message?.includes('timeout')) {
+            errorMessage = 'Request timed out. Please try again.';
+          } else if (error.message) {
+            errorMessage = error.message;
+          }
+          
+          alert(errorMessage);
           setLoading(false);
           return;
         }

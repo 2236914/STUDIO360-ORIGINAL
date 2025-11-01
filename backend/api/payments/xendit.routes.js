@@ -7,72 +7,48 @@ const emailService = require('../../services/emailService');
 const ordersService = require('../../services/ordersService');
 
 /**
- * Helper function to get store owner user_id from shop name
+ * Get the default kitschstudio user_id (since all Xendit API keys are for kitschstudio)
+ * This is cached to avoid repeated database queries
  */
-async function getUserIdByShopName(shopName) {
+let cachedKitschstudioUserId = null;
+
+async function getKitschstudioUserId() {
+  // Return cached value if available
+  if (cachedKitschstudioUserId) {
+    return cachedKitschstudioUserId;
+  }
+
   try {
-    if (!shopName || typeof shopName !== 'string') {
-      console.error(`[Xendit Payment] Invalid shopName: ${shopName}`);
-      return null;
-    }
-
-    // Normalize shop name: lowercase and remove spaces for comparison
-    const normalizedShopName = shopName.toLowerCase().replace(/\s+/g, '');
-    
-    console.log(`[Xendit Payment] Looking up shop: "${shopName}" (normalized: "${normalizedShopName}")`);
-
-    // Try exact match first
-    let { data, error } = await supabase
+    // Try to find kitschstudio shop (normalized: lowercase, remove spaces)
+    const { data: allShops, error } = await supabase
       .from('shop_info')
       .select('user_id, shop_name')
-      .eq('shop_name', shopName)
-      .is('deleted_at', null)
-      .maybeSingle();
+      .is('deleted_at', null);
 
-    if (error || !data) {
-      // Try case-insensitive match
-      const { data: caseInsensitiveData, error: caseInsensitiveError } = await supabase
-        .from('shop_info')
-        .select('user_id, shop_name')
-        .ilike('shop_name', shopName)
-        .is('deleted_at', null)
-        .maybeSingle();
-
-      if (!caseInsensitiveError && caseInsensitiveData) {
-        console.log(`[Xendit Payment] Found shop via case-insensitive match: "${caseInsensitiveData.shop_name}"`);
-        return caseInsensitiveData.user_id;
-      }
-
-      // Try normalized match (remove spaces and case differences)
-      // Fetch all shops and match manually
-      const { data: allShops, error: allShopsError } = await supabase
-        .from('shop_info')
-        .select('user_id, shop_name')
-        .is('deleted_at', null);
-
-      if (!allShopsError && allShops) {
-        for (const shop of allShops) {
-          const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
-          if (normalizedDbShopName === normalizedShopName) {
-            console.log(`[Xendit Payment] Found shop via normalized match: "${shop.shop_name}"`);
-            return shop.user_id;
-          }
+    if (!error && allShops) {
+      // Look for kitschstudio with various name formats
+      const normalizedSearch = 'kitschstudio';
+      for (const shop of allShops) {
+        const normalizedDbShopName = shop.shop_name.toLowerCase().replace(/\s+/g, '');
+        if (normalizedDbShopName === normalizedSearch) {
+          cachedKitschstudioUserId = shop.user_id;
+          console.log(`[Xendit Payment] Found kitschstudio shop: "${shop.shop_name}" (userId: ${shop.user_id})`);
+          return shop.user_id;
         }
       }
-
-      // Log all available shops for debugging
-      console.error(`[Xendit Payment] Shop not found: "${shopName}"`);
-      if (!allShopsError && allShops && allShops.length > 0) {
-        console.error(`[Xendit Payment] Available shops: ${allShops.map(s => `"${s.shop_name}"`).join(', ')}`);
-      }
-      
-      return null;
     }
-    
-    console.log(`[Xendit Payment] Found shop via exact match: "${data.shop_name}"`);
-    return data.user_id;
+
+    // If not found, get the first shop (fallback)
+    if (allShops && allShops.length > 0) {
+      cachedKitschstudioUserId = allShops[0].user_id;
+      console.log(`[Xendit Payment] Using first available shop as fallback: "${allShops[0].shop_name}" (userId: ${allShops[0].user_id})`);
+      return allShops[0].user_id;
+    }
+
+    console.error(`[Xendit Payment] No shops found in database`);
+    return null;
   } catch (e) {
-    console.error(`[Xendit Payment] Error looking up shop "${shopName}":`, e);
+    console.error(`[Xendit Payment] Error getting kitschstudio userId:`, e);
     return null;
   }
 }
@@ -368,29 +344,21 @@ router.post('/public/qrph', async (req, res) => {
     const { shopName, amount, description, customer, orderId } = req.body;
     
     console.log(`[Xendit Payment] QRPH request received:`, {
-      shopName,
+      shopName: shopName || '(not provided)',
       amount,
-      hasShopName: !!shopName,
       bodyKeys: Object.keys(req.body)
     });
-    
-    if (!shopName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Shop name is required' 
-      });
-    }
 
-    const userId = await getUserIdByShopName(shopName);
+    // Get kitschstudio userId (all API keys are for kitschstudio)
+    const userId = await getKitschstudioUserId();
     if (!userId) {
-      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
-      return res.status(404).json({ 
+      return res.status(500).json({ 
         success: false, 
-        message: `Store "${shopName}" not found. Please check the store name.` 
+        message: 'Payment service unavailable. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+    console.log(`[Xendit Payment] Processing QRPH payment for kitschstudio (userId: ${userId})`);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ 
@@ -471,29 +439,21 @@ router.post('/public/gcash', async (req, res) => {
     const { shopName, amount, description, customer, orderId } = req.body;
     
     console.log(`[Xendit Payment] GCash request received:`, {
-      shopName,
+      shopName: shopName || '(not provided)',
       amount,
-      hasShopName: !!shopName,
       bodyKeys: Object.keys(req.body)
     });
-    
-    if (!shopName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Shop name is required' 
-      });
-    }
 
-    const userId = await getUserIdByShopName(shopName);
+    // Get kitschstudio userId (all API keys are for kitschstudio)
+    const userId = await getKitschstudioUserId();
     if (!userId) {
-      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
-      return res.status(404).json({ 
+      return res.status(500).json({ 
         success: false, 
-        message: `Store "${shopName}" not found. Please check the store name.` 
+        message: 'Payment service unavailable. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+    console.log(`[Xendit Payment] Processing GCash payment for kitschstudio (userId: ${userId})`);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ 
@@ -573,30 +533,22 @@ router.post('/public/card', async (req, res) => {
     const { shopName, amount, description, customer, orderId, cardToken } = req.body;
     
     console.log(`[Xendit Payment] Card request received:`, {
-      shopName,
+      shopName: shopName || '(not provided)',
       amount,
-      hasShopName: !!shopName,
       hasCardToken: !!cardToken,
       bodyKeys: Object.keys(req.body)
     });
-    
-    if (!shopName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Shop name is required' 
-      });
-    }
 
-    const userId = await getUserIdByShopName(shopName);
+    // Get kitschstudio userId (all API keys are for kitschstudio)
+    const userId = await getKitschstudioUserId();
     if (!userId) {
-      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
-      return res.status(404).json({ 
+      return res.status(500).json({ 
         success: false, 
-        message: `Store "${shopName}" not found. Please check the store name.` 
+        message: 'Payment service unavailable. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+    console.log(`[Xendit Payment] Processing Card payment for kitschstudio (userId: ${userId})`);
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ 
@@ -684,29 +636,22 @@ router.post('/public/card-token', async (req, res) => {
     const { shopName, cardNumber, expiryMonth, expiryYear, cvv, isMultipleUse } = req.body;
     
     console.log(`[Xendit Payment] Card token request received:`, {
-      shopName,
-      hasShopName: !!shopName,
+      shopName: shopName || '(not provided)',
       hasCardNumber: !!cardNumber,
       bodyKeys: Object.keys(req.body)
     });
-    
-    if (!shopName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Shop name is required' 
-      });
-    }
 
-    const userId = await getUserIdByShopName(shopName);
+    // Get kitschstudio userId (all API keys are for kitschstudio)
+    // Note: userId is not actually needed for token creation, but we validate it exists
+    const userId = await getKitschstudioUserId();
     if (!userId) {
-      console.error(`[Xendit Payment] Shop not found for shopName: "${shopName}"`);
-      return res.status(404).json({ 
+      return res.status(500).json({ 
         success: false, 
-        message: `Store "${shopName}" not found. Please check the store name.` 
+        message: 'Payment service unavailable. Please contact support.' 
       });
     }
     
-    console.log(`[Xendit Payment] Processing payment for shop: "${shopName}", userId: ${userId}`);
+    console.log(`[Xendit Payment] Processing card token for kitschstudio (userId: ${userId})`);
 
     if (!cardNumber || !expiryMonth || !expiryYear || !cvv) {
       return res.status(400).json({ 
