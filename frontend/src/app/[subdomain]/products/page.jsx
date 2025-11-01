@@ -259,15 +259,10 @@ function ProductGridSection({ storeId }) {
       try {
         setLoading(true);
         
-        // Test backend connection first
-        const connectionTest = await storefrontApi.testConnection();
-        if (!connectionTest.success) {
-          throw new Error(`Backend connection failed: ${connectionTest.error}`);
-        }
-        
         const response = await storefrontApi.getProducts(storeId);
         
-        if (response.success) {
+        // Handle both success and failure responses gracefully
+        if (response.success && response.data && Array.isArray(response.data)) {
           // Transform database products to match the component's expected format
           const transformedProducts = response.data.map((product) => ({
             id: product.id,
@@ -283,12 +278,26 @@ function ProductGridSection({ storeId }) {
           
           setProducts(transformedProducts);
         } else {
-          console.warn('No products found or error in response');
-          setProducts([]);
+          // Handle error response gracefully - show error message but don't break UI
+          if (response.error) {
+            setError(response.error);
+            // Auto-retry if rate limited
+            if (response.retryAfter) {
+              setTimeout(() => {
+                if (storeId) {
+                  fetchProducts();
+                }
+              }, 5000);
+            }
+          } else {
+            console.warn('No products found');
+            setProducts([]);
+          }
         }
       } catch (err) {
-        console.error('Error fetching products:', err);
-        setError(err.message);
+        // This catch block should rarely trigger now since getProducts returns gracefully
+        console.error('Unexpected error fetching products:', err);
+        setError('Unable to load products. Please try refreshing the page.');
         setProducts([]);
       } finally {
         setLoading(false);

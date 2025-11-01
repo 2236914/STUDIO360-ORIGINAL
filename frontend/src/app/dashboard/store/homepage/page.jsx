@@ -67,6 +67,13 @@ export default function HomepageEditorPage() {
       setLoading(true);
       const data = await homepageApi.getCompleteHomepageData();
       
+      // Handle null/undefined gracefully (e.g., rate limiting or connection errors)
+      if (!data) {
+        console.warn('Homepage data not available - keeping existing state');
+        setLoading(false);
+        return;
+      }
+      
       console.log('Loaded homepage data:', data);
       
       // Populate hero section
@@ -161,7 +168,14 @@ export default function HomepageEditorPage() {
       toast.success('Homepage data loaded successfully!');
     } catch (error) {
       console.error('Error loading homepage data:', error);
-      toast.error('Failed to load homepage data. Using empty defaults.');
+      // Don't show error toast for rate limiting or connection issues
+      // Just use defaults and let the user continue working
+      if (!error.message?.includes('rate limit') && 
+          !error.message?.includes('429') && 
+          !error.message?.includes('connection')) {
+        toast.error('Failed to load homepage data. You can still edit and save.');
+      }
+      // Don't reset everything - keep existing state if available
       setInitialLoad(false);
     } finally {
       setLoading(false);
@@ -268,7 +282,12 @@ export default function HomepageEditorPage() {
         setAvailableProducts(transformedProducts);
       } catch (error) {
         console.error('Error loading products:', error);
-        toast.error('Failed to load products');
+        // Don't show toast for rate limiting - just log and continue
+        if (!error.message?.includes('rate limit') && !error.message?.includes('429')) {
+          toast.error('Failed to load products. Please refresh if needed.');
+        }
+        // Set empty array to prevent UI breakage
+        setAvailableProducts([]);
       } finally {
         setProductsLoading(false);
       }

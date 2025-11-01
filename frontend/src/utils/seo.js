@@ -39,4 +39,50 @@ export function breadcrumbJsonLd(items) {
   };
 }
 
+export function storeJsonLd({ name, description, url, logo, email, phone }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Store',
+    name,
+    description,
+    url,
+    logo: logo ? { '@type': 'ImageObject', url: logo } : undefined,
+    contactPoint: email || phone ? {
+      '@type': 'ContactPoint',
+      ...(email ? { email } : {}),
+      ...(phone ? { telephone: phone } : {}),
+      contactType: 'Customer Service',
+    } : undefined,
+  };
+}
+
+export function itemListJsonLd({ name, description, url, items = [] }) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name,
+    description,
+    url,
+    numberOfItems: items.length,
+    itemListElement: items.map((item, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      item: {
+        '@type': 'Product',
+        name: item.name,
+        url: item.url,
+        image: item.image,
+        description: item.description,
+        offers: item.price ? {
+          '@type': 'Offer',
+          price: item.price,
+          priceCurrency: item.currency || 'USD',
+          availability: 'https://schema.org/InStock',
+          url: item.url,
+        } : undefined,
+      },
+    })),
+  };
+}
+
 

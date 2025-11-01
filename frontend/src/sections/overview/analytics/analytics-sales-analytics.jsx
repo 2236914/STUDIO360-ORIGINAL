@@ -105,12 +105,20 @@ export function AnalyticsSalesAnalytics() {
             const cached = JSON.parse(localStorage.getItem(`sales-analytics:${year}`) || 'null');
             if (cached) {
               setSeriesState(cached);
-              setError('');
+              setError(''); // Clear error if we have cached data
               return;
             }
           } catch (_) {}
-          const msg = typeof e?.message === 'string' ? e.message : 'Failed to load analytics';
-          setError(msg);
+          
+          // Handle rate limiting gracefully
+          const errorMsg = typeof e?.message === 'string' ? e.message : '';
+          if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
+            setError('Analytics data is temporarily unavailable. Please refresh in a moment.');
+          } else if (errorMsg.includes('connection') || errorMsg.includes('Network')) {
+            setError('Unable to connect. Please check your connection.');
+          } else {
+            setError(errorMsg || 'Failed to load analytics data');
+          }
         }
       } finally {
         if (!cancelled) setLoading(false);

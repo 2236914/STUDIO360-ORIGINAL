@@ -194,6 +194,11 @@ export default function GeneralLedgerPage() {
         setAccounts(acct);
       } catch (err) {
         console.error('Failed to load ledger:', err);
+        // Handle errors gracefully - don't break the UI
+        // Log error but allow dashboard to continue
+        if (err.message?.includes('429') || err.message?.includes('rate limit')) {
+          console.warn('Ledger request rate limited - will retry on next refresh');
+        }
       }
     }, []);
 

@@ -114,35 +114,38 @@ export const storefrontApi = {
    */
   async getProducts(shopName) {
     try {
-      console.log(`Fetching products from: /api/public/storefront/${shopName}/products`);
-      console.log(`API_URL is: ${API_URL}`);
-      
-      // Add a small delay to ensure backend is ready
-      await new Promise(resolve => setTimeout(resolve, 100));
-
+      // Use cached data if available to reduce API calls
       const ck = String(shopName || '');
       const e = _cache.products.get(ck);
       const now = Date.now();
-      if (e && now - e.ts < CACHE_MS_MED) return e.data;
+      if (e && now - e.ts < CACHE_MS_MED) {
+        return e.data;
+      }
 
       const response = await client.get(`/public/storefront/${shopName}/products`);
-      console.log('Products response:', response.data);
       _cache.products.set(ck, { ts: now, data: response.data });
       return response.data;
     } catch (error) {
       console.error('Error fetching products:', error);
-      console.error('Error details:', {
-        message: error.message,
-        code: error.code,
-        response: error.response?.data,
-        status: error.response?.status,
-        config: {
-          url: error.config?.url,
-          method: error.config?.method,
-          timeout: error.config?.timeout
-        }
-      });
-      throw error;
+      
+      // Return graceful fallback instead of throwing to prevent UI breakage
+      // This ensures the storefront always shows something, even if API fails
+      if (error.response?.status === 429) {
+        console.warn('Rate limited - returning empty products with error message');
+        return { 
+          success: false, 
+          data: [], 
+          error: 'Store is busy, please try again in a moment',
+          retryAfter: true
+        };
+      }
+      
+      // For other errors, return empty array but don't crash the UI
+      return { 
+        success: false, 
+        data: [], 
+        error: error.message || 'Failed to load products' 
+      };
     }
   },
 

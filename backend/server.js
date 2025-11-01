@@ -25,21 +25,46 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// Rate limiting - exclude announcements endpoint from strict rate limiting
-const limiter = rateLimit({
+// Rate limiting - separate limiters for different route types
+// More lenient for dashboard (authenticated users working in dashboard need higher limits)
+const dashboardLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500, // Higher limit for authenticated dashboard users
+  message: 'Too many requests. Please slow down.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Stricter limiter for non-authenticated requests
+const strictLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.'
 });
 
-// Skip rate limiting for public endpoints
+// Skip rate limiting for public endpoints - CRITICAL for storefront
+// Use lenient limits for authenticated dashboard users
 app.use('/api/', (req, res, next) => {
-  // Skip rate limiting for public endpoints (announcements and storefront)
-  if (req.path.startsWith('/api/announcements') || 
-      req.path.startsWith('/api/public/storefront')) {
-    return next();
+  const path = req.path || req.url || '';
+  
+  // Skip rate limiting entirely for public storefront and public payment endpoints
+  // These are customer-facing and must work reliably
+  if (path.startsWith('/api/public/storefront') || 
+      path.startsWith('/api/payments/xendit/public') ||
+      path.startsWith('/api/orders/public') ||
+      path.startsWith('/api/announcements')) {
+    return next(); // No rate limiting at all for public endpoints
   }
-  return limiter(req, res, next);
+  
+  // Use dashboard limiter for authenticated requests (more lenient - 500 requests per 15min)
+  // Fall back to strict limiter for unauthenticated
+  const authHeader = req.headers['authorization'];
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return dashboardLimiter(req, res, next);
+  }
+  
+  // Apply strict rate limiting for unauthenticated requests
+  return strictLimiter(req, res, next);
 });
 
 // CORS configuration (allow multiple origins in dev)

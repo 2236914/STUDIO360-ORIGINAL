@@ -516,11 +516,8 @@ function FeaturedProductsSection({ storeId }) {
         }
       } catch (err) {
         console.error('Error fetching products:', err);
-        if (err.code === 'ECONNREFUSED' || err.message.includes('Network Error')) {
-          setError('Backend server is not running. Please start the backend server.');
-        } else {
-          setError('Failed to load products');
-        }
+        // Don't show error on homepage - just show empty state gracefully
+        setProducts([]);
       } finally {
         setLoading(false);
       }

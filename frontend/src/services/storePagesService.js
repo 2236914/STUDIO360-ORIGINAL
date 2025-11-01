@@ -33,6 +33,22 @@ async function authenticatedRequest(url, options = {}) {
 
     const response = await fetch(finalUrl, { ...options, ...defaultOptions });
     
+    // Handle rate limiting gracefully
+    if (response.status === 429) {
+      console.warn('Rate limited - request will be retried automatically');
+      // Return a response-like object that indicates rate limiting
+      return {
+        ok: false,
+        status: 429,
+        statusText: 'Too Many Requests',
+        json: async () => ({ 
+          success: false, 
+          message: 'Request rate limited. Please try again in a moment.',
+          rateLimited: true 
+        }),
+      };
+    }
+    
     // If we get a 401/403, the token might be invalid
     if (response.status === 401 || response.status === 403) {
       throw new Error('Authentication failed. Please log in again.');
@@ -41,6 +57,12 @@ async function authenticatedRequest(url, options = {}) {
     return response;
   } catch (error) {
     console.error('Authenticated request error:', error);
+    
+    // Handle network errors gracefully
+    if (error.message?.includes('Failed to fetch') || error.message?.includes('NetworkError')) {
+      throw new Error('Unable to connect to server. Please check your connection.');
+    }
+    
     throw error;
   }
 }

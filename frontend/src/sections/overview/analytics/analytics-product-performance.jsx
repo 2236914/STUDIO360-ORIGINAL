@@ -384,7 +384,16 @@ export function AnalyticsProductPerformance({ hideHeader = false, showTableOnly 
         setInventoryData(json.data);
       }
     } catch (e) {
-      setError(e.message);
+      const errorMsg = typeof e?.message === 'string' ? e.message : 'Unknown error';
+      
+      // Handle rate limiting gracefully
+      if (errorMsg.includes('429') || errorMsg.includes('rate limit')) {
+        setError('Analytics data is temporarily unavailable. Please refresh in a moment.');
+      } else if (errorMsg.includes('connection') || errorMsg.includes('Network')) {
+        setError('Unable to connect. Please check your connection.');
+      } else {
+        setError(errorMsg);
+      }
     } finally {
       setLoading(false);
     }
